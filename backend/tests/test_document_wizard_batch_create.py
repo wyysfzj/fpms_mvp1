@@ -52,6 +52,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "Wizard Test Case",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -73,6 +74,16 @@ def _get_template(client: TestClient, auth_headers: dict, code: str) -> dict:
     match = [item for item in items if item["code"] == code]
     assert match, f"template {code} not found"
     return match[0]
+
+
+def _confirmed_oa_due_extra_data() -> str:
+    return json.dumps(
+        {
+            "OfficialDueDate": "2026-05-15",
+            "OfficialDueDateSource": "MANUAL_OFFICIAL_NOTICE",
+            "OfficialDueDateStatus": "CONFIRMED",
+        }
+    )
 
 
 def _create_fee_template(client: TestClient, auth_headers: dict) -> dict:
@@ -118,6 +129,7 @@ def _preview_task_candidates(
                 "doc_template_id": template_id,
                 "direction": "IN",
                 "doc_date": "2026-01-15",
+                "extra_data": _confirmed_oa_due_extra_data(),
             },
             "rows": [{"case_id": case_id, "title": title}],
         },
@@ -244,6 +256,7 @@ def test_batch_create_documents_uses_step3_task_rows(
                 "doc_template_id": template["id"],
                 "direction": "IN",
                 "doc_date": "2026-01-15",
+                "extra_data": _confirmed_oa_due_extra_data(),
             },
             "rows": [{"case_id": case_one["id"], "title": "OA 收文文书"}],
             "task_rows": [

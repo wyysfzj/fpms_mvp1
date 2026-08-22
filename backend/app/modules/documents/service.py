@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -9,14 +12,35 @@ from uuid import uuid4
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.core.storage import ensure_dir, safe_join
-from app.modules.cases.models import Case, T_CaseApplicant
-from app.modules.cases.service import (
-    has_required_granted_status_fields,
-    validate_case_status_transition,
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    EvidenceReference,
+    LegalStatus,
+    LifecycleEventCommand,
+    LifecycleProjection,
+    OfficialProcedureStage,
 )
+from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.evidence_contracts import (
+    EvidenceReviewState,
+    EvidenceRole,
+    EvidenceVersionResult,
+    EvidenceVersionState,
+    RegisterEvidenceVersionCommand,
+)
+from app.modules.documents.evidence_service import register_evidence_version
+from app.modules.documents.extra_data import (
+    DocumentExtraDataBusinessError,
+    DocumentExtraDataShapeError,
+    merge_document_extra_data,
+    parse_document_extra_data,
+)
 from app.modules.documents.fee_linking_service import (
     create_fee_draft_from_wizard_row,
     maybe_create_fee_draft,
@@ -28,6 +52,7 @@ from app.modules.documents.models import (
     DocDispatchLine,
     DocTemplate,
     Document,
+    DocumentEvidenceVersion,
 )
 from app.modules.documents.schemas import (
     AttachmentManifestItemOut,
@@ -50,6 +75,7 @@ from app.modules.documents.schemas import (
     DocumentWizardFeePreviewIn,
     DocumentWizardTaskFinalRowIn,
 )
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskStatus
 from app.modules.tasks.models import Task, TaskTemplate
@@ -57,6 +83,8 @@ from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
 from app.modules.templates.models import Template
 from app.modules.templates.render import TemplateRenderer
+
+logger = logging.getLogger(__name__)
 
 ATTACHMENT_ROLE_CATEGORY_INTAKE = "INTAKE_GATE"
 ATTACHMENT_ROLE_CATEGORY_FILING = "FILING"
@@ -148,6 +176,12 @@ _ATTACHMENT_ROLE_DEFINITIONS: dict[str, dict[str, object]] = {
         "package_usage_hint": "FILING_ARCHIVE",
         "is_archive_evidence": True,
     },
+    "OFFICIAL_NOTICE_PDF": {
+        "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
+        "external_upload_position": "OFFICIAL_NOTICE_EVIDENCE",
+        "package_usage_hint": "OFFICIAL_NOTICE_EVIDENCE",
+        "is_archive_evidence": True,
+    },
     "ELECTRONIC_RECEIPT": {
         "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
         "external_upload_position": "RECEIPT_ARCHIVE",
@@ -191,6 +225,10 @@ _ATTACHMENT_ROLE_FILE_RULES: dict[str, dict[str, set[str]]] = {
         "mimes": _ZIP_MIME_TYPES,
     },
     "FILING_MERGED_PDF": {
+        "exts": {".pdf"},
+        "mimes": _PDF_MIME_TYPES,
+    },
+    "OFFICIAL_NOTICE_PDF": {
         "exts": {".pdf"},
         "mimes": _PDF_MIME_TYPES,
     },
@@ -250,6 +288,127 @@ _HISTORICAL_ATTACHMENT_ALIASES = {
 }
 
 
+def _merge_document_create_extra_data(
+    data: DocumentCreateIn | DocumentImpactPreviewIn,
+) -> str | None:
+    structured_fields = (
+        "official_due_date",
+        "official_due_date_source",
+        "official_due_date_status",
+        "description",
+    )
+    updates = {
+        field: getattr(data, field) for field in structured_fields if field in data.model_fields_set
+    }
+    try:
+        if not updates:
+            parsed = parse_document_extra_data(data.extra_data)
+            if parsed.official_due_date_status == "LEGACY_UNVERIFIED":
+                raise DocumentExtraDataBusinessError(
+                    "OfficialDueDate",
+                    "writes require date, source, and write status together",
+                )
+            return data.extra_data
+        return merge_document_extra_data(data.extra_data, **updates)
+    except DocumentExtraDataShapeError as exc:
+        raise_business_error(
+            "DOCUMENT_EXTRA_DATA_INVALID",
+            "Document extra data has an invalid shape",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=422,
+        )
+    except DocumentExtraDataBusinessError as exc:
+        raise_business_error(
+            "DOCUMENT_DEADLINE_INVALID",
+            "Document deadline fields are incomplete or inconsistent",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=400,
+        )
+
+
+def _is_official_notice_catalog_template(template: DocTemplate) -> bool:
+    template_code = (_normalize_text(template.code) or "").upper()
+    if template_code.startswith("OFFICIAL_NOTICE_"):
+        return True
+    try:
+        metadata = json.loads(template.input_fields or "null")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(
+        isinstance(metadata, dict)
+        and (_normalize_text(metadata.get("catalog_kind")) or "").upper() == "OFFICIAL_NOTICE"
+    )
+
+
+def _validate_document_template_execution_gate(template: DocTemplate) -> None:
+    if not _is_official_notice_catalog_template(template):
+        return
+    semantics = resolve_document_semantics(template)
+    if semantics.catalog_status == "EXECUTABLE":
+        return
+    raise_business_error(
+        "DOCUMENT_TEMPLATE_REFERENCE_ONLY",
+        "Official notice catalog template is reference-only",
+        details={
+            "template_id": template.id,
+            "template_code": template.code,
+            "catalog_status": semantics.catalog_status,
+        },
+        status_code=409,
+    )
+
+
+def _validate_document_create_deadline(template: DocTemplate | None, extra_data: str | None) -> None:
+    if template is None:
+        return
+    semantics = resolve_document_semantics(template)
+    if semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED":
+        return
+    deadline = parse_document_extra_data(extra_data)
+    if (
+        deadline.official_due_date is not None
+        and deadline.official_due_date_source
+        in {"MANUAL_OFFICIAL_NOTICE", "IMPORTED_OFFICIAL_NOTICE"}
+        and deadline.official_due_date_status == "CONFIRMED"
+    ):
+        return
+    error_code = {
+        "OA_REPLY": "OA_OFFICIAL_DUE_DATE_REQUIRED",
+        "GRANT_NOTICE": "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+    }.get(
+        semantics.execution_behavior,
+        "DOCUMENT_OFFICIAL_DUE_DATE_REQUIRED",
+    )
+    raise_business_error(
+        error_code,
+        "Executable notice creation requires a confirmed explicit official due date",
+        details={"status": deadline.official_due_date_status},
+        status_code=409,
+    )
+
+
+def _is_oa_out_template(template: DocTemplate | None) -> bool:
+    return bool(template and (template.code or "").strip().upper() == "OA_OUT")
+
+
+def _reply_source_waits_for_receipt_archive(
+    db: Session,
+    source_document: Document,
+) -> bool:
+    if not source_document.doc_template_id:
+        return False
+    source_template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == source_document.doc_template_id)
+    ).scalar_one_or_none()
+    if not source_template:
+        return False
+    semantics = resolve_document_semantics(source_template)
+    return (
+        semantics.execution_behavior == "OA_REPLY"
+        and semantics.completion_event == "OFFICIAL_RECEIPT_ARCHIVED"
+    )
+
+
 def _apply_template_defaults(
     *,
     case: Case,
@@ -260,24 +419,9 @@ def _apply_template_defaults(
     if not template:
         return
 
-    if not need_reply_overridden and getattr(template, "need_reply", None) is not None:
-        document.need_reply = template.need_reply
-
-    if getattr(template, "status_effect", None) and document.direction == DocumentDirection.IN:
-        validate_case_status_transition(case.status, template.status_effect)
-        case.status = template.status_effect
-
-    if (
-        getattr(template, "status_restore", None)
-        and document.direction == DocumentDirection.OUT
-        and document.reply_to_id
-    ):
-        validate_case_status_transition(case.status, template.status_restore)
-        case.status = template.status_restore
-
-
-def _has_required_grant_fields(case: Case) -> bool:
-    return has_required_granted_status_fields(case)
+    semantics = resolve_document_semantics(template)
+    if not need_reply_overridden:
+        document.need_reply = semantics.requires_reply
 
 
 def _advance_grant_notice_case_after_attachment(db: Session, *, document: Document) -> None:
@@ -294,15 +438,113 @@ def _advance_grant_notice_case_after_attachment(db: Session, *, document: Docume
 
     ensure_grant_fee_task_for_notice_document(db, document=document, template=template)
 
-    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
-    if case is None or case.status == "GRANTED" or not _has_required_grant_fields(case):
+
+def _is_patent_certificate_document(db: Session, document: Document) -> bool:
+    if not document.doc_template_id:
+        return False
+    template = db.get(DocTemplate, document.doc_template_id)
+    if template is None or (template.code or "").strip().upper() != "OFFICIAL_NOTICE_010":
+        return False
+    try:
+        metadata = json.loads(template.input_fields or "null")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(
+        isinstance(metadata, dict)
+        and metadata.get("catalog_kind") == "OFFICIAL_NOTICE"
+        and metadata.get("official_notice_name") == "专利证书"
+    )
+
+
+def _capture_document_activity_projection(case: Case) -> LifecycleProjection:
+    try:
+        return LifecycleProjection(
+            business_stage=(
+                BusinessStage(case.business_stage) if case.business_stage is not None else None
+            ),
+            official_procedure_stage=(
+                OfficialProcedureStage(case.official_procedure_stage)
+                if case.official_procedure_stage is not None
+                else None
+            ),
+            legal_status=LegalStatus(case.legal_status) if case.legal_status is not None else None,
+            lifecycle_verification_status=(
+                ConfirmationStatus(case.lifecycle_verification_status)
+                if case.lifecycle_verification_status is not None
+                else None
+            ),
+        )
+    except ValueError:
+        raise_business_error(
+            "LIFECYCLE_PROJECTION_CONFLICT",
+            "Stored lifecycle projection is invalid",
+            status_code=409,
+        )
+
+
+def _append_certificate_archived_activity(
+    db: Session,
+    *,
+    document: Document,
+    evidence_version: EvidenceVersionResult,
+) -> None:
+    if not _is_patent_certificate_document(db, document):
         return
+    case = db.get(Case, document.case_id)
+    version = db.get(DocumentEvidenceVersion, evidence_version.evidence_version_id)
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    if version is None:
+        raise_business_error(
+            "EVIDENCE_VERSION_NOT_FOUND",
+            "Evidence version not found",
+            status_code=404,
+        )
+    projection = _capture_document_activity_projection(case)
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="CERTIFICATE_ARCHIVED",
+            lane=ActivityLane.DOCUMENT,
+            effective_at=version.created_at,
+            occurred_at=version.created_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="DOCUMENT_EVIDENCE_VERSION",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=version.id,
+                    content_hash=version.content_hash,
+                    captured_at=version.created_at,
+                ),
+            ),
+            actor_id=evidence_version.creator_id,
+            reviewer_id=None,
+            idempotency_key=f"certificate-archived:{version.id}",
+            source_activity_id=None,
+            supersedes_event_id=None,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "attachment_id": version.attachment_id,
+                "document_id": version.document_id,
+                "evidence_version_id": version.id,
+            },
+        ),
+        db,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
 
-    validate_case_status_transition(case.status, "GRANTED")
-    case.status = "GRANTED"
 
-
-def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None) -> None:
+def _apply_reply_chain(
+    db: Session,
+    *,
+    document: Document,
+    doc_date: date | None,
+    template: DocTemplate | None,
+) -> None:
     if not document.reply_to_id or document.direction != DocumentDirection.OUT:
         return
 
@@ -313,6 +555,11 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
         raise_business_error(
             "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
         )
+
+    if not _is_oa_out_template(template):
+        original_doc.reply_date = doc_date
+    if _reply_source_waits_for_receipt_archive(db, original_doc):
+        return
 
     open_tasks = (
         db.execute(
@@ -336,8 +583,6 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
             to_status=TaskStatus.DONE.value,
             remark=f"Auto write-off: reply document {document.id}",
         )
-
-    original_doc.reply_date = doc_date
 
 
 def _validate_reply_to_document(
@@ -367,13 +612,25 @@ def _validate_reply_to_document(
 
     expected_template_code = _normalize_text(getattr(template, "reply_to_template_code", None))
     if expected_template_code:
+        original_template = None
         original_template_code = None
         if original_doc.doc_template_id:
             original_template = db.execute(
                 select(DocTemplate).where(DocTemplate.id == original_doc.doc_template_id)
             ).scalar_one_or_none()
             original_template_code = _normalize_text(getattr(original_template, "code", None))
-        if original_template_code != expected_template_code:
+        matches_expected_template = original_template_code == expected_template_code
+        if (
+            not matches_expected_template
+            and expected_template_code.upper() == "OA_IN"
+            and original_template is not None
+        ):
+            original_semantics = resolve_document_semantics(original_template)
+            matches_expected_template = (
+                original_semantics.catalog_status == "EXECUTABLE"
+                and original_semantics.execution_behavior == "OA_REPLY"
+            )
+        if not matches_expected_template:
             raise_business_error(
                 "REPLY_TO_TEMPLATE_MISMATCH",
                 "Reply-to document template does not match reply template rule",
@@ -710,6 +967,7 @@ def _create_document_record(
             raise_business_error(
                 "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
             )
+        _validate_document_template_execution_gate(template)
 
     _validate_reply_to_document(
         db,
@@ -718,6 +976,8 @@ def _create_document_record(
         template=template,
     )
 
+    extra_data = _merge_document_create_extra_data(data)
+    _validate_document_create_deadline(template, extra_data)
     document = Document(
         id=str(uuid4()),
         case_id=data.case_id,
@@ -727,14 +987,19 @@ def _create_document_record(
         doc_date=data.doc_date,
         title=data.title,
         ref_no=data.ref_no,
-        extra_data=data.extra_data,
+        extra_data=extra_data,
         reply_to_id=data.reply_to_id,
     )
     db.add(document)
     db.flush()
 
     _apply_template_defaults(case=case, document=document, template=template)
-    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
+    _apply_reply_chain(
+        db,
+        document=document,
+        doc_date=data.doc_date,
+        template=template,
+    )
 
     if commit:
         db.commit()
@@ -831,7 +1096,7 @@ def list_documents(
 
 
 def create_document(db: Session, data: DocumentCreateIn) -> Document:
-    return _create_document_record(db, data, commit=True)
+    return _create_document_record(db, data, commit=False)
 
 
 def preview_document_impact(
@@ -859,36 +1124,58 @@ def preview_document_impact(
     file_status_impacts: list[DocumentImpactItemOut] = []
     confirmation_items: list[str] = []
     risk_tips: list[str] = []
+    deadline = parse_document_extra_data(_merge_document_create_extra_data(data))
 
     if template:
-        if data.direction == DocumentDirection.IN and _normalize_text(template.status_effect):
-            status_impacts.append(
-                DocumentImpactItemOut(
-                    kind="CASE_STATUS",
-                    title="案件状态影响",
-                    effect=template.status_effect,
-                    requires_confirmation=True,
-                    detail=f"登记后案件状态预计变更为 {template.status_effect}",
-                )
+        semantics = resolve_document_semantics(template)
+        if semantics.case_status_effect or _normalize_text(template.status_restore):
+            risk_tips.append(
+                "文书登记不会直接变更案件法律状态；"
+                "请通过已复核证据的生命周期入口确认状态变化"
             )
-            confirmation_items.append("案件状态将受模板影响")
-        if (
-            data.direction == DocumentDirection.OUT
-            and data.reply_to_id
-            and _normalize_text(template.status_restore)
-        ):
-            status_impacts.append(
-                DocumentImpactItemOut(
-                    kind="CASE_STATUS_RESTORE",
-                    title="案件状态恢复",
-                    effect=template.status_restore,
-                    requires_confirmation=True,
-                    detail=f"答复登记后案件状态预计恢复为 {template.status_restore}",
-                )
-            )
-            confirmation_items.append("案件状态将受模板影响")
 
-        if _normalize_text(template.deadline_template_code):
+        if semantics.deadline_source_policy == "EXPLICIT_OFFICIAL_DUE_REQUIRED" and (
+            deadline.official_due_date is None or deadline.official_due_date_status != "CONFIRMED"
+        ):
+            error_code = {
+                "OA_REPLY": "OA_OFFICIAL_DUE_DATE_REQUIRED",
+                "GRANT_NOTICE": "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+            }.get(
+                semantics.execution_behavior,
+                "DOCUMENT_OFFICIAL_DUE_DATE_REQUIRED",
+            )
+            raise_business_error(
+                error_code,
+                "Executable notice preview requires a confirmed explicit official due date",
+                details={"status": deadline.official_due_date_status},
+                status_code=409,
+            )
+
+        if semantics.deadline_source_policy == "EXPLICIT_OFFICIAL_DUE_REQUIRED":
+            assert deadline.official_due_date is not None
+            deadline_impacts.append(
+                DocumentImpactItemOut(
+                    kind="OFFICIAL_DUE_DATE",
+                    title="官方期限",
+                    effect=deadline.official_due_date.isoformat(),
+                    detail=(
+                        f"来源 {deadline.official_due_date_source}；"
+                        f"确认状态 {deadline.official_due_date_status}"
+                    ),
+                )
+            )
+            if semantics.task_template_code:
+                task_impacts.append(
+                    DocumentImpactItemOut(
+                        kind="AUTO_TASK",
+                        title="任务影响",
+                        effect=semantics.task_template_code,
+                        requires_confirmation=True,
+                        detail="登记后将按已确认官方期限生成或更新期限任务",
+                    )
+                )
+                confirmation_items.append("期限任务将受已确认官方期限影响")
+        elif _normalize_text(template.deadline_template_code):
             deadline_impacts.append(
                 DocumentImpactItemOut(
                     kind="DEADLINE_TEMPLATE",
@@ -909,7 +1196,14 @@ def preview_document_impact(
             )
             confirmation_items.append("期限任务将受模板影响")
 
-        if _normalize_text(template.fee_draft_type):
+        suppress_grant_auto_draft = (
+            _normalize_text(template.code) or ""
+        ).upper() == "GRANT_NOTICE" or (
+            semantics.catalog_status == "EXECUTABLE"
+            and semantics.execution_behavior == "GRANT_NOTICE"
+            and semantics.fee_trigger == "GRANT_FEE"
+        )
+        if _normalize_text(template.fee_draft_type) and not suppress_grant_auto_draft:
             fee_impacts.append(
                 DocumentImpactItemOut(
                     kind="FEE_DRAFT",
@@ -921,7 +1215,7 @@ def preview_document_impact(
             )
             confirmation_items.append("费用草稿将受模板影响")
 
-        if template.need_reply and data.direction == DocumentDirection.IN:
+        if semantics.requires_reply and data.direction == DocumentDirection.IN:
             file_status_impacts.append(
                 DocumentImpactItemOut(
                     kind="NEED_REPLY",
@@ -965,6 +1259,10 @@ def preview_document_impact(
         case_id=case.id,
         case_no=case.case_no,
         template_code=template.code if template else None,
+        official_due_date=deadline.official_due_date,
+        official_due_date_source=deadline.official_due_date_source,
+        official_due_date_status=deadline.official_due_date_status,
+        description=deadline.description,
         status_impacts=status_impacts,
         deadline_impacts=deadline_impacts,
         task_impacts=task_impacts,
@@ -977,7 +1275,10 @@ def preview_document_impact(
 
 
 def create_document_wizard_batch(
-    db: Session, data: DocumentWizardBatchCreateIn
+    db: Session,
+    data: DocumentWizardBatchCreateIn,
+    *,
+    actor_id: str | None = None,
 ) -> list[tuple[int, Document]]:
     template = db.execute(
         select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
@@ -989,6 +1290,8 @@ def create_document_wizard_batch(
     _validate_document_wizard_rows(db, rows)
 
     created_rows: list[tuple[int, Document]] = []
+    managed_generated_files: list[Path] = []
+    committed = False
     task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
     fee_rows_by_row_index: dict[int, DocumentWizardFeeFinalRowIn] = {}
     attachment_rows_by_row_index: dict[int, list[DocumentWizardAttachmentFinalRowIn]] = {}
@@ -998,6 +1301,30 @@ def create_document_wizard_batch(
         )
     if data.fee_rows:
         fee_rows_by_row_index = _group_document_wizard_fee_rows(data.fee_rows, row_count=len(rows))
+    if fee_rows_by_row_index:
+        semantics = resolve_document_semantics(template)
+        if (
+            semantics.catalog_status == "EXECUTABLE"
+            and semantics.execution_behavior == "APPLICATION_FEE_NOTICE"
+        ):
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid fee rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": row_index,
+                            "field": "fee_draft_type",
+                            "code": "APPLICATION_FEE_NOTICE_DRAFT_FORBIDDEN",
+                            "message": (
+                                "Application-fee notice wizard rows cannot create generic fee drafts"
+                            ),
+                        }
+                        for row_index in sorted(fee_rows_by_row_index)
+                    ]
+                },
+                status_code=400,
+            )
     if data.attachment_rows:
         attachment_rows_by_row_index = _group_document_wizard_attachment_rows(
             data.attachment_rows, row_count=len(rows)
@@ -1038,22 +1365,39 @@ def create_document_wizard_batch(
                 maybe_create_fee_draft(db, document, template)
             explicit_attachment_rows = attachment_rows_by_row_index.get(idx, [])
             if explicit_attachment_rows:
-                _create_document_wizard_attachments_from_rows(
+                managed_generated_files.extend(
+                    _create_document_wizard_attachments_from_rows(
+                        db,
+                        document=document,
+                        doc_template=template,
+                        row_attachment_rows=explicit_attachment_rows,
+                        actor_id=actor_id,
+                    )
+                )
+            if _is_oa_out_template(template):
+                from app.modules.official_workflows.service import (
+                    prepare_oa_out_package_link,
+                )
+
+                prepare_oa_out_package_link(
                     db,
-                    document=document,
-                    doc_template=template,
-                    row_attachment_rows=explicit_attachment_rows,
+                    reply_document=document,
+                    actor_id=actor_id,
                 )
             if not explicit_task_rows:
                 TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
         db.commit()
+        committed = True
         for _, document in created_rows:
             db.refresh(document)
         return created_rows
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        if not committed:
+            for managed_file_path in managed_generated_files:
+                _remove_managed_attachment_file(managed_file_path, original_error=exc)
         raise
 
 
@@ -1084,7 +1428,7 @@ def preview_document_wizard_tasks(
             doc_date=payload.doc_date,
             direction=getattr(payload.direction, "value", payload.direction),
             doc_template_id=payload.doc_template_id,
-            extra_data=payload.extra_data,
+            extra_data=_merge_document_create_extra_data(payload),
             title=payload.title,
             case=case,
         )
@@ -1223,6 +1567,13 @@ def preview_document_wizard_fee_candidates(
 
     fee_draft_type = _normalize_text(getattr(template, "fee_draft_type", None))
     if not fee_draft_type:
+        return []
+
+    semantics = resolve_document_semantics(template)
+    if (
+        semantics.catalog_status == "EXECUTABLE"
+        and semantics.execution_behavior == "APPLICATION_FEE_NOTICE"
+    ):
         return []
 
     case_ids = [_normalize_text(row.case_id) for row in data.rows]
@@ -1852,7 +2203,7 @@ def _build_document_wizard_payload(
     row: DocumentWizardBatchRowIn,
     template: DocTemplate,
 ) -> DocumentCreateIn:
-    data = defaults.model_dump()
+    data = defaults.model_dump(exclude_unset=True)
     row_data = row.model_dump(exclude_unset=True)
     data.update(row_data)
     data["case_id"] = _normalize_text(row.case_id)
@@ -1959,6 +2310,97 @@ def get_document(db: Session, document_id: str) -> Document:
     return document
 
 
+@dataclass(frozen=True, slots=True)
+class AttachmentEvidenceReadProjection:
+    evidence_version_id: str
+    role: EvidenceRole
+    creator_id: str
+    reviewer_id: str | None
+    review_state: EvidenceReviewState
+    is_current: bool
+    is_final: bool
+
+
+def _attachment_current_evidence_invalid() -> None:
+    raise_business_error(
+        "DOCUMENT_ATTACHMENT_CURRENT_EVIDENCE_INVALID",
+        "当前附件证据版本数据无效",
+        status_code=409,
+    )
+
+
+def _is_valid_evidence_identifier(value: object) -> bool:
+    return type(value) is str and bool(value.strip()) and len(value) <= 36
+
+
+def get_current_attachment_evidence_versions(
+    db: Session,
+    *,
+    document: Document,
+) -> dict[str, AttachmentEvidenceReadProjection]:
+    attachment_ids = tuple(attachment.id for attachment in document.attachments)
+    if not attachment_ids:
+        return {}
+    attachment_id_set = set(attachment_ids)
+
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.attachment_id.in_(attachment_ids),
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_attachment: dict[str, AttachmentEvidenceReadProjection] = {}
+    for version in versions:
+        if (
+            not _is_valid_evidence_identifier(version.id)
+            or version.document_id != document.id
+            or version.case_id != document.case_id
+            or version.attachment_id not in attachment_id_set
+            or type(version.lineage_key) is not str
+            or not version.lineage_key.strip()
+            or len(version.lineage_key) > 128
+            or version.current_identity_key != f"{document.case_id}|{version.lineage_key}"
+            or version.attachment_id in by_attachment
+            or not _is_valid_evidence_identifier(version.creator_id)
+        ):
+            _attachment_current_evidence_invalid()
+        try:
+            role = EvidenceRole(version.role)
+            state = EvidenceVersionState(version.state)
+            review_state = EvidenceReviewState(version.review_state)
+        except (TypeError, ValueError):
+            _attachment_current_evidence_invalid()
+        if (
+            role in {EvidenceRole.RAW_ATTACHMENT, EvidenceRole.GENERATED_ATTACHMENT}
+            and state is not EvidenceVersionState.DRAFT
+        ):
+            _attachment_current_evidence_invalid()
+        if review_state is EvidenceReviewState.PENDING:
+            if version.reviewer_id is not None or version.reviewed_at is not None:
+                _attachment_current_evidence_invalid()
+        elif (
+            not _is_valid_evidence_identifier(version.reviewer_id)
+            or type(version.reviewed_at) is not datetime
+            or version.reviewed_at.tzinfo is not None
+            or version.reviewer_id == version.creator_id
+        ):
+            _attachment_current_evidence_invalid()
+        by_attachment[version.attachment_id] = AttachmentEvidenceReadProjection(
+            evidence_version_id=version.id,
+            role=role,
+            creator_id=version.creator_id,
+            reviewer_id=version.reviewer_id,
+            review_state=review_state,
+            is_current=True,
+            is_final=state is EvidenceVersionState.FINAL,
+        )
+    return by_attachment
+
+
 def _pop_reply_task_controls(updates: dict[str, object]) -> tuple[str | None, dict[str, date]]:
     action = updates.pop("reply_task_action", None)
     task_updates: dict[str, date] = {}
@@ -2043,6 +2485,107 @@ def _apply_reply_task_update_controls(
         )
 
 
+def _merge_document_update_extra_data(
+    document: Document,
+    updates: dict,
+) -> date | None:
+    structured_fields = (
+        "official_due_date",
+        "official_due_date_source",
+        "official_due_date_status",
+        "description",
+    )
+    structured_updates = {
+        field: updates.pop(field) for field in structured_fields if field in updates
+    }
+    raw_was_updated = "extra_data" in updates
+    if not structured_updates and not raw_was_updated:
+        return None
+
+    raw = updates.pop("extra_data", document.extra_data)
+    deadline_was_updated = raw_was_updated or any(
+        field in structured_updates
+        for field in (
+            "official_due_date",
+            "official_due_date_source",
+            "official_due_date_status",
+        )
+    )
+    try:
+        existing = parse_document_extra_data(document.extra_data)
+        existing_deadline_fields = {
+            "official_due_date": existing.official_due_date,
+            "official_due_date_source": existing.official_due_date_source,
+            "official_due_date_status": existing.official_due_date_status,
+        }
+        confirmed_structured_override = existing.official_due_date_status == "CONFIRMED" and any(
+            field in structured_updates
+            and structured_updates[field] != existing_deadline_fields[field]
+            for field in existing_deadline_fields
+        )
+        if confirmed_structured_override:
+            raise_business_error(
+                "DOCUMENT_DEADLINE_OVERRIDE_REQUIRED",
+                "A confirmed official due date cannot be changed by ordinary edit",
+                status_code=409,
+            )
+        merged = merge_document_extra_data(raw, **structured_updates) if structured_updates else raw
+        proposed = parse_document_extra_data(merged)
+
+        existing_identity = (
+            existing.official_due_date,
+            existing.official_due_date_source,
+            existing.official_due_date_status,
+        )
+        proposed_identity = (
+            proposed.official_due_date,
+            proposed.official_due_date_source,
+            proposed.official_due_date_status,
+        )
+        confirmed_override = (
+            existing.official_due_date_status == "CONFIRMED"
+            and proposed_identity != existing_identity
+        )
+        legacy_date_change = (
+            existing.official_due_date_status == "LEGACY_UNVERIFIED"
+            and deadline_was_updated
+            and proposed.official_due_date != existing.official_due_date
+        )
+        if confirmed_override or legacy_date_change:
+            raise_business_error(
+                "DOCUMENT_DEADLINE_OVERRIDE_REQUIRED",
+                "A confirmed or legacy official due date cannot be changed by ordinary edit",
+                status_code=409,
+            )
+        if deadline_was_updated and proposed.official_due_date_status == "LEGACY_UNVERIFIED":
+            raise DocumentExtraDataBusinessError(
+                "OfficialDueDate",
+                "writes require date, source, and write status together",
+            )
+        updates["extra_data"] = merged
+        if (
+            deadline_was_updated
+            and existing.official_due_date_status in (None, "LEGACY_UNVERIFIED")
+            and proposed.official_due_date_status == "CONFIRMED"
+        ):
+            return proposed.official_due_date
+        return None
+    except DocumentExtraDataShapeError as exc:
+        raise_business_error(
+            "DOCUMENT_EXTRA_DATA_INVALID",
+            "Document extra data has an invalid shape",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=422,
+        )
+    except DocumentExtraDataBusinessError as exc:
+        raise_business_error(
+            "DOCUMENT_DEADLINE_INVALID",
+            "Document deadline fields are incomplete or inconsistent",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=400,
+        )
+
+
 def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Document:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
@@ -2074,6 +2617,17 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
             select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
         ).scalar_one_or_none()
 
+    confirmed_legacy_due_date = _merge_document_update_extra_data(document, updates)
+    if confirmed_legacy_due_date is not None and template is not None:
+        semantics = resolve_document_semantics(template)
+        if semantics.execution_behavior == "OA_REPLY" and semantics.task_template_code:
+            TaskGenerationService().synchronize_confirmed_oa_deadline(
+                db,
+                document=document,
+                case_id=case.id,
+                task_template_code=semantics.task_template_code,
+                due_date=confirmed_legacy_due_date,
+            )
     for field, value in updates.items():
         setattr(document, field, value)
 
@@ -2094,11 +2648,50 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
     if "reply_to_id" in updates or (
         "doc_template_id" in updates and getattr(template, "status_restore", None)
     ):
-        _apply_reply_chain(db, document=document, doc_date=document.doc_date)
+        _apply_reply_chain(
+            db,
+            document=document,
+            doc_date=document.doc_date,
+            template=template,
+        )
 
     db.commit()
     db.refresh(document)
     return document
+
+
+@dataclass(frozen=True, slots=True)
+class PendingAttachmentEvidenceUpload:
+    attachment: DocAttachment
+    evidence_version: EvidenceVersionResult
+    managed_file_path: Path
+
+
+def _remove_managed_attachment_file(
+    managed_file_path: Path,
+    *,
+    original_error: Exception,
+) -> None:
+    try:
+        managed_file_path.unlink()
+    except FileNotFoundError:
+        return
+    except Exception as cleanup_error:
+        logger.error(
+            "Attachment compensation failed; residual_path=%s; original_error=%r",
+            managed_file_path,
+            original_error,
+            exc_info=(
+                type(original_error),
+                original_error,
+                original_error.__traceback__,
+            ),
+        )
+        raise BusinessError(
+            "ATTACHMENT_STORAGE_COMPENSATION_FAILED",
+            "Attachment storage compensation failed",
+            status_code=500,
+        ) from cleanup_error
 
 
 def add_attachment(
@@ -2113,10 +2706,18 @@ def add_attachment(
     package_usage_hint: str | None = None,
     is_archive_evidence: bool | None = None,
     is_receipt_evidence: bool | None = None,
-) -> DocAttachment:
+) -> PendingAttachmentEvidenceUpload:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    creator_id = (actor_id or "").strip()
+    if not creator_id:
+        raise_business_error(
+            "ATTACHMENT_ACTOR_REQUIRED",
+            "Authenticated attachment creator is required",
+            status_code=400,
+        )
 
     original_name = (upload_file.filename or "").strip()
     if not original_name:
@@ -2144,13 +2745,13 @@ def add_attachment(
     max_size_bytes = 25 * 1024 * 1024
     stored_name = f"{uuid4().hex}_{Path(original_name).name}"
     relative_path = f"attachments/{document_id}/{stored_name}"
-    dest_path = safe_join(storage_dir, relative_path)
-    ensure_dir(str(Path(dest_path).parent))
+    managed_file_path = Path(safe_join(storage_dir, relative_path))
 
     size_bytes = 0
     content_hasher = sha256()
     try:
-        with open(dest_path, "wb") as f:
+        ensure_dir(str(managed_file_path.parent))
+        with open(managed_file_path, "wb") as f:
             while True:
                 chunk = upload_file.file.read(1024 * 1024)
                 if not chunk:
@@ -2164,33 +2765,84 @@ def add_attachment(
                     )
                 content_hasher.update(chunk)
                 f.write(chunk)
-    except Exception:
-        try:
-            Path(dest_path).unlink()
-        except FileNotFoundError:
-            pass
-        raise
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_STORAGE_WRITE_FAILED",
+            "Attachment storage write failed",
+            status_code=500,
+        )
 
-    attachment = DocAttachment(
-        id=str(uuid4()),
-        document_id=document_id,
-        file_name=original_name,
-        file_path=relative_path,
-        mime_type=content_type,
-        file_size=size_bytes,
-        official_file_role=manifest_metadata["official_file_role"],
-        source_role_alias=manifest_metadata["source_role_alias"],
-        external_upload_position=manifest_metadata["external_upload_position"],
-        content_hash=f"sha256:{content_hasher.hexdigest()}",
-        package_usage_hint=manifest_metadata["package_usage_hint"],
-        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
-        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
-    )
-    db.add(attachment)
-    _advance_grant_notice_case_after_attachment(db, document=document)
-    db.commit()
-    db.refresh(attachment)
-    return attachment
+    try:
+        attachment = DocAttachment(
+            id=str(uuid4()),
+            document_id=document_id,
+            file_name=original_name,
+            file_path=relative_path,
+            mime_type=content_type,
+            file_size=size_bytes,
+            official_file_role=manifest_metadata["official_file_role"],
+            source_role_alias=manifest_metadata["source_role_alias"],
+            external_upload_position=manifest_metadata["external_upload_position"],
+            content_hash=f"sha256:{content_hasher.hexdigest()}",
+            package_usage_hint=manifest_metadata["package_usage_hint"],
+            is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+            is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
+        )
+        db.add(attachment)
+        db.flush()
+        final_official_roles = {
+            "FILING_MERGED_PDF",
+            "OFFICIAL_NOTICE_PDF",
+        }
+        evidence_role = (
+            EvidenceRole.OFFICIAL_FINAL_PDF
+            if official_file_role in final_official_roles
+            else EvidenceRole.FILING_FULL_WORD
+            if official_file_role == EvidenceRole.FILING_FULL_WORD.value
+            else EvidenceRole.RAW_ATTACHMENT
+        )
+        evidence_state = (
+            EvidenceVersionState.FINAL
+            if evidence_role is EvidenceRole.OFFICIAL_FINAL_PDF
+            else EvidenceVersionState.DRAFT
+        )
+        evidence_version = register_evidence_version(
+            RegisterEvidenceVersionCommand(
+                case_id=document.case_id,
+                document_id=document_id,
+                attachment_id=attachment.id,
+                lineage_key=f"attachment:{attachment.id}",
+                role=evidence_role,
+                state=evidence_state,
+                creator_id=creator_id,
+                content_hash=attachment.content_hash,
+            ),
+            db,
+        )
+        _append_certificate_archived_activity(
+            db,
+            document=document,
+            evidence_version=evidence_version,
+        )
+        _advance_grant_notice_case_after_attachment(db, document=document)
+        db.flush()
+        return PendingAttachmentEvidenceUpload(
+            attachment=attachment,
+            evidence_version=evidence_version,
+            managed_file_path=managed_file_path,
+        )
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        )
 
 
 def persist_generated_attachment(
@@ -2208,10 +2860,48 @@ def persist_generated_attachment(
     package_usage_hint: str | None = None,
     is_archive_evidence: bool | None = None,
     is_receipt_evidence: bool | None = None,
+    actor_id: str | None = None,
+    template_id: str | None = None,
+    template_code: str | None = None,
 ) -> DocAttachment:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    provenance_values = (actor_id, template_id, template_code)
+    register_generated_evidence = any(value is not None for value in provenance_values)
+    if register_generated_evidence and any(
+        not isinstance(value, str) or not value.strip() for value in provenance_values
+    ):
+        raise_business_error(
+            "GENERATED_ATTACHMENT_PROVENANCE_REQUIRED",
+            "Generated attachment provenance is required",
+            status_code=400,
+        )
+
+    normalized_actor_id = actor_id.strip() if register_generated_evidence else None
+    normalized_template_id = template_id.strip() if register_generated_evidence else None
+    normalized_template_code = template_code.strip() if register_generated_evidence else None
+    if register_generated_evidence:
+        doc_template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+        ).scalar_one_or_none()
+        if doc_template is None or _normalize_text(doc_template.code) != normalized_template_code:
+            raise_business_error(
+                "GENERATED_ATTACHMENT_TEMPLATE_MISMATCH",
+                "Generated attachment template identity does not match the document",
+                status_code=409,
+            )
+        resolved_template, _template_path = resolve_document_template_render_source(
+            db,
+            doc_template=doc_template,
+        )
+        if resolved_template.id != normalized_template_id:
+            raise_business_error(
+                "GENERATED_ATTACHMENT_TEMPLATE_MISMATCH",
+                "Generated attachment template source identity does not match",
+                status_code=409,
+            )
 
     normalized_name = Path(_normalize_text(file_name) or "").name
     if not normalized_name:
@@ -2223,42 +2913,78 @@ def persist_generated_attachment(
 
     stored_name = f"{uuid4().hex}_{normalized_name}"
     relative_path = f"attachments/{document_id}/{stored_name}"
-    dest_path = safe_join(storage_dir, relative_path)
-    ensure_dir(str(Path(dest_path).parent))
+    managed_file_path = Path(safe_join(storage_dir, relative_path))
+    try:
+        ensure_dir(str(managed_file_path.parent))
+        with open(managed_file_path, "wb") as output_file:
+            output_file.write(content_bytes)
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        raise_business_error(
+            "ATTACHMENT_STORAGE_WRITE_FAILED",
+            "Attachment storage write failed",
+            status_code=500,
+        )
 
-    with open(dest_path, "wb") as output_file:
-        output_file.write(content_bytes)
-
-    manifest_metadata = _resolve_attachment_manifest_metadata(
-        official_file_role=official_file_role,
-        source_role_alias=source_role_alias,
-        external_upload_position=external_upload_position,
-        package_usage_hint=package_usage_hint,
-        is_archive_evidence=is_archive_evidence,
-        is_receipt_evidence=is_receipt_evidence,
-    )
-    attachment = DocAttachment(
-        id=str(uuid4()),
-        document_id=document_id,
-        file_name=normalized_name,
-        file_path=relative_path,
-        mime_type=mime_type or "application/octet-stream",
-        file_size=len(content_bytes),
-        official_file_role=manifest_metadata["official_file_role"],
-        source_role_alias=manifest_metadata["source_role_alias"],
-        external_upload_position=manifest_metadata["external_upload_position"],
-        content_hash=f"sha256:{sha256(content_bytes).hexdigest()}",
-        package_usage_hint=manifest_metadata["package_usage_hint"],
-        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
-        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
-    )
-    db.add(attachment)
-    if commit:
-        db.commit()
-        db.refresh(attachment)
-    else:
+    try:
+        manifest_metadata = _resolve_attachment_manifest_metadata(
+            official_file_role=official_file_role,
+            source_role_alias=source_role_alias,
+            external_upload_position=external_upload_position,
+            package_usage_hint=package_usage_hint,
+            is_archive_evidence=is_archive_evidence,
+            is_receipt_evidence=is_receipt_evidence,
+        )
+        attachment = DocAttachment(
+            id=str(uuid4()),
+            document_id=document_id,
+            file_name=normalized_name,
+            file_path=relative_path,
+            mime_type=mime_type or "application/octet-stream",
+            file_size=len(content_bytes),
+            official_file_role=manifest_metadata["official_file_role"],
+            source_role_alias=manifest_metadata["source_role_alias"],
+            external_upload_position=manifest_metadata["external_upload_position"],
+            content_hash=f"sha256:{sha256(content_bytes).hexdigest()}",
+            package_usage_hint=manifest_metadata["package_usage_hint"],
+            is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+            is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
+        )
+        db.add(attachment)
         db.flush()
-    return attachment
+        if register_generated_evidence:
+            template_code_hash = sha256(normalized_template_code.encode()).hexdigest()[:16]
+            register_evidence_version(
+                RegisterEvidenceVersionCommand(
+                    case_id=document.case_id,
+                    document_id=document_id,
+                    attachment_id=attachment.id,
+                    lineage_key=(
+                        f"generated:{normalized_template_id}:{template_code_hash}:{attachment.id}"
+                    ),
+                    role=EvidenceRole.GENERATED_ATTACHMENT,
+                    state=EvidenceVersionState.DRAFT,
+                    creator_id=normalized_actor_id,
+                    content_hash=attachment.content_hash,
+                ),
+                db,
+            )
+            db.flush()
+        if commit:
+            db.commit()
+            db.refresh(attachment)
+        return attachment
+    except Exception as exc:
+        if commit:
+            db.rollback()
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        )
 
 
 def build_document_template_render_context(
@@ -2327,12 +3053,14 @@ def _create_document_wizard_attachments_from_rows(
     document: Document,
     doc_template: DocTemplate,
     row_attachment_rows: list[DocumentWizardAttachmentFinalRowIn],
-) -> None:
+    actor_id: str | None = None,
+) -> list[Path]:
     resolved_template, template_path = resolve_document_template_render_source(
         db, doc_template=doc_template
     )
     renderer = TemplateRenderer()
     base_context = build_document_template_render_context(db, document=document)
+    managed_generated_files: list[Path] = []
 
     for attachment_row in row_attachment_rows:
         if _normalize_text(attachment_row.case_id) != document.case_id:
@@ -2437,15 +3165,26 @@ def _create_document_wizard_attachments_from_rows(
                 status_code=409,
             )
 
-        persist_generated_attachment(
+        storage_dir = _backend_storage_dir()
+        provenance: dict[str, str] = {}
+        if actor_id is not None:
+            provenance = {
+                "actor_id": actor_id,
+                "template_id": resolved_template.id,
+                "template_code": attachment_row.template_code,
+            }
+        attachment = persist_generated_attachment(
             db,
             document_id=document.id,
             file_name=attachment_row.output_file_name,
             content_bytes=rendered_bytes,
-            storage_dir=str(_backend_storage_dir()),
+            storage_dir=str(storage_dir),
             mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             commit=False,
+            **provenance,
         )
+        managed_generated_files.append(Path(safe_join(str(storage_dir), attachment.file_path)))
+    return managed_generated_files
 
 
 def get_attachment_download(

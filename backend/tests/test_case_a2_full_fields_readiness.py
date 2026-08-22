@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -61,6 +62,11 @@ def test_a2_full_fields_mvp_surface_persists_and_exposes_detail(
     bill_address_id = _create_address(client, auth_headers, client_id, "BILLING")
     first_applicant_id = _seed_applicant(session_factory, applicant_type="ENTITY", label="ENTITY")
     second_applicant_id = _seed_applicant(session_factory, applicant_type="INDIVIDUAL", label="IND")
+    _seed_approval_record(
+        session_factory,
+        applicant_ids=(first_applicant_id, second_applicant_id),
+        ratio="0.85",
+    )
     case_no = f"A2-{uuid4().hex[:8]}"
 
     response = client.post(
@@ -81,7 +87,7 @@ def test_a2_full_fields_mvp_surface_persists_and_exposes_detail(
             "claim_count": 12,
             "claim_pages": 4,
             "manuscript_words": 12345,
-            "fee_reduction": "0.15",
+            "fee_reduction": "0.85",
             "discount_rate": "0.8000",
             "applicant_kind": "ENTITY",
             "no_power": True,
@@ -132,7 +138,7 @@ def test_a2_full_fields_mvp_surface_persists_and_exposes_detail(
     assert detail["claim_count"] == 12
     assert detail["claim_pages"] == 4
     assert detail["manuscript_words"] == 12345
-    assert detail["fee_reduction"] == "0.15"
+    assert detail["fee_reduction"] == "0.85"
     assert detail["discount_rate"] == "0.8000"
     assert detail["no_power"] is True
     assert detail["no_prio_text"] is False

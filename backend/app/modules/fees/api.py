@@ -1,18 +1,67 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any
+import json
+from datetime import date, datetime
+from hashlib import sha256
+from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Path, Query, Response, status
+from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
-from app.core.errors import raise_business_error
+from app.core.config import get_settings
+from app.core.errors import BusinessError, raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
-from app.modules.fees.models import FeeDraft, FeeItem
+from app.modules.documents.models import DocumentEvidenceVersion
+from app.modules.fees.demo_service import (
+    create_demo_service_obligation,
+    get_demo_preflight,
+    get_demo_service_item,
+)
+from app.modules.fees.demo_service_schemas import (
+    DemoPreflightOut,
+    DemoServiceItemOut,
+    DemoServiceObligationIn,
+    DemoServiceObligationOut,
+)
+from app.modules.fees.fee_reduction import FeeReductionValidationError
+from app.modules.fees.fee_reduction_approval_schemas import (
+    FeeReductionApprovalCreateIn,
+    FeeReductionApprovalCreateOut,
+    FeeReductionApprovalListItemOut,
+)
+from app.modules.fees.fee_reduction_approval_service import (
+    FeeReductionApprovalRecordDisposition,
+    RecordFeeReductionApprovalCommand,
+    record_fee_reduction_approval,
+)
+from app.modules.fees.models import FeeDraft, FeeItem, FeeReductionApproval
+from app.modules.fees.obligation_contracts import (
+    FeeEstimateContext,
+    PreviewFeeEstimateCommand,
+    RecordFeeObligationInstructionCommand,
+)
+from app.modules.fees.obligation_schemas import (
+    FeeObligationDetailOut,
+    FeeObligationInstructionIn,
+    FeeObligationInstructionOut,
+    ServiceReceivableCreateIn,
+    ServiceReceivableCreateOut,
+)
+from app.modules.fees.obligation_service import (
+    CreateServiceReceivableObligationCommand,
+    FeeEstimatePreviewError,
+    FeeEstimatePreviewErrorCode,
+    create_service_receivable_obligation,
+    get_fee_obligation,
+    preview_estimate,
+    record_client_instruction,
+)
+from app.modules.fees.official_rate_book import SqlAlchemyOfficialFeeEstimateRateProvider
 from app.modules.fees.schemas import (
     ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
@@ -35,13 +84,88 @@ from app.modules.fees.service import create_fee_draft as create_fee_draft_servic
 from app.modules.fees.service import create_fee_rate as create_fee_rate_service
 from app.modules.fees.service import generate_apply_fee_draft as generate_apply_fee_draft_service
 from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
-from app.modules.fees.service import preview_official_fee_candidates as preview_official_fee_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
+from app.modules.fees.service_price_book import (
+    ActivateServicePriceBookCommand,
+    ImportServicePriceBookCommand,
+    ServicePriceBookItemInput,
+    activate_service_price_book,
+    import_service_price_book,
+)
+from app.modules.fees.service_price_book_schemas import (
+    ServicePriceBookActivationIn,
+    ServicePriceBookActivationOut,
+    ServicePriceBookImportIn,
+    ServicePriceBookImportOut,
+)
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _service_price_book_runtime_profile() -> str:
+    return get_settings().fpms_env
+
+
+def _service_price_book_utcnow() -> datetime:
+    return datetime.utcnow()
+
+
+@router.get(
+    "/fees/demo-preflight",
+    response_model=DemoPreflightOut,
+    summary="Validate a fresh local integrated-demo run",
+)
+def get_local_demo_preflight(
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> DemoPreflightOut:
+    return DemoPreflightOut.model_validate(get_demo_preflight(db))
+
+
+@router.get(
+    "/fees/demo-service-item",
+    response_model=DemoServiceItemOut,
+    summary="Read the validated local-demo service item",
+)
+def get_local_demo_service_item(
+    _perm: None = Depends(require_perm("Fee.Read")),
+) -> DemoServiceItemOut:
+    return DemoServiceItemOut.model_validate(get_demo_service_item())
+
+
+@router.post(
+    "/fees/demo-service-obligations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoServiceObligationOut,
+    summary="Create a local-demo service obligation",
+)
+def post_local_demo_service_obligation(
+    payload: DemoServiceObligationIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoServiceObligationOut:
+    try:
+        result = create_demo_service_obligation(
+            db,
+            case_id=str(payload.case_id),
+            item_code=payload.item_code,
+            actor_id=str(current_user.id),
+            idempotency_key=payload.idempotency_key,
+            recognized_at=_service_price_book_utcnow(),
+        )
+        output = DemoServiceObligationOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.reused:
+        response.status_code = status.HTTP_200_OK
+    return output
 
 
 def _get_client_display_name(client: Client) -> str | None:
@@ -64,6 +188,216 @@ def _build_client_name_map(db: Session, client_ids: set[str]) -> dict[str, str]:
         for client in clients
         if _get_client_display_name(client)
     }
+
+
+def _raise_corrupt_approval_scope() -> None:
+    raise_business_error(
+        "FEE_REDUCTION_APPROVAL_SCOPE_CORRUPT",
+        "费用减免审批费用范围数据损坏",
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def _fee_codes_from_approval_scope(
+    value: object,
+    expected_hash: object,
+) -> tuple[str, ...]:
+    def reject_constant(_value: str) -> None:
+        raise ValueError
+
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = item
+        return result
+
+    try:
+        if type(value) is not str:
+            raise ValueError
+        snapshot = json.loads(
+            value,
+            object_pairs_hook=unique_object,
+            parse_constant=reject_constant,
+        )
+        canonical_snapshot = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        snapshot_bytes = value.encode("utf-8")
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeEncodeError):
+        _raise_corrupt_approval_scope()
+
+    fee_codes = snapshot.get("fee_codes") if type(snapshot) is dict else None
+    if (
+        type(snapshot) is not dict
+        or set(snapshot) != {"fee_codes", "schema"}
+        or snapshot.get("schema") != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+        or type(fee_codes) is not list
+        or not fee_codes
+        or any(
+            type(code) is not str
+            or not code
+            or code != code.strip()
+            or "\x00" in code
+            or len(code) > 64
+            for code in fee_codes
+        )
+        or len(set(fee_codes)) != len(fee_codes)
+        or fee_codes != sorted(fee_codes)
+        or canonical_snapshot != value
+        or type(expected_hash) is not str
+        or len(expected_hash) != 64
+        or any(character not in "0123456789abcdef" for character in expected_hash)
+        or sha256(snapshot_bytes).hexdigest() != expected_hash
+    ):
+        _raise_corrupt_approval_scope()
+    return tuple(fee_codes)
+
+
+def _validate_approval_source_identity(row: Any, case_id: str) -> None:
+    evidence_case_id = row["evidence_case_id"]
+    lineage_key = row["evidence_lineage_key"]
+    current_identity_key = row["evidence_current_identity_key"]
+    try:
+        lineage_is_utf8 = type(lineage_key) is str and bool(lineage_key.encode("utf-8"))
+    except UnicodeEncodeError:
+        lineage_is_utf8 = False
+    if (
+        evidence_case_id != case_id
+        or type(lineage_key) is not str
+        or not lineage_key
+        or lineage_key != lineage_key.strip()
+        or "\x00" in lineage_key
+        or len(lineage_key) > 128
+        or not lineage_is_utf8
+        or current_identity_key != f"{case_id}|{lineage_key}"
+        or row["is_current"] is not True
+    ):
+        raise_business_error(
+            "FEE_REDUCTION_APPROVAL_SOURCE_IDENTITY_CORRUPT",
+            "费用减免审批来源当前标识数据损坏",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+@router.post(
+    "/fees/service-price-books/import",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ServicePriceBookImportOut,
+    summary="Import a service price book draft",
+)
+def post_service_price_book_import(
+    payload: ServicePriceBookImportIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServicePriceBookImportOut:
+    command = ImportServicePriceBookCommand(
+        source_classification=payload.source_classification,
+        book_version=payload.book_version,
+        scope_key=payload.scope_key,
+        currency=payload.currency,
+        tax_policy=payload.tax_policy,
+        discount_policy=payload.discount_policy,
+        source_reference=payload.source_reference,
+        source_content=payload.source_content,
+        expected_source_content_hash=payload.expected_source_content_hash,
+        items=tuple(
+            ServicePriceBookItemInput(
+                item_code=item.item_code,
+                unit_price=item.unit_price,
+            )
+            for item in payload.items
+        ),
+        effective_from=payload.effective_from,
+        effective_to=payload.effective_to,
+        actor_id=str(current_user.id),
+        idempotency_key=payload.idempotency_key,
+        runtime_profile=_service_price_book_runtime_profile(),
+    )
+    try:
+        result = import_service_price_book(db, command)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.disposition == "REUSED":
+        response.status_code = status.HTTP_200_OK
+    return ServicePriceBookImportOut.model_validate(result)
+
+
+@router.post(
+    "/fees/service-price-books/{price_book_id}/activate",
+    response_model=ServicePriceBookActivationOut,
+    summary="Activate a service price book",
+)
+def post_service_price_book_activation(
+    price_book_id: UUID,
+    payload: ServicePriceBookActivationIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServicePriceBookActivationOut:
+    command = ActivateServicePriceBookCommand(
+        price_book_id=str(price_book_id),
+        approval_reason=payload.approval_reason,
+        actor_id=str(current_user.id),
+        at=_service_price_book_utcnow(),
+        expected_current_price_book_id=(
+            None
+            if payload.expected_current_price_book_id is None
+            else str(payload.expected_current_price_book_id)
+        ),
+        runtime_profile=_service_price_book_runtime_profile(),
+    )
+    try:
+        result = activate_service_price_book(db, command)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return ServicePriceBookActivationOut.model_validate(result)
+
+
+@router.post(
+    "/fees/service-receivables",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ServiceReceivableCreateOut,
+    summary="Create a service receivable obligation",
+)
+def post_service_receivable(
+    payload: ServiceReceivableCreateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServiceReceivableCreateOut:
+    try:
+        result = create_service_receivable_obligation(
+            CreateServiceReceivableObligationCommand(
+                price_book_version_id=str(payload.price_book_version_id),
+                item_code=payload.item_code,
+                case_id=str(payload.case_id),
+                actor_id=str(current_user.id),
+                idempotency_key=payload.idempotency_key,
+                recognized_at=_service_price_book_utcnow(),
+            ),
+            db,
+        )
+        output = ServiceReceivableCreateOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.reused:
+        response.status_code = status.HTTP_200_OK
+    return output
 
 
 @router.get("/fees/drafts", summary="List fee drafts")
@@ -175,7 +509,36 @@ def create_fee_draft(
     - 404: Case or client not found
     - 422: VALIDATION_ERROR
     """
-    draft = create_fee_draft_service(db, data=payload, actor_id=current_user.id)
+    if payload.obligation_id is None:
+        draft = create_fee_draft_service(
+            db,
+            data=payload,
+            actor_id=current_user.id,
+            obligation_id=None,
+        )
+    else:
+        try:
+            draft = create_fee_draft_service(
+                db,
+                data=payload,
+                actor_id=current_user.id,
+                obligation_id=payload.obligation_id,
+            )
+            db.commit()
+            db.refresh(draft)
+        except BusinessError as exc:
+            db.rollback()
+            if exc.code == "FEE_OBLIGATION_NOT_FOUND":
+                raise BusinessError(
+                    code=exc.code,
+                    message=exc.message,
+                    details=exc.details,
+                    status_code=status.HTTP_409_CONFLICT,
+                ) from exc
+            raise
+        except Exception:
+            db.rollback()
+            raise
     return FeeDraftOut.model_validate(draft)
 
 
@@ -204,6 +567,7 @@ def generate_apply_fee_draft(
 
 @router.post(
     "/fees/official-fee-preview",
+    status_code=status.HTTP_200_OK,
     response_model=OfficialFeePreviewOut,
     summary="Preview official fee candidates",
 )
@@ -212,8 +576,234 @@ def preview_official_fee_candidates(
     _perm: None = Depends(require_perm("Fee.Read")),
     db: Session = Depends(get_db),
 ) -> OfficialFeePreviewOut:
-    preview = preview_official_fee_service(db, data=payload)
-    return OfficialFeePreviewOut.model_validate(preview)
+    with db.no_autoflush:
+        case = db.execute(select(Case).where(Case.id == payload.case_id)).scalar_one_or_none()
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    command = PreviewFeeEstimateCommand(
+        case_id=payload.case_id,
+        trigger_context=FeeEstimateContext(
+            trigger=payload.trigger_context.trigger,
+            source_document_id=payload.trigger_context.source_document_id,
+        ),
+        currency=payload.currency,
+    )
+    try:
+        estimate = preview_estimate(
+            command=command,
+            rate_effective_on=payload.rate_effective_on,
+            rate_provider=SqlAlchemyOfficialFeeEstimateRateProvider(db),
+        )
+    except FeeEstimatePreviewError as exc:
+        status_code = (
+            400
+            if exc.code
+            in {
+                FeeEstimatePreviewErrorCode.INVALID_COMMAND,
+                FeeEstimatePreviewErrorCode.TRIGGER_UNSUPPORTED,
+            }
+            else 409
+        )
+        raise_business_error(
+            exc.code.value,
+            exc.code.value,
+            details=exc.details,
+            status_code=status_code,
+        )
+    except FeeReductionValidationError as exc:
+        raise_business_error(
+            exc.code.value,
+            exc.code.value,
+            details=exc.details,
+            status_code=409,
+        )
+
+    return OfficialFeePreviewOut.model_validate(estimate)
+
+
+@router.get(
+    "/fees/cases/{case_id}/reduction-approvals",
+    response_model=list[FeeReductionApprovalListItemOut],
+    summary="List current fee reduction approvals for a case",
+)
+def list_fee_reduction_approvals(
+    case_id: Annotated[str, Path(min_length=1, max_length=36)],
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> list[FeeReductionApprovalListItemOut]:
+    with db.no_autoflush:
+        if db.get(Case, case_id) is None:
+            raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+        rows = (
+            db.execute(
+                select(
+                    FeeReductionApproval.id.label("approval_id"),
+                    FeeReductionApproval.scope_type,
+                    FeeReductionApproval.case_id,
+                    FeeReductionApproval.applicant_set_key,
+                    FeeReductionApproval.reduction_ratio,
+                    FeeReductionApproval.fee_scope_snapshot,
+                    FeeReductionApproval.fee_scope_hash,
+                    FeeReductionApproval.fee_year_from,
+                    FeeReductionApproval.fee_year_to,
+                    FeeReductionApproval.effective_from,
+                    FeeReductionApproval.effective_to,
+                    FeeReductionApproval.source_evidence_version_id,
+                    FeeReductionApproval.confirmation_status,
+                    FeeReductionApproval.confirmed_at,
+                    FeeReductionApproval.confirmed_by,
+                    DocumentEvidenceVersion.case_id.label("evidence_case_id"),
+                    DocumentEvidenceVersion.lineage_key.label("evidence_lineage_key"),
+                    DocumentEvidenceVersion.current_identity_key.label(
+                        "evidence_current_identity_key"
+                    ),
+                    (
+                        DocumentEvidenceVersion.current_identity_key
+                        == DocumentEvidenceVersion.case_id
+                        + literal("|")
+                        + DocumentEvidenceVersion.lineage_key
+                    ).label("is_current"),
+                )
+                .join(
+                    DocumentEvidenceVersion,
+                    DocumentEvidenceVersion.id == FeeReductionApproval.source_evidence_version_id,
+                )
+                .where(
+                    DocumentEvidenceVersion.case_id == case_id,
+                    FeeReductionApproval.confirmation_status == "CONFIRMED",
+                )
+                .order_by(
+                    FeeReductionApproval.confirmed_at.asc(),
+                    FeeReductionApproval.id.asc(),
+                )
+            )
+            .mappings()
+            .all()
+        )
+    result: list[FeeReductionApprovalListItemOut] = []
+    for row in rows:
+        _validate_approval_source_identity(row, case_id)
+        result.append(
+            FeeReductionApprovalListItemOut.model_validate(
+                {
+                    **row,
+                    "fee_codes": _fee_codes_from_approval_scope(
+                        row["fee_scope_snapshot"],
+                        row["fee_scope_hash"],
+                    ),
+                }
+            )
+        )
+    return result
+
+
+@router.post(
+    "/fees/cases/{case_id}/reduction-approvals",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeReductionApprovalCreateOut,
+    summary="Create a fee reduction approval",
+)
+def create_fee_reduction_approval(
+    case_id: str,
+    payload: FeeReductionApprovalCreateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FeeReductionApprovalCreateOut:
+    if payload.case_id != case_id:
+        raise_business_error(
+            "FEE_REDUCTION_APPROVAL_CASE_MISMATCH",
+            "费用减免审批案件标识不匹配",
+            details={
+                "path_case_id": case_id,
+                "body_case_id": payload.case_id,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    command = RecordFeeReductionApprovalCommand(
+        case_id=payload.case_id,
+        scope_type=payload.scope_type,
+        applicant_ids=payload.applicant_ids,
+        eligibility_attributes_version=payload.eligibility_attributes_version,
+        eligibility_attributes_json=payload.eligibility_attributes_json,
+        reduction_ratio=payload.reduction_ratio,
+        fee_codes=payload.fee_codes,
+        fee_year_from=payload.fee_year_from,
+        fee_year_to=payload.fee_year_to,
+        effective_from=payload.effective_from,
+        effective_to=payload.effective_to,
+        source_evidence_version_id=payload.source_evidence_version_id,
+        expected_source_content_hash=payload.expected_source_content_hash,
+        confirmed_at=payload.confirmed_at,
+        confirmed_by=current_user.id,
+    )
+    try:
+        result = record_fee_reduction_approval(command, db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    if result.disposition is FeeReductionApprovalRecordDisposition.REUSED:
+        response.status_code = status.HTTP_200_OK
+    return FeeReductionApprovalCreateOut(approval_id=result.approval_id)
+
+
+@router.post(
+    "/fees/obligations/{obligation_id}/instruction",
+    status_code=status.HTTP_200_OK,
+    response_model=FeeObligationInstructionOut,
+    summary="Record a fee obligation client instruction",
+)
+def record_fee_obligation_instruction(
+    obligation_id: str,
+    payload: FeeObligationInstructionIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FeeObligationInstructionOut:
+    command = RecordFeeObligationInstructionCommand(
+        obligation_id=obligation_id,
+        instruction=payload.instruction,
+        actor_id=current_user.id,
+        idempotency_key=payload.idempotency_key,
+    )
+    try:
+        result = record_client_instruction(command, db)
+    except BusinessError:
+        db.rollback()
+        raise
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return FeeObligationInstructionOut(
+        obligation_id=result.obligation.id,
+        client_instruction_status=result.obligation.statuses.client_instruction_status,
+        activity_id=result.activity_id,
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
+
+
+@router.get(
+    "/fees/obligations/{obligation_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=FeeObligationDetailOut,
+    summary="Get a fee obligation detail",
+)
+def get_fee_obligation_detail(
+    obligation_id: Annotated[str, Path(min_length=1, max_length=36)],
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> FeeObligationDetailOut:
+    return FeeObligationDetailOut.model_validate(get_fee_obligation(obligation_id, db))
 
 
 @router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")

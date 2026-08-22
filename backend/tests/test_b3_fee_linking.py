@@ -1,9 +1,9 @@
 """Tests for Batch B3: Document→FeeDraft Auto-Linking.
 
 Covers:
-- GRANT_NOTICE template creates FeeDraft with X-Auto-Fee-Draft-Created header
-- FeeDraft fields: draft_type, currency, status, totals
-- FeeDraft inherits client_id from case
+- GRANT_NOTICE registration with a confirmed due creates no generic fee draft
+- GRANT_NOTICE registration creates no zero-value draft or auto-draft header
+- GRANT_NOTICE registration for a client-linked case creates no generic fee draft
 - No fee draft created when doc has no template
 - No fee draft created for templates without fee_draft_type (e.g. CLIENT_IN)
 - fee_item_list JSON → FeeItems auto-created
@@ -73,6 +73,7 @@ def _create_case(client: TestClient, auth_headers: dict, **overrides) -> dict:
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
+        "fee_reduction": "0",
         "title_cn": "B3 Test Case",
         "applicants": [
             {
@@ -155,13 +156,14 @@ def _get_fee_draft_detail(client: TestClient, auth_headers: dict, draft_id: str)
 
 
 # ---------------------------------------------------------------------------
-# 1. GRANT_NOTICE creates FeeDraft
+# 1. GRANT_NOTICE creates no generic FeeDraft
 # ---------------------------------------------------------------------------
 
 
-def test_grant_notice_creates_fee_draft(client: TestClient, auth_headers: dict) -> None:
-    """POST doc with GRANT_NOTICE template → response has X-Auto-Fee-Draft-Created
-    header, and FeeDraft exists in DB via GET /fees/drafts."""
+def test_grant_notice_does_not_create_generic_fee_draft(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Confirmed GRANT_NOTICE registration creates no generic fee draft."""
     case = _create_case(client, auth_headers)
     tmpl = _get_doc_template_by_code(client, auth_headers, "GRANT_NOTICE")
 
@@ -172,32 +174,24 @@ def test_grant_notice_creates_fee_draft(client: TestClient, auth_headers: dict) 
         direction="IN",
         doc_template_id=tmpl["id"],
         title="授权通知书",
+        official_due_date="2026-08-28",
+        official_due_date_source="MANUAL_OFFICIAL_NOTICE",
+        official_due_date_status="CONFIRMED",
     )
     assert resp.status_code == 201, f"Doc creation failed: {resp.text}"
-
-    # Check response header
-    draft_id = resp.headers.get("X-Auto-Fee-Draft-Created")
-    assert draft_id is not None, (
-        f"Expected X-Auto-Fee-Draft-Created header, got headers: {dict(resp.headers)}"
-    )
-    assert len(draft_id) == 36, f"Draft ID should be UUID, got: {draft_id}"
-
-    # Verify draft exists in DB via API
-    drafts = _get_fee_drafts_for_case(client, auth_headers, case["id"])
-    draft_ids = [d["id"] for d in drafts]
-    assert draft_id in draft_ids, (
-        f"Auto-created draft {draft_id} not found in case fee drafts: {draft_ids}"
-    )
+    assert resp.headers.get("X-Auto-Fee-Draft-Created") is None
+    assert _get_fee_drafts_for_case(client, auth_headers, case["id"]) == []
 
 
 # ---------------------------------------------------------------------------
-# 2. FeeDraft fields correct
+# 2. GRANT_NOTICE creates no zero-value FeeDraft
 # ---------------------------------------------------------------------------
 
 
-def test_fee_draft_fields_correct(client: TestClient, auth_headers: dict) -> None:
-    """Created FeeDraft has: draft_type='GRANT_FEE', currency='CNY',
-    status='OPEN', all totals=0."""
+def test_grant_notice_does_not_create_zero_value_fee_draft(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Confirmed GRANT_NOTICE registration creates no zero-value draft."""
     case = _create_case(client, auth_headers)
     tmpl = _get_doc_template_by_code(client, auth_headers, "GRANT_NOTICE")
 
@@ -208,32 +202,24 @@ def test_fee_draft_fields_correct(client: TestClient, auth_headers: dict) -> Non
         direction="IN",
         doc_template_id=tmpl["id"],
         title="授权通知书-fields",
+        official_due_date="2026-08-28",
+        official_due_date_source="MANUAL_OFFICIAL_NOTICE",
+        official_due_date_status="CONFIRMED",
     )
     assert resp.status_code == 201
-    draft_id = resp.headers.get("X-Auto-Fee-Draft-Created")
-    assert draft_id is not None
-
-    # Verify fields via detail endpoint
-    detail = _get_fee_draft_detail(client, auth_headers, draft_id)
-    assert detail["draft_type"] == "GRANT_FEE", (
-        f"Expected draft_type 'GRANT_FEE', got '{detail['draft_type']}'"
-    )
-    assert detail["currency"] == "CNY", f"Expected currency 'CNY', got '{detail['currency']}'"
-    assert detail["status"] == "OPEN", f"Expected status 'OPEN', got '{detail['status']}'"
-
-    # Verify totals via list endpoint (has amount field)
-    drafts = _get_fee_drafts_for_case(client, auth_headers, case["id"])
-    draft_item = next(d for d in drafts if d["id"] == draft_id)
-    assert float(draft_item["amount"]) == 0.0, f"Expected amount 0, got {draft_item['amount']}"
+    assert resp.headers.get("X-Auto-Fee-Draft-Created") is None
+    assert _get_fee_drafts_for_case(client, auth_headers, case["id"]) == []
 
 
 # ---------------------------------------------------------------------------
-# 3. FeeDraft inherits client_id from case
+# 3. Client-linked GRANT_NOTICE creates no generic FeeDraft
 # ---------------------------------------------------------------------------
 
 
-def test_fee_draft_client_id_from_case(client: TestClient, auth_headers: dict) -> None:
-    """Case with client_id → fee draft inherits that client_id."""
+def test_client_linked_grant_notice_does_not_create_generic_fee_draft(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Confirmed GRANT_NOTICE registration has no draft side effect for a client case."""
     # Create a client first
     cl = _create_client(client, auth_headers)
     client_id = cl["id"]
@@ -251,16 +237,13 @@ def test_fee_draft_client_id_from_case(client: TestClient, auth_headers: dict) -
         direction="IN",
         doc_template_id=tmpl["id"],
         title="授权通知书-client",
+        official_due_date="2026-08-28",
+        official_due_date_source="MANUAL_OFFICIAL_NOTICE",
+        official_due_date_status="CONFIRMED",
     )
     assert resp.status_code == 201
-    draft_id = resp.headers.get("X-Auto-Fee-Draft-Created")
-    assert draft_id is not None
-
-    # Verify client_id on the draft
-    detail = _get_fee_draft_detail(client, auth_headers, draft_id)
-    assert detail["client_id"] == client_id, (
-        f"Expected fee draft client_id='{client_id}', got '{detail.get('client_id')}'"
-    )
+    assert resp.headers.get("X-Auto-Fee-Draft-Created") is None
+    assert _get_fee_drafts_for_case(client, auth_headers, case["id"]) == []
 
 
 # ---------------------------------------------------------------------------

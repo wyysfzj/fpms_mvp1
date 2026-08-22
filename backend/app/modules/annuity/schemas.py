@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PayListOfficialReadinessOut(BaseModel):
@@ -12,6 +12,33 @@ class PayListOfficialReadinessOut(BaseModel):
     official_upload_template_name: str | None = None
     official_upload_batch_limit: int | None = None
     official_pay_list_boundary_note: str | None = None
+
+
+class OfficialWorkbookAcceptanceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str = Field(..., min_length=1, max_length=36)
+    evidence_ref: str = Field(..., min_length=1, max_length=512)
+    evidence_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    accepted_at: datetime
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class OfficialWorkbookAcceptanceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    artifact_id: str
+    pay_list_id: int
+    evidence_ref: str
+    evidence_sha256: str
+    accepted_at: datetime
+    activity_id: str
+    status: str
+    accepted: bool
+    paid: bool
+    ticket_verified: bool
+    idempotency_key: str
+    disposition: str
 
 
 class AnnuityTaskListItemResponse(BaseModel):

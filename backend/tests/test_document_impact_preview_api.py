@@ -34,7 +34,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "文件影响预览测试案件",
-            "status": "NOT_FILED",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -80,6 +80,9 @@ def _create_document(
             "direction": direction,
             "doc_date": "2026-04-02",
             "title": title,
+            "official_due_date": "2026-07-02",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
     )
     assert response.status_code == 201, response.text
@@ -118,6 +121,9 @@ def test_document_impact_preview_returns_template_impacts_without_mutating_case(
             "direction": "IN",
             "doc_date": "2026-04-02",
             "title": "第一次审查意见通知书",
+            "official_due_date": "2026-07-02",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
     )
 
@@ -126,13 +132,22 @@ def test_document_impact_preview_returns_template_impacts_without_mutating_case(
     assert payload["case_id"] == case_data["id"]
     assert payload["template_code"] == "OA_IN"
     assert payload["confirmation_required"] is True
-    assert payload["status_impacts"][0]["kind"] == "CASE_STATUS"
-    assert payload["status_impacts"][0]["effect"] == "OA1"
-    assert payload["deadline_impacts"][0]["kind"] == "DEADLINE_TEMPLATE"
-    assert payload["deadline_impacts"][0]["effect"] == "OA_REPLY"
+    assert payload["status_impacts"] == []
+    official_due_impact = next(
+        impact for impact in payload["deadline_impacts"] if impact["kind"] == "OFFICIAL_DUE_DATE"
+    )
+    assert official_due_impact["effect"] == "2026-07-02"
+    assert "MANUAL_OFFICIAL_NOTICE" in official_due_impact["detail"]
+    assert "CONFIRMED" in official_due_impact["detail"]
     assert payload["task_impacts"][0]["kind"] == "AUTO_TASK"
+    assert payload["task_impacts"][0]["effect"] == "OA_REPLY"
     assert payload["fee_impacts"] == []
-    assert "案件状态将受模板影响" in payload["confirmation_items"]
+    assert "案件状态将受模板影响" not in payload["confirmation_items"]
+    assert (
+        "文书登记不会直接变更案件法律状态；"
+        "请通过已复核证据的生命周期入口确认状态变化"
+        in payload["risk_tips"]
+    )
 
     with session_factory() as db:
         case = db.query(Case).filter(Case.id == case_data["id"]).one()

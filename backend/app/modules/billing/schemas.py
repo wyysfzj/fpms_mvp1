@@ -1,10 +1,44 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
+
+_DEMO_MONEY_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
+
+
+def _strict_positive_demo_money(value: object) -> Decimal:
+    if type(value) is not str or _DEMO_MONEY_RE.fullmatch(value) is None:
+        raise ValueError("money must be a decimal string with exactly two fractional digits")
+    parsed = Decimal(value)
+    if parsed <= 0 or len(parsed.as_tuple().digits) > 18:
+        raise ValueError("money must be positive with at most 18 digits")
+    return parsed
+
+
+def _strict_demo_date(value: object) -> date:
+    if type(value) is not str:
+        raise ValueError("date must be an ISO date string")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("date must be an ISO date string") from exc
+    if parsed.isoformat() != value:
+        raise ValueError("date must be an ISO date string")
+    return parsed
+
+
+DemoPositiveMoney = Annotated[Decimal, BeforeValidator(_strict_positive_demo_money)]
+DemoDate = Annotated[date, BeforeValidator(_strict_demo_date)]
+
+
+def _strict_demo_text(value: object, label: str) -> object:
+    if type(value) is not str or not value or value != value.strip() or "\x00" in value:
+        raise ValueError(f"{label} must be a non-empty trimmed string")
+    return value
 
 
 class BillCreateSchema(BaseModel):
@@ -189,6 +223,135 @@ class BillDetailResponse(BaseModel):
     bad_debt_recoveries: list[BillBadDebtRecoveryResponse] = []
     bad_debt_total_recovered: Decimal = Field(Decimal("0"), ge=0)
     bad_debt_remaining_amount: Decimal = Field(Decimal("0"), ge=0)
+
+
+class DemoBillFromDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str = Field(..., min_length=1, max_length=36)
+    bill_no: str | None = Field(None, min_length=1, max_length=64)
+    bill_date: DemoDate
+    due_date: DemoDate | None = None
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator("draft_id", "bill_no", "idempotency_key", mode="before")
+    @classmethod
+    def validate_text(cls, value: object, info):
+        if value is None and info.field_name == "bill_no":
+            return value
+        return _strict_demo_text(value, info.field_name)
+
+    @model_validator(mode="after")
+    def validate_date_order(self) -> "DemoBillFromDraftRequest":
+        if self.due_date is not None and self.due_date < self.bill_date:
+            raise ValueError("due_date must not precede bill_date")
+        return self
+
+
+class DemoBillFromDraftResponse(BaseModel):
+    bill: BillDetailResponse
+    idempotency_key: str
+    reused: bool
+
+
+class DemoBankReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_bill_id: str = Field(..., min_length=1, max_length=36)
+    amount: DemoPositiveMoney
+    pay_no: str = Field(..., min_length=1, max_length=64)
+    pay_date: DemoDate
+    currency: Literal["CNY"]
+    pay_method: Literal["BANK_TRANSFER"]
+    bank_ref_no: str = Field(..., min_length=1, max_length=96)
+    remark: str | None = Field(None, max_length=512)
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator(
+        "target_bill_id",
+        "pay_no",
+        "bank_ref_no",
+        "idempotency_key",
+        mode="before",
+    )
+    @classmethod
+    def validate_text(cls, value: object, info):
+        return _strict_demo_text(value, info.field_name)
+
+
+class DemoPaymentOut(BaseModel):
+    id: str
+    pay_no: str
+    client_id: str
+    pay_date: date
+    currency: str
+    amount: Decimal
+    pay_method: str
+    bank_ref_no: str
+    remark: str | None = None
+
+
+class DemoPaymentLineOut(BaseModel):
+    id: str
+    payment_id: str
+    case_id: str
+    raw_amount: Decimal
+    allocated_amt: Decimal
+    balance_amt: Decimal
+    status: str
+
+
+class DemoBankReceiptResponse(BaseModel):
+    payment: DemoPaymentOut
+    line: DemoPaymentLineOut
+    bill: BillDetailResponse
+    target_bill_id: str
+    idempotency_key: str
+    reused: bool
+
+
+class DemoFullOffsetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payment_line_id: str = Field(..., min_length=1, max_length=36)
+    bill_id: str = Field(..., min_length=1, max_length=36)
+    offset_amt: DemoPositiveMoney
+    offset_date: DemoDate
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator("payment_line_id", "bill_id", "idempotency_key", mode="before")
+    @classmethod
+    def validate_text(cls, value: object, info):
+        return _strict_demo_text(value, info.field_name)
+
+
+class DemoOffsetOut(BaseModel):
+    id: str
+    payment_line_id: str
+    bill_id: str
+    offset_amt: Decimal
+    offset_date: date
+    is_reversed: bool
+
+
+class DemoCaseReceiptOut(BaseModel):
+    id: str
+    case_id: str
+    fee_type: str
+    fee_code: str
+    currency: str
+    receivable_amt: Decimal
+    received_amt: Decimal
+    last_receipt_date: date
+
+
+class DemoFullOffsetResponse(BaseModel):
+    offset: DemoOffsetOut
+    bill: BillDetailResponse
+    line: DemoPaymentLineOut
+    case_receipt: DemoCaseReceiptOut
+    idempotency_key: str
+    reused: bool
 
 
 class PaymentSchema(BaseModel):

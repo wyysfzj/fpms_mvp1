@@ -53,8 +53,11 @@
         </div>
       </div>
 
-      <!-- V3 Stepper (above tabs) -->
-      <CaseStepper :status="caseData.status" />
+      <CaseLifecycleOverlay
+        :case-id="caseData.id"
+        @loaded="handleLifecycleOverlayLoaded"
+        @failed="handleLifecycleOverlayFailed"
+      />
 
       <!-- Main content grid: left tabs + right panel -->
       <div class="case-detail-v3-grid">
@@ -444,7 +447,12 @@
             </el-tab-pane>
 
             <el-tab-pane :label="ZH.caseDetail.fees" name="fees">
-              <CaseFeesTab :case-id="caseData.id" />
+              <CaseFeesTab
+                :case-id="caseData.id"
+                :lifecycle-overlay="lifecycleOverlay"
+                :lifecycle-overlay-error="lifecycleOverlayError"
+                lifecycle-overlay-managed
+              />
             </el-tab-pane>
 
             <el-tab-pane :label="ZH.caseDetail.billing" name="billing">
@@ -482,6 +490,7 @@
           <div style="margin-top: 14px;">
             <div class="related-tasks-title">{{ ZH.caseDetail.quickActions }}</div>
             <div class="quick-actions">
+              <el-button size="small" type="primary" @click="openFilingPreparation">申请前准备</el-button>
               <el-button size="small" @click="handleEdit">{{ ZH.caseDetail.editCase }}</el-button>
               <el-button size="small" @click="showLimitedEdit = true">{{ ZH.caseDetail.quickEdit }}</el-button>
             </div>
@@ -516,12 +525,13 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCase, getCaseByCaseNo } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
+import type { LifecycleOverlay } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import LimitedEditDialog from '../components/LimitedEditDialog.vue'
 import CaseReceiptsSummary from '../components/CaseReceiptsSummary.vue'
-import CaseStepper from '../components/CaseStepper.vue'
+import CaseLifecycleOverlay from '../components/CaseLifecycleOverlay.vue'
 import CaseDeadlineCard from '../components/CaseDeadlineCard.vue'
 import CaseRelatedTasks from '../components/CaseRelatedTasks.vue'
 import CaseDocumentsTab from '../components/CaseDocumentsTab.vue'
@@ -542,6 +552,8 @@ const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('overview')
 const showLimitedEdit = ref(false)
+const lifecycleOverlay = ref<LifecycleOverlay | null>(null)
+const lifecycleOverlayError = ref<ApiError | null>(null)
 
 const statusTagClass = computed(() =>
   caseData.value?.status ? getStatusTagClass(caseData.value.status) : 'gray'
@@ -651,6 +663,14 @@ function goBack() {
   router.push('/cases')
 }
 
+function openFilingPreparation() {
+  if (!caseData.value?.id) return
+  router.push({
+    name: 'official_work_filing_preparation',
+    query: { case_id: caseData.value.id },
+  })
+}
+
 function handleEdit() {
   if (caseData.value?.case_no) {
     router.push({ name: 'case_edit_by_no', params: { caseNo: caseData.value.case_no } })
@@ -662,6 +682,16 @@ function handleEdit() {
 
 function handleLimitedEditSuccess() {
   fetchCase()
+}
+
+function handleLifecycleOverlayLoaded(value: LifecycleOverlay) {
+  lifecycleOverlay.value = value
+  lifecycleOverlayError.value = null
+}
+
+function handleLifecycleOverlayFailed(value: ApiError) {
+  lifecycleOverlay.value = null
+  lifecycleOverlayError.value = value
 }
 
 function formatUnknownCode(label: string) {

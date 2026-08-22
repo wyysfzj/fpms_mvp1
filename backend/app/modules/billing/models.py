@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -75,6 +76,19 @@ class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
 
 
+class BillDraftSource(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_bill_draft_source"
+
+    bill_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    draft_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_fee_draft.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class BadDebtVoucher(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bad_debt_voucher"
 
@@ -135,6 +149,7 @@ class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
         Boolean, nullable=True, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    receipt_key: Mapped[str | None] = mapped_column(String(192), nullable=True, unique=True)
 
 
 class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -165,6 +180,8 @@ class Payment(UUIDPrimaryKeyMixin, AuditMixin, Base):
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pay_method: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    bank_ref_no: Mapped[str | None] = mapped_column(String(96), nullable=True, unique=True)
 
 
 class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -183,3 +200,47 @@ class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
     balance_amt: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
+
+
+class DemoPaymentCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_payment_command"
+
+    payment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_payment.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    target_bill_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_bill.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class DemoOffsetCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_offset_command"
+
+    offset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_offset.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    receipt_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_case_receipt.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class DemoFinanceCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_finance_command"
+    __table_args__ = (
+        UniqueConstraint(
+            "operation",
+            "idempotency_key",
+            name="uq_demo_finance_command_operation_key",
+        ),
+    )
+
+    operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    command_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    result_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)

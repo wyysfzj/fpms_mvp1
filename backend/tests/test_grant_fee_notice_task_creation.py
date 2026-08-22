@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -17,6 +18,8 @@ DOC_BASE = "/api/v1/documents"
 DOC_TEMPLATE_BASE = "/api/v1/doc-templates"
 CASE_BASE = "/api/v1/cases"
 GRANT_FEE_TASK_BASE = "/api/v1/grant-fee-tasks/list"
+GRANT_NOTICE_DUE_DATE = "2026-07-31"
+IMPORTED_GRANT_NOTICE_DUE_DATE = "2026-08-15"
 
 
 def _uid(prefix: str) -> str:
@@ -31,6 +34,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "Grant fee notice task case",
         },
         headers=auth_headers,
@@ -67,6 +71,9 @@ def _create_grant_notice(
             "direction": "IN",
             "doc_date": "2026-04-10",
             "title": title,
+            "official_due_date": GRANT_NOTICE_DUE_DATE,
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
         headers=auth_headers,
     )
@@ -74,7 +81,7 @@ def _create_grant_notice(
     return resp.json()
 
 
-def _set_case_ready_for_granted(session_factory: sessionmaker, *, case_id: str) -> None:
+def _set_complete_grant_fields(session_factory: sessionmaker, *, case_id: str) -> None:
     with session_factory() as db:
         case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
         case.app_no = "CN202610000009"
@@ -89,7 +96,7 @@ def _set_case_ready_for_granted(session_factory: sessionmaker, *, case_id: str) 
         db.commit()
 
 
-def _set_case_missing_publication_fields_for_granted(
+def _set_incomplete_grant_fields(
     session_factory: sessionmaker, *, case_id: str
 ) -> None:
     with session_factory() as db:
@@ -204,6 +211,13 @@ def _seed_imported_grant_notice_document(
                 direction="IN",
                 doc_date=date(2026, 4, 10),
                 title="授权通知书",
+                extra_data=json.dumps(
+                    {
+                        "OfficialDueDate": IMPORTED_GRANT_NOTICE_DUE_DATE,
+                        "OfficialDueDateSource": "IMPORTED_OFFICIAL_NOTICE",
+                        "OfficialDueDateStatus": "CONFIRMED",
+                    }
+                ),
             )
         )
         db.commit()
@@ -218,20 +232,25 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     case = _create_case(client, auth_headers)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
-    _create_grant_notice(
+    document = _create_grant_notice(
         client,
         auth_headers,
         case_id=case["id"],
         template_id=template["id"],
         title="授权通知书",
     )
-    _create_grant_notice(
-        client,
-        auth_headers,
-        case_id=case["id"],
-        template_id=template["id"],
-        title="授权通知书-重复登记",
+    repeat_resp = client.post(
+        f"{DOC_BASE}/{document['id']}/attachments",
+        headers=auth_headers,
+        files={
+            "file": (
+                "授权通知书-重复处理.pdf",
+                BytesIO(b"%PDF-1.4 repeated same-source grant notice"),
+                "application/pdf",
+            )
+        },
     )
+    assert repeat_resp.status_code == 201, repeat_resp.text
 
     resp = client.get(
         GRANT_FEE_TASK_BASE,
@@ -245,7 +264,7 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     item = payload["items"][0]
     assert item["case_id"] == case["id"]
     assert item["status"] == "OPEN"
-    assert item["due_date"] == "2026-06-09"
+    assert item["due_date"] == GRANT_NOTICE_DUE_DATE
     assert item["currency"] == "CNY"
     assert item["trigger_rule"] == "收到办理登记手续通知书/授权通知书"
     assert (
@@ -267,11 +286,14 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
             .all()
         )
         assert len(tasks) == 1
-        assert tasks[0].due_date == date(2026, 6, 9)
+        assert tasks[0].due_date == date.fromisoformat(GRANT_NOTICE_DUE_DATE)
+        assert tasks[0].source_document_id == document["id"]
+        assert tasks[0].deadline_source == "MANUAL_OFFICIAL_NOTICE"
+        assert tasks[0].deadline_confirmed_at is not None
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANT_PENDING"
+    assert case_resp.json()["status"] == case["status"]
 
 
 def test_grant_notice_document_creation_prefills_official_gov_fee_from_annuity_rate(
@@ -280,7 +302,7 @@ def test_grant_notice_document_creation_prefills_official_gov_fee_from_annuity_r
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     _seed_inv_annuity_gov_rate(session_factory)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
@@ -306,7 +328,7 @@ def test_grant_notice_document_creation_prefills_current_effective_gov_fee(
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     _seed_inv_annuity_gov_rate_with_effective_windows(session_factory)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
@@ -326,13 +348,13 @@ def test_grant_notice_document_creation_prefills_current_effective_gov_fee(
         assert task.service_fee_amt == Decimal("0.00")
 
 
-def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
+def test_grant_notice_attachment_is_lifecycle_neutral_with_complete_grant_fields(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
     document = _create_grant_notice(
@@ -345,7 +367,7 @@ def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
 
     pending_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert pending_resp.status_code == 200, pending_resp.text
-    assert pending_resp.json()["status"] == "GRANT_PENDING"
+    assert pending_resp.json()["status"] == case["status"]
 
     upload_resp = client.post(
         f"{DOC_BASE}/{document['id']}/attachments",
@@ -362,16 +384,16 @@ def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    assert case_resp.json()["status"] == case["status"]
 
 
-def test_grant_notice_attachment_upload_does_not_advance_without_publication_fields(
+def test_grant_notice_attachment_is_lifecycle_neutral_with_incomplete_grant_fields(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_missing_publication_fields_for_granted(session_factory, case_id=case["id"])
+    _set_incomplete_grant_fields(session_factory, case_id=case["id"])
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
     document = _create_grant_notice(
@@ -384,7 +406,7 @@ def test_grant_notice_attachment_upload_does_not_advance_without_publication_fie
 
     pending_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert pending_resp.status_code == 200, pending_resp.text
-    assert pending_resp.json()["status"] == "GRANT_PENDING"
+    assert pending_resp.json()["status"] == case["status"]
 
     upload_resp = client.post(
         f"{DOC_BASE}/{document['id']}/attachments",
@@ -401,20 +423,21 @@ def test_grant_notice_attachment_upload_does_not_advance_without_publication_fie
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANT_PENDING"
+    assert case_resp.json()["status"] == case["status"]
 
 
-def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_task(
+def test_imported_grant_notice_attachment_keeps_case_status_and_creates_fee_task(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     with session_factory() as db:
         target_case = db.execute(select(Case).where(Case.id == case["id"])).scalar_one()
         target_case.status = "SUB_EXAM"
         db.commit()
+        pre_attachment_status = target_case.status
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
     document_id = _seed_imported_grant_notice_document(
         session_factory,
@@ -437,7 +460,7 @@ def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_t
     assert upload_resp.status_code == 201, upload_resp.text
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    assert case_resp.json()["status"] == pre_attachment_status
 
     task_resp = client.get(
         GRANT_FEE_TASK_BASE,
@@ -447,4 +470,12 @@ def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_t
     assert task_resp.status_code == 200, task_resp.text
     payload = task_resp.json()
     assert payload["total"] == 1
-    assert payload["items"][0]["due_date"] == "2026-06-09"
+    assert payload["items"][0]["due_date"] == IMPORTED_GRANT_NOTICE_DUE_DATE
+
+    with session_factory() as db:
+        task = db.execute(
+            select(T_GrantFeeTask).where(T_GrantFeeTask.case_id == case["id"])
+        ).scalar_one()
+        assert task.source_document_id == document_id
+        assert task.deadline_source == "IMPORTED_OFFICIAL_NOTICE"
+        assert task.deadline_confirmed_at is not None

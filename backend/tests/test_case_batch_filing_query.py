@@ -57,12 +57,12 @@ def _create_case(
 ) -> dict:
     payload = {
         "case_no": f"{case_no_prefix}-{uuid4().hex[:8]}",
+        "fee_reduction": "0",
         "case_type": case_type,
         "patent_category": patent_category,
         "flow_dir": flow_dir,
         "client_id": client_id,
         "title_cn": f"{case_no_prefix} 标题",
-        "status": status,
         "recv_date": recv_date,
         "applicants": [
             {

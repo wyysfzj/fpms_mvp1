@@ -12,10 +12,15 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
-from app.modules.billing.models import Bill, BillItem
+from app.modules.billing.models import Bill, BillDraftSource, BillItem
 from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.fees.enums import FeeDraftStatus, FeeType
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.fees.obligation_contracts import (
+    PrepareFeeObligationDraftCommand,
+    PrepareFeeObligationDraftResult,
+)
+from app.modules.fees.obligation_service import prepare_draft
 from app.modules.fees.schemas import (
     ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
@@ -582,7 +587,21 @@ def get_fee_draft(db: Session, *, draft_id: str) -> FeeDraft:
     return draft
 
 
-def create_fee_draft(db: Session, *, data: FeeDraftCreateIn, actor_id: str | None) -> FeeDraft:
+def create_fee_draft(
+    db: Session,
+    *,
+    data: FeeDraftCreateIn,
+    actor_id: str | None,
+    obligation_id: str | None = None,
+) -> FeeDraft:
+    if obligation_id is not None:
+        return _create_obligation_fee_draft(
+            db,
+            data=data,
+            actor_id=actor_id,
+            obligation_id=obligation_id,
+        )
+
     case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
     if not case:
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
@@ -607,6 +626,68 @@ def create_fee_draft(db: Session, *, data: FeeDraftCreateIn, actor_id: str | Non
     db.add(draft)
     db.commit()
     db.refresh(draft)
+    return draft
+
+
+def _create_obligation_fee_draft(
+    db: Session,
+    *,
+    data: FeeDraftCreateIn,
+    actor_id: str | None,
+    obligation_id: str,
+) -> FeeDraft:
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id.strip() != actor_id
+        or len(actor_id) > 36
+    ):
+        raise_business_error(
+            "FEE_DRAFT_OBLIGATION_ACTOR_REQUIRED",
+            "关联费用义务时必须提供操作人",
+            status_code=409,
+        )
+    idempotency_key = f"generic-fee-draft:{obligation_id}"
+    connection = db.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN")
+    with db.begin_nested():
+        result = prepare_draft(
+            PrepareFeeObligationDraftCommand(
+                obligation_id=obligation_id,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        if type(result) is not PrepareFeeObligationDraftResult:
+            raise_business_error(
+                "FEE_DRAFT_OBLIGATION_LINK_MISMATCH",
+                "费用草稿与费用义务关联不一致",
+                status_code=409,
+            )
+        draft = db.execute(
+            select(FeeDraft).where(FeeDraft.id == result.draft_id)
+        ).scalar_one_or_none()
+        if (
+            result.obligation_id != obligation_id
+            or result.idempotency_key != idempotency_key
+            or not result.links
+            or not result.activity_id
+            or draft is None
+            or draft.case_id != data.case_id
+            or draft.client_id != data.client_id
+            or draft.draft_type != (data.draft_type or "GENERIC")
+            or draft.currency != data.currency
+        ):
+            raise_business_error(
+                "FEE_DRAFT_OBLIGATION_LINK_MISMATCH",
+                "费用草稿与费用义务关联不一致",
+                status_code=409,
+            )
     return draft
 
 
@@ -644,6 +725,17 @@ def fee_rate_effective_on_conditions(as_of_date: date_type):
     )
 
 
+# 待确认/停用来源的费率不得参与自动生成草单或预览（GAP-AUDIT-006 启用门禁）。
+_BLOCKED_SOURCE_STATUSES = ("PENDING_CONFIRMATION", "PENDING", "DISABLED")
+
+
+def fee_rate_source_enabled_condition():
+    return or_(
+        FeeRate.source_status.is_(None),
+        FeeRate.source_status.not_in(_BLOCKED_SOURCE_STATUSES),
+    )
+
+
 def _enabled_fee_rates_by_code(
     db: Session,
     *,
@@ -659,6 +751,7 @@ def _enabled_fee_rates_by_code(
                 FeeRate.fee_type == FeeType.GOV.value,
                 FeeRate.currency == currency,
                 FeeRate.enabled.is_(True),
+                fee_rate_source_enabled_condition(),
                 *fee_rate_effective_on_conditions(effective_on),
             )
         )
@@ -1096,6 +1189,12 @@ def unlock_fee_draft(
         raise_business_error(
             "FEE_DRAFT_NOT_LOCKED",
             "Fee draft not locked",
+            status_code=409,
+        )
+    if db.scalar(select(BillDraftSource.id).where(BillDraftSource.draft_id == draft_id)):
+        raise_business_error(
+            "FEE_DRAFT_ALREADY_BILLED",
+            "已生成账单的费用草稿不可解锁",
             status_code=409,
         )
     draft.status = FeeDraftStatus.OPEN.value
@@ -1652,6 +1751,8 @@ def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
     Batch 3 slice:
     - FIXED keeps default amount behavior
     - PER_CLAIM supports calc_params + optional reduction/discount percentages
+    - PER_PAGE bills the pages falling inside [from_page, to_page] at unit_amount
+      (page basis: spec_pages + draw_pages, i.e. 说明书含附图页数)
     - Other modes still fall back to default amount
     """
     amount = rate.default_amount if rate.default_amount is not None else Decimal("0")
@@ -1712,6 +1813,50 @@ def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
             computed = computed * (Decimal("100") - discount_pct) / Decimal("100")
 
         return _quantize_money(computed)
+
+    if calc_mode == "PER_PAGE":
+        calc_params_raw = getattr(rate, "calc_params", None)
+        calc_params = {}
+        if calc_params_raw:
+            try:
+                parsed = json.loads(calc_params_raw)
+                if isinstance(parsed, dict):
+                    calc_params = parsed
+            except (TypeError, ValueError):
+                logger.warning(
+                    "calculate_fee_amount: invalid calc_params for rate=%s, raw=%r",
+                    rate.fee_code,
+                    calc_params_raw,
+                )
+
+        try:
+            unit_amount = Decimal(calc_params.get("unit_amount", amount))
+        except (InvalidOperation, TypeError, ValueError):
+            unit_amount = amount
+
+        # 页数口径：说明书含附图页数（spec_pages + draw_pages）。
+        total_pages = 0
+        if case is not None:
+            total_pages = int(case.spec_pages or 0) + int(case.draw_pages or 0)
+        if total_pages <= 0:
+            try:
+                total_pages = int(calc_params.get("total_pages", 0))
+            except (TypeError, ValueError):
+                total_pages = 0
+
+        try:
+            from_page = int(calc_params.get("from_page", 1))
+        except (TypeError, ValueError):
+            from_page = 1
+        to_page_raw = calc_params.get("to_page")
+        try:
+            to_page = int(to_page_raw) if to_page_raw is not None else None
+        except (TypeError, ValueError):
+            to_page = None
+
+        upper = min(total_pages, to_page) if to_page is not None else total_pages
+        billable_pages = max(0, upper - from_page + 1) if total_pages >= from_page else 0
+        return _quantize_money(unit_amount * Decimal(billable_pages))
 
     logger.warning(
         "calculate_fee_amount: calc_mode=%s not yet implemented for rate=%s, "

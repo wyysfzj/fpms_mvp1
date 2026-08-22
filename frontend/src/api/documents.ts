@@ -3,6 +3,7 @@ import { http } from './http'
 import type { Pagination } from './types'
 import type {
     Attachment,
+    AttachmentEvidenceProjection,
     DocTemplate,
     DocTemplateCreatePayload,
     DocTemplateListParams,
@@ -15,6 +16,7 @@ import type {
     DocumentMailingBatchIn,
     DocumentMailingBatchOut,
     DocumentCreatePayload,
+    DocumentEvidenceReviewPayload,
     DocumentImpactPreviewPayload,
     DocumentImpactPreviewResult,
     DocumentListParams,
@@ -28,6 +30,9 @@ import type {
     DocumentWizardTaskPreviewResult,
     DocumentWizardStep1State,
     DocumentWizardState,
+    GrantEvidenceCandidate,
+    GrantEvidenceReviewPayload,
+    GrantEvidenceReviewResult,
 } from './documents.types'
 
 interface BackendAttachment {
@@ -44,6 +49,13 @@ interface BackendAttachment {
     package_usage_hint?: string | null
     is_archive_evidence?: boolean
     is_receipt_evidence?: boolean
+    evidence_version_id: string | null
+    role: string | null
+    creator_id: string | null
+    reviewer_id: string | null
+    review_state: 'PENDING' | 'APPROVED' | 'REJECTED' | null
+    is_current: boolean
+    is_final: boolean
 }
 
 interface BackendDocument {
@@ -68,6 +80,28 @@ interface BackendDocument {
     case_no?: string | null
     outgoing_reg_no?: string | null
     forward_date?: string | null
+    description?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
+}
+
+interface BackendEvidenceReviewResult {
+    case_id: string
+    evidence_version_id: string
+    creator_id: string
+    reviewer_id: string
+    decision: 'APPROVE' | 'REJECT'
+    review_state: 'APPROVED' | 'REJECTED'
+    reviewed_at: string
+    idempotency_key: string
+}
+
+export interface EvidenceReviewExpectation {
+    expectedReviewerId: string
+    role: string
+    isCurrent: boolean
+    isFinal: boolean
 }
 
 function mapAttachment(input: BackendAttachment): Attachment {
@@ -85,6 +119,13 @@ function mapAttachment(input: BackendAttachment): Attachment {
         package_usage_hint: input.package_usage_hint ?? null,
         is_archive_evidence: input.is_archive_evidence ?? false,
         is_receipt_evidence: input.is_receipt_evidence ?? false,
+        evidence_version_id: input.evidence_version_id,
+        role: input.role,
+        creator_id: input.creator_id,
+        reviewer_id: input.reviewer_id,
+        review_state: input.review_state,
+        is_current: input.is_current,
+        is_final: input.is_final,
     }
 }
 
@@ -101,7 +142,7 @@ function mapDocument(input: BackendDocument): Document {
         doc_date: input.doc_date || undefined,
         title: input.title || 'Untitled Document',
         doc_type: input.doc_type || undefined,
-        description: input.extra_data || undefined,
+        description: input.description ?? input.extra_data ?? undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
         reply_to_id: input.reply_to_id || undefined,
@@ -110,6 +151,9 @@ function mapDocument(input: BackendDocument): Document {
         case_no: input.case_no || undefined,
         outgoing_reg_no: input.outgoing_reg_no || undefined,
         forward_date: input.forward_date || undefined,
+        official_due_date: input.official_due_date ?? null,
+        official_due_date_source: input.official_due_date_source ?? null,
+        official_due_date_status: input.official_due_date_status ?? null,
         attachments: (input.attachments || []).map(mapAttachment),
     }
 }
@@ -124,6 +168,9 @@ function toCreatePayload(data: DocumentCreatePayload): Record<string, unknown> {
         title: data.title,
         extra_data: data.description || null,
         reply_to_id: data.reply_to_id || null,
+        official_due_date: data.official_due_date || null,
+        official_due_date_source: data.official_due_date_source || null,
+        official_due_date_status: data.official_due_date_status || null,
     }
 }
 
@@ -136,10 +183,19 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
     if (data.direction !== undefined) payload.direction = data.direction
     if (data.doc_date !== undefined) payload.doc_date = data.doc_date || null
     if (data.title !== undefined) payload.title = data.title || null
-    if (data.description !== undefined) payload.extra_data = data.description || null
+    if (data.description !== undefined) payload.description = data.description || null
     if (data.reply_to_id !== undefined) payload.reply_to_id = data.reply_to_id || null
     if (data.need_reply !== undefined) payload.need_reply = data.need_reply
     if (data.reply_date !== undefined) payload.reply_date = data.reply_date || null
+    if (data.official_due_date !== undefined) {
+        payload.official_due_date = data.official_due_date || null
+    }
+    if (data.official_due_date_source !== undefined) {
+        payload.official_due_date_source = data.official_due_date_source || null
+    }
+    if (data.official_due_date_status !== undefined) {
+        payload.official_due_date_status = data.official_due_date_status || null
+    }
 
     return payload
 }
@@ -156,6 +212,15 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
             doc_template_id: data.defaults.doc_template_id,
             direction: data.defaults.direction,
             doc_date: data.defaults.doc_date,
+            ...(trimToUndefined(data.defaults.official_due_date ?? undefined)
+                ? { official_due_date: trimToUndefined(data.defaults.official_due_date ?? undefined) }
+                : {}),
+            ...(data.defaults.official_due_date_source
+                ? { official_due_date_source: data.defaults.official_due_date_source }
+                : {}),
+            ...(data.defaults.official_due_date_status
+                ? { official_due_date_status: data.defaults.official_due_date_status }
+                : {}),
         },
         rows: data.rows.map((row) => ({
             case_id: row.case_id,
@@ -165,6 +230,15 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
             ...(row.need_reply !== undefined ? { need_reply: row.need_reply } : {}),
             ...(trimToUndefined(row.reply_to_id) ? { reply_to_id: trimToUndefined(row.reply_to_id) } : {}),
             ...(trimToUndefined(row.extra_data) ? { extra_data: trimToUndefined(row.extra_data) } : {}),
+            ...(trimToUndefined(row.official_due_date ?? undefined)
+                ? { official_due_date: trimToUndefined(row.official_due_date ?? undefined) }
+                : {}),
+            ...(row.official_due_date_source
+                ? { official_due_date_source: row.official_due_date_source }
+                : {}),
+            ...(row.official_due_date_status
+                ? { official_due_date_status: row.official_due_date_status }
+                : {}),
         })),
         task_rows: (data.task_rows || []).map((row) => ({
             row_index: row.row_index,
@@ -265,6 +339,53 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
 }
 
 /**
+ * Export the filtered document list as an Excel blob (US-WD-06)
+ */
+export async function exportDocuments(
+    params: Omit<DocumentListParams, 'page' | 'page_size'> = {},
+): Promise<Blob> {
+    const {
+        q,
+        doc_name,
+        doc_type,
+        case_no,
+        template_code,
+        direction,
+        doc_template_id,
+        case_id,
+        client_id,
+        need_reply,
+        replied,
+        has_attachment,
+        date_from,
+        date_to,
+    } = params
+    const query = new URLSearchParams()
+    if (q) query.set('q', q)
+    if (doc_name) query.set('doc_name', doc_name)
+    if (case_no) query.set('case_no', case_no)
+    if (template_code) query.set('template_code', template_code)
+    if (direction) query.set('direction', direction)
+    if (doc_template_id) query.set('doc_template_id', doc_template_id)
+    if (case_id) query.set('case_id', case_id)
+    if (client_id) query.set('client_id', client_id)
+    if (need_reply !== undefined) query.set('need_reply', String(need_reply))
+    if (replied !== undefined) query.set('replied', String(replied))
+    if (has_attachment !== undefined) query.set('has_attachment', String(has_attachment))
+    if (date_from) query.set('date_from', date_from)
+    if (date_to) query.set('date_to', date_to)
+    for (const value of doc_type || []) {
+        query.append('doc_type', value)
+    }
+
+    const response = await http.get<Blob>('/documents/export', {
+        params: query,
+        responseType: 'blob',
+    })
+    return response.data
+}
+
+/**
  * Get candidate outgoing documents for mailing registration workflow
  */
 export async function getDocumentDispatchMailingCandidates(
@@ -316,6 +437,138 @@ export async function getDocumentEnvelopePreview(documentId: string): Promise<Do
 export async function getDocument(id: string | number): Promise<Document> {
     const response = await http.get<BackendDocument>(`/documents/${id}`)
     return mapDocument(response.data)
+}
+
+export async function reviewDocumentEvidence(
+    documentId: string,
+    evidenceVersionId: string,
+    payload: DocumentEvidenceReviewPayload,
+    expectation: EvidenceReviewExpectation,
+): Promise<AttachmentEvidenceProjection> {
+    const expectedReviewState = payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+    return executeEvidenceReviewCommand(
+        async () => {
+            const response = await http.post<BackendEvidenceReviewResult>(
+                `/documents/evidence-versions/${evidenceVersionId}/review`,
+                payload,
+            )
+            return mapEvidenceReviewResult(
+                response.data,
+                evidenceVersionId,
+                payload,
+                expectation,
+            )
+        },
+        async () => {
+            const document = await getDocument(documentId)
+            const attachment = document.attachments?.find(
+                (item) => item.evidence_version_id === evidenceVersionId
+            )
+            if (
+                attachment?.evidence_version_id === evidenceVersionId &&
+                attachment.role === expectation.role &&
+                attachment.creator_id &&
+                attachment.reviewer_id === expectation.expectedReviewerId &&
+                attachment.review_state === expectedReviewState &&
+                typeof attachment.is_current === 'boolean' &&
+                typeof attachment.is_final === 'boolean'
+            ) {
+                return {
+                    evidence_version_id: attachment.evidence_version_id,
+                    role: attachment.role,
+                    creator_id: attachment.creator_id,
+                    reviewer_id: attachment.reviewer_id,
+                    review_state: attachment.review_state,
+                    is_current: attachment.is_current,
+                    is_final: attachment.is_final,
+                }
+            }
+            throw new Error('未找到与复核命令完全一致的持久状态')
+        },
+    )
+}
+
+export function shouldReconcileEvidenceReview(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false
+    const candidate = error as { status?: unknown; code?: unknown }
+    return candidate.status === 0 && candidate.code === 'UNKNOWN_ERROR'
+}
+
+export async function executeEvidenceReviewCommand<T>(
+    postReview: () => Promise<T>,
+    reconcileDocument: () => Promise<T>,
+): Promise<T> {
+    try {
+        return await postReview()
+    } catch (error) {
+        if (!shouldReconcileEvidenceReview(error)) throw error
+        try {
+            return await reconcileDocument()
+        } catch {
+            // Preserve the original unknown mutation outcome when reconciliation cannot prove it.
+            throw error
+        }
+    }
+}
+
+function mapEvidenceReviewResult(
+    result: BackendEvidenceReviewResult,
+    evidenceVersionId: string,
+    payload: DocumentEvidenceReviewPayload,
+    expectation: EvidenceReviewExpectation,
+): AttachmentEvidenceProjection {
+    const expectedReviewState = payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+    requireEqual(result.case_id, payload.case_id)
+    requireEqual(result.decision, payload.decision)
+    requireEqual(result.reviewed_at, payload.reviewed_at)
+    requireEqual(result.idempotency_key, payload.idempotency_key)
+    return {
+        evidence_version_id: requireEqual(result.evidence_version_id, evidenceVersionId),
+        role: requireText(expectation.role),
+        creator_id: requireText(result.creator_id),
+        reviewer_id: requireEqual(result.reviewer_id, expectation.expectedReviewerId),
+        review_state: requireEqual(result.review_state, expectedReviewState),
+        is_current: requireBoolean(expectation.isCurrent),
+        is_final: requireBoolean(expectation.isFinal),
+    }
+}
+
+function requireText(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) throw new Error('证据复核响应不一致')
+    return value
+}
+
+function requireEqual<T extends string>(value: unknown, expected: T | undefined): T {
+    if (expected === undefined || value !== expected) throw new Error('证据复核响应不一致')
+    return expected
+}
+
+function requireBoolean(value: unknown): boolean {
+    if (typeof value !== 'boolean') throw new Error('证据复核响应不一致')
+    return value
+}
+
+export async function listGrantEvidenceCandidates(
+    documentId: string
+): Promise<GrantEvidenceCandidate[]> {
+    const response = await http.get<GrantEvidenceCandidate[]>(
+        `/documents/${documentId}/grant-evidence-candidates`
+    )
+    return response.data
+}
+
+export async function reviewGrantEvidence(
+    candidateId: string,
+    payload: GrantEvidenceReviewPayload
+): Promise<GrantEvidenceReviewResult> {
+    const response = await http.post<GrantEvidenceReviewResult>(
+        `/documents/grant-evidence-candidates/${candidateId}/review`,
+        {
+            decision: payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+            reason: payload.reason,
+        }
+    )
+    return response.data
 }
 
 /**

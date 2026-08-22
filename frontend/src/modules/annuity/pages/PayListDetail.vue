@@ -85,9 +85,208 @@
           <el-card shadow="never" class="rows-card">
             <template #header>
               <div class="card-header">
-                <span class="form-card-title">缴费明细</span>
+                <span class="form-card-title">内部导出</span>
+                <span class="page-count">
+                  共 {{ detail.internal_artifacts?.length ?? 0 }} 个
+                </span>
+              </div>
+            </template>
+
+            <el-empty
+              v-if="!detail.internal_artifacts?.length"
+              description="当前没有内部导出产物"
+            />
+
+            <el-table
+              v-else
+              :data="detail.internal_artifacts"
+              stripe
+              size="small"
+              class="compact-table"
+            >
+              <el-table-column prop="id" label="产物编号" min-width="180" />
+              <el-table-column prop="status" label="产物状态" min-width="150" />
+              <el-table-column prop="content_sha256" label="内容摘要" min-width="220" />
+              <el-table-column label="生成时间" min-width="160">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.generated_at) }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card
+            shadow="never"
+            class="rows-card"
+            data-testid="official-workbook-panel"
+          >
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">官方工作簿</span>
+              </div>
+            </template>
+
+            <el-descriptions v-if="detail.official_workbook" :column="2" border>
+              <el-descriptions-item label="模板门禁状态">
+                {{ detail.official_workbook.official_upload_template_status || '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="模板名称">
+                {{ detail.official_workbook.official_upload_template_name || '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="单批上限">
+                {{ detail.official_workbook.official_upload_batch_limit ?? '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="边界说明">
+                {{ detail.official_workbook.official_pay_list_boundary_note || '—' }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <template v-if="detail.official_workbook">
+              <el-alert
+                class="official-workbook-note"
+                title="生成不代表官方接受、已缴费或票据已核验"
+                type="warning"
+                :closable="false"
+                description="页面仅展示服务端返回的生成结果；官方接受、实际支付和票据核验仍是独立事实。"
+              />
+
+              <el-alert
+                v-if="!officialWorkbookStatusActive"
+                class="official-workbook-note"
+                :title="officialWorkbookUnavailableMessage"
+                type="warning"
+                :closable="false"
+              />
+
+              <el-alert
+                v-else-if="!hasOfficialWorkbookGeneratePermission"
+                class="official-workbook-note"
+                title="缺少生成官方工作簿权限"
+                type="error"
+                :closable="false"
+              />
+
+              <el-form
+                v-if="canGenerateOfficialWorkbook"
+                class="official-workbook-form"
+                :model="officialWorkbookForm"
+                label-position="top"
+              >
+                <el-row :gutter="12">
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="申请号/专利号">
+                      <el-input
+                        v-model="officialWorkbookForm.application_number"
+                        data-testid="official-workbook-application-number"
+                        placeholder="请输入申请号或专利号"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="业务类型">
+                      <el-input
+                        v-model="officialWorkbookForm.business_type"
+                        data-testid="official-workbook-business-type"
+                        placeholder="请输入业务类型"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="票据抬头">
+                      <el-input
+                        v-model="officialWorkbookForm.invoice_title"
+                        data-testid="official-workbook-invoice-title"
+                        placeholder="请输入票据抬头"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="统一社会信用代码">
+                      <el-input
+                        v-model="officialWorkbookForm.unified_social_credit_code"
+                        data-testid="official-workbook-credit-code"
+                        placeholder="请输入统一社会信用代码"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="费用种类">
+                      <el-input
+                        v-model="officialWorkbookForm.fee_type"
+                        data-testid="official-workbook-fee-type"
+                        placeholder="请输入费用种类"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="费用金额（人民币）">
+                      <el-input
+                        v-model.number="officialWorkbookForm.amount_cny"
+                        data-testid="official-workbook-amount-cny"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="请输入人民币金额"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="24">
+                    <el-form-item label="备注">
+                      <el-input
+                        v-model="officialWorkbookForm.remark"
+                        data-testid="official-workbook-remark"
+                        placeholder="选填"
+                      />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <el-button
+                  type="primary"
+                  :disabled="!officialWorkbookCanSubmit"
+                  :loading="generatingOfficialWorkbook"
+                  @click="handleGenerateOfficialWorkbook"
+                >
+                  生成并下载官方工作簿
+                </el-button>
+              </el-form>
+
+              <el-descriptions
+                v-if="canGenerateOfficialWorkbook && generatedOfficialWorkbook"
+                class="official-workbook-result"
+                :column="1"
+                border
+              >
+                <el-descriptions-item label="产物编号">
+                  产物编号：{{ generatedOfficialWorkbook.artifact_id }}
+                </el-descriptions-item>
+                <el-descriptions-item label="服务端生成状态">
+                  服务端生成状态：{{ generatedOfficialWorkbook.generated_status === 'GENERATED' ? '已生成' : '未返回' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="模板版本">
+                  {{ generatedOfficialWorkbook.template_version }}
+                </el-descriptions-item>
+                <el-descriptions-item label="内容摘要">
+                  {{ generatedOfficialWorkbook.content_sha256 }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </template>
+
+            <el-alert
+              v-else
+              title="官方工作簿门禁尚未开放"
+              type="warning"
+              :closable="false"
+              description="仅显示服务端返回的官方工作簿事实，不依据清单头状态推断。"
+            />
+          </el-card>
+
+          <el-card shadow="never" class="rows-card">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">支付记录</span>
                 <div class="card-header-actions">
-                  <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
+                  <span class="page-count">共 {{ detail.payment.length }} 条</span>
                   <el-button
                     v-if="canAddManualRow"
                     size="small"
@@ -102,13 +301,13 @@
             </template>
 
             <el-empty
-              v-if="detail.gov_payments.length === 0"
-              description="当前清单暂无缴费明细"
+              v-if="detail.payment.length === 0"
+              description="当前清单暂无支付记录"
             />
 
             <el-table
               v-else
-              :data="detail.gov_payments"
+              :data="detail.payment"
               stripe
               size="small"
               class="compact-table"
@@ -120,7 +319,7 @@
               </el-table-column>
               <el-table-column prop="case_id" label="案件" min-width="180">
                 <template #default="{ row }">
-                  {{ formatCaseDisplay(row.case_id) }}
+                  {{ formatCaseDisplay(row) }}
                 </template>
               </el-table-column>
               <el-table-column label="状态" width="110">
@@ -160,6 +359,125 @@
                   >
                     登记缴费
                   </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card
+            shadow="never"
+            class="rows-card"
+            data-testid="official-acceptance-panel"
+          >
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">官方凭证</span>
+                <span class="page-count">
+                  共 {{ detail.official_evidence?.length ?? 0 }} 个
+                </span>
+              </div>
+            </template>
+
+            <el-alert
+              title="官方页面接受、实际支付和票据核验是三个独立的服务端事实"
+              type="warning"
+              :closable="false"
+            />
+
+            <el-alert
+              v-if="!detail.official_workbook"
+              class="official-acceptance-note"
+              title="官方工作簿门禁尚未开放，不能登记官方页面接受。"
+              type="warning"
+              :closable="false"
+            />
+
+            <el-alert
+              v-else-if="!officialWorkbookStatusActive"
+              class="official-acceptance-note"
+              :title="`服务端模板状态为 ${officialWorkbookServerStatus || '未返回'}，不能登记官方页面接受。`"
+              type="warning"
+              :closable="false"
+            />
+
+            <el-alert
+              v-else-if="!hasOfficialAcceptancePermission"
+              class="official-acceptance-note"
+              title="缺少登记官方页面接受权限"
+              type="error"
+              :closable="false"
+            />
+
+            <el-descriptions
+              v-if="officialAcceptanceResult"
+              class="official-acceptance-result"
+              data-testid="official-acceptance-result"
+              :column="1"
+              border
+            >
+              <el-descriptions-item label="官方页面接受">
+                官方页面接受：{{ officialAcceptanceResult.accepted ? '已接受' : '未接受' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="支付">
+                支付：{{ officialAcceptanceResult.paid ? '已支付' : '未支付' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="票据核验">
+                票据核验：{{ officialAcceptanceResult.ticket_verified ? '已核验' : '未核验' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="接受凭证引用">
+                接受凭证引用：{{ officialAcceptanceResult.evidence_ref }}
+              </el-descriptions-item>
+              <el-descriptions-item label="服务端状态">
+                {{ officialAcceptanceResult.status }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-empty
+              v-if="!detail.official_evidence?.length"
+              description="当前没有官方凭证"
+            />
+
+            <el-table
+              v-else
+              :data="detail.official_evidence"
+              stripe
+              size="small"
+              class="compact-table"
+            >
+              <el-table-column label="官方接受事实" min-width="240">
+                <template #default="{ row }">
+                  <div
+                    class="official-acceptance-cell"
+                    :data-testid="`official-acceptance-artifact-${row.id}`"
+                  >
+                    <span>{{ officialAcceptanceStatusText(row.status) }}</span>
+                    <el-button
+                      v-if="canRecordOfficialAcceptance(row)"
+                      size="small"
+                      type="primary"
+                      plain
+                      @click="openOfficialAcceptanceDialog(row)"
+                    >
+                      登记官方页面接受
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="id" label="产物编号" min-width="180" />
+              <el-table-column prop="status" label="凭证状态" min-width="190" />
+              <el-table-column
+                prop="official_acceptance_evidence_ref"
+                label="接受凭证引用"
+                min-width="190"
+              />
+              <el-table-column
+                prop="official_acceptance_evidence_hash"
+                label="接受凭证摘要"
+                min-width="220"
+              />
+              <el-table-column label="官方接受时间" min-width="160">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.official_accepted_at) }}
                 </template>
               </el-table-column>
             </el-table>
@@ -254,46 +572,154 @@
       :pay-list-title="payListTitle"
       @success="handleManualSuccess"
     />
+
+    <el-dialog
+      v-model="officialAcceptanceDialogVisible"
+      title="登记官方页面接受"
+      width="560px"
+      @closed="resetOfficialAcceptanceForm"
+    >
+      <el-alert
+        title="本操作仅登记官方页面接受事实，不代表已缴费或票据已核验。"
+        type="warning"
+        :closable="false"
+      />
+      <el-form
+        class="official-acceptance-form"
+        :model="officialAcceptanceForm"
+        label-position="top"
+      >
+        <el-form-item label="官方工作簿产物编号">
+          <el-input :model-value="officialAcceptanceForm.artifact_id" disabled />
+        </el-form-item>
+        <el-form-item label="官方页面接受凭证引用">
+          <el-input
+            v-model="officialAcceptanceForm.evidence_ref"
+            data-testid="official-acceptance-evidence-ref"
+            placeholder="请输入官方页面接受凭证引用"
+          />
+        </el-form-item>
+        <el-form-item label="凭证内容摘要（SHA-256）">
+          <el-input
+            v-model="officialAcceptanceForm.evidence_sha256"
+            data-testid="official-acceptance-evidence-sha256"
+            placeholder="请输入 64 位小写 SHA-256"
+          />
+        </el-form-item>
+        <el-form-item label="官方接受时间">
+          <el-input
+            v-model="officialAcceptanceForm.accepted_at"
+            data-testid="official-acceptance-accepted-at"
+            placeholder="YYYY-MM-DDTHH:mm:ss"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="officialAcceptanceDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="!officialAcceptanceCanSubmit"
+          :loading="recordingOfficialAcceptance"
+          @click="handleRecordOfficialAcceptance"
+        >
+          提交官方页面接受
+        </el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
   exportPayList,
+  generateOfficialPaymentWorkbook,
   getPayListDetail,
   mapGovPaymentsError,
   markPayListPaid,
+  recordOfficialWorkbookAcceptance,
 } from '../../../api/govPayments'
 import type {
   GovPaymentInfo,
   GovPaymentsApiError,
+  OfficialWorkbookAcceptanceResult,
+  OfficialWorkbookArtifact,
+  PayListOfficialEvidenceInfo,
   PayListDetailResult,
 } from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import ManualGovPaymentDialog from '../components/ManualGovPaymentDialog.vue'
 import FeeLinkagePanel from '../../officialWorkflows/components/FeeLinkagePanel.vue'
+import { useAuthStore } from '../../../stores/auth'
 
 interface MarkPaidForm {
   paid_date: string
 }
 
+interface OfficialWorkbookForm {
+  application_number: string
+  business_type: string
+  invoice_title: string
+  unified_social_credit_code: string
+  fee_type: string
+  amount_cny: number | null
+  remark: string
+}
+
+interface OfficialAcceptanceForm {
+  artifact_id: string
+  evidence_ref: string
+  evidence_sha256: string
+  accepted_at: string
+}
+
+interface BoundOfficialAcceptanceResult {
+  payListId: number
+  artifactId: string
+  result: OfficialWorkbookAcceptanceResult
+}
+
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const exporting = ref(false)
+const generatingOfficialWorkbook = ref(false)
+const recordingOfficialAcceptance = ref(false)
 const markingPaid = ref(false)
 const manualDialogVisible = ref(false)
+const officialAcceptanceDialogVisible = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const detail = ref<PayListDetailResult | null>(null)
+const generatedOfficialWorkbook = ref<OfficialWorkbookArtifact | null>(null)
+const boundOfficialAcceptanceResult = ref<BoundOfficialAcceptanceResult | null>(null)
 const markPaidFormRef = ref<FormInstance>()
+const officialWorkbookIdempotencyKey = ref(crypto.randomUUID())
+const officialAcceptanceIdempotencyKey = ref(crypto.randomUUID())
 
 const markPaidForm = reactive<MarkPaidForm>({
   paid_date: dayjs().format('YYYY-MM-DD'),
+})
+
+const officialWorkbookForm = reactive<OfficialWorkbookForm>({
+  application_number: '',
+  business_type: '',
+  invoice_title: '',
+  unified_social_credit_code: '',
+  fee_type: '',
+  amount_cny: null,
+  remark: '',
+})
+
+const officialAcceptanceForm = reactive<OfficialAcceptanceForm>({
+  artifact_id: '',
+  evidence_ref: '',
+  evidence_sha256: '',
+  accepted_at: '',
 })
 
 const markPaidRules: FormRules<MarkPaidForm> = {
@@ -308,12 +734,61 @@ const feePackageId = computed(() => String(route.query.package_id || route.query
 
 const payList = computed(() => detail.value?.pay_list ?? null)
 
+const officialAcceptanceResult = computed(() => {
+  const bound = boundOfficialAcceptanceResult.value
+  if (!bound || bound.payListId !== payListId.value) return null
+  if (bound.result.pay_list_id !== bound.payListId || bound.result.artifact_id !== bound.artifactId) {
+    return null
+  }
+  const artifact = detail.value?.official_evidence?.find((item) => item.id === bound.artifactId)
+  return artifact?.status === 'OFFICIAL_SITE_ACCEPTED' ? bound.result : null
+})
+
 const payListTitle = computed(() => {
   if (!payList.value) return '读取中'
   return formatPayListNo(payList.value)
 })
 
 const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
+const officialWorkbookServerStatus = computed(() => (
+  detail.value?.official_workbook?.official_upload_template_status ?? null
+))
+const officialWorkbookStatusActive = computed(() => officialWorkbookServerStatus.value === 'ACTIVE')
+const hasOfficialWorkbookGeneratePermission = computed(() => (
+  authStore.hasPermission('PayList.Export')
+))
+const canGenerateOfficialWorkbook = computed(() => (
+  officialWorkbookStatusActive.value && hasOfficialWorkbookGeneratePermission.value
+))
+const hasOfficialAcceptancePermission = computed(() => authStore.hasPermission('Fee.Edit'))
+const canRecordOfficialAcceptanceFact = computed(() => (
+  officialWorkbookStatusActive.value && hasOfficialAcceptancePermission.value
+))
+const officialAcceptanceCanSubmit = computed(() => (
+  canRecordOfficialAcceptanceFact.value
+  && officialAcceptanceDialogVisible.value
+  && !recordingOfficialAcceptance.value
+  && Boolean(officialAcceptanceForm.artifact_id)
+  && Boolean(officialAcceptanceForm.evidence_ref.trim())
+  && /^[0-9a-f]{64}$/.test(officialAcceptanceForm.evidence_sha256)
+  && Boolean(officialAcceptanceForm.accepted_at.trim())
+))
+const officialWorkbookUnavailableMessage = computed(() => (
+  `服务端模板状态为 ${officialWorkbookServerStatus.value || '未返回'}，只有 ACTIVE 状态可生成官方工作簿。`
+))
+const officialWorkbookCanSubmit = computed(() => (
+  canGenerateOfficialWorkbook.value
+  && Boolean(detail.value?.official_workbook)
+  && !generatingOfficialWorkbook.value
+  && Boolean(officialWorkbookForm.application_number.trim())
+  && Boolean(officialWorkbookForm.business_type.trim())
+  && Boolean(officialWorkbookForm.invoice_title.trim())
+  && Boolean(officialWorkbookForm.unified_social_credit_code.trim())
+  && Boolean(officialWorkbookForm.fee_type.trim())
+  && officialWorkbookForm.amount_cny !== null
+  && Number.isFinite(officialWorkbookForm.amount_cny)
+  && officialWorkbookForm.amount_cny > 0
+))
 const canMarkPaid = computed(() => (payList.value?.status || '').toUpperCase() === 'EXPORTED')
 const canAddManualRow = computed(() => {
   if (!payList.value) return false
@@ -333,6 +808,40 @@ function canRegisterPayment(row: GovPaymentInfo): boolean {
   if (!row.fee_item_id) return false
   const status = (row.status || '').toUpperCase()
   return status !== 'PAID' && status !== 'RECORDED'
+}
+
+function officialAcceptanceStatusText(status?: string): string {
+  if (status === 'GENERATED') return '服务端：已生成，尚未登记官方接受'
+  if (status === 'OFFICIAL_SITE_ACCEPTED') return '服务端：官方页面已接受'
+  return `服务端：${status || '状态未返回'}`
+}
+
+function canRecordOfficialAcceptance(row: PayListOfficialEvidenceInfo): boolean {
+  return canRecordOfficialAcceptanceFact.value
+    && row.status === 'GENERATED'
+    && !recordingOfficialAcceptance.value
+}
+
+function openOfficialAcceptanceDialog(row: PayListOfficialEvidenceInfo) {
+  if (!canRecordOfficialAcceptance(row)) return
+  clearOfficialAcceptanceResult()
+  officialAcceptanceForm.artifact_id = row.id
+  officialAcceptanceForm.evidence_ref = ''
+  officialAcceptanceForm.evidence_sha256 = ''
+  officialAcceptanceForm.accepted_at = ''
+  officialAcceptanceIdempotencyKey.value = crypto.randomUUID()
+  officialAcceptanceDialogVisible.value = true
+}
+
+function clearOfficialAcceptanceResult() {
+  boundOfficialAcceptanceResult.value = null
+}
+
+function resetOfficialAcceptanceForm() {
+  officialAcceptanceForm.artifact_id = ''
+  officialAcceptanceForm.evidence_ref = ''
+  officialAcceptanceForm.evidence_sha256 = ''
+  officialAcceptanceForm.accepted_at = ''
 }
 
 function goToFirstRegistrable() {
@@ -441,8 +950,9 @@ function formatFeeItemDisplay(value?: string | null): string {
   return value ? '已关联费用项' : '手工补录'
 }
 
-function formatCaseDisplay(value?: string | null): string {
-  return value ? '已关联案件' : '未关联案件'
+function formatCaseDisplay(row: { case_id?: string | null; case_no?: string | null }): string {
+  if (row.case_no) return row.case_no
+  return row.case_id ? '已关联案件' : '未关联案件'
 }
 
 function buildExportFileName(target: NonNullable<typeof payList.value>): string {
@@ -462,6 +972,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 async function loadDetail() {
+  clearOfficialAcceptanceResult()
   detail.value = null
   if (!payListId.value) {
     error.value = {
@@ -509,6 +1020,86 @@ async function handleExport() {
   }
 }
 
+async function handleGenerateOfficialWorkbook() {
+  if (!payList.value || !officialWorkbookCanSubmit.value || officialWorkbookForm.amount_cny === null) {
+    return
+  }
+
+  generatingOfficialWorkbook.value = true
+  error.value = null
+  try {
+    const artifact = await generateOfficialPaymentWorkbook(payList.value.id, {
+      idempotency_key: officialWorkbookIdempotencyKey.value,
+      rows: [{
+        sequence_number: 1,
+        application_number: officialWorkbookForm.application_number.trim(),
+        business_type: officialWorkbookForm.business_type.trim(),
+        invoice_title: officialWorkbookForm.invoice_title.trim(),
+        unified_social_credit_code: officialWorkbookForm.unified_social_credit_code.trim(),
+        fee_type: officialWorkbookForm.fee_type.trim(),
+        foreign_currency_amount: null,
+        amount_cny: officialWorkbookForm.amount_cny,
+        remark: officialWorkbookForm.remark.trim() || null,
+      }],
+    })
+    generatedOfficialWorkbook.value = artifact
+    downloadBlob(artifact.blob, artifact.filename)
+    ElMessage.success('官方工作簿已生成并开始下载。')
+    officialWorkbookIdempotencyKey.value = crypto.randomUUID()
+    await loadDetail()
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    generatingOfficialWorkbook.value = false
+  }
+}
+
+async function handleRecordOfficialAcceptance() {
+  if (!payList.value || !officialAcceptanceCanSubmit.value) return
+
+  const submittedPayListId = payList.value.id
+  const submittedArtifactId = officialAcceptanceForm.artifact_id
+  clearOfficialAcceptanceResult()
+  recordingOfficialAcceptance.value = true
+  error.value = null
+  try {
+    const result = await recordOfficialWorkbookAcceptance(
+      submittedPayListId,
+      {
+        artifact_id: submittedArtifactId,
+        evidence_ref: officialAcceptanceForm.evidence_ref.trim(),
+        evidence_sha256: officialAcceptanceForm.evidence_sha256,
+        accepted_at: officialAcceptanceForm.accepted_at.trim(),
+        idempotency_key: officialAcceptanceIdempotencyKey.value,
+      },
+    )
+    officialAcceptanceDialogVisible.value = false
+    ElMessage.success('官方页面接受事实已登记。')
+    if (payListId.value === submittedPayListId) {
+      await loadDetail()
+      const acceptedArtifact = detail.value?.official_evidence?.find(
+        (item) => item.id === submittedArtifactId && item.status === 'OFFICIAL_SITE_ACCEPTED',
+      )
+      if (
+        acceptedArtifact
+        && result.pay_list_id === submittedPayListId
+        && result.artifact_id === submittedArtifactId
+      ) {
+        boundOfficialAcceptanceResult.value = {
+          payListId: submittedPayListId,
+          artifactId: submittedArtifactId,
+          result,
+        }
+      }
+    }
+  } catch (err) {
+    clearOfficialAcceptanceResult()
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    recordingOfficialAcceptance.value = false
+  }
+}
+
 async function handleMarkPaid() {
   if (!payList.value || !canMarkPaid.value) {
     ElMessage.warning('当前状态不允许标记清单已缴费。')
@@ -536,8 +1127,17 @@ async function handleManualSuccess() {
 }
 
 watch(payListId, () => {
+  clearOfficialAcceptanceResult()
+  officialAcceptanceDialogVisible.value = false
+  resetOfficialAcceptanceForm()
   void loadDetail()
 }, { immediate: true })
+
+onBeforeUnmount(() => {
+  clearOfficialAcceptanceResult()
+  officialAcceptanceDialogVisible.value = false
+  resetOfficialAcceptanceForm()
+})
 </script>
 
 <style scoped>
@@ -551,6 +1151,25 @@ watch(payListId, () => {
 
 .fee-linkage-side-panel {
   margin-bottom: 16px;
+}
+
+.official-workbook-note,
+.official-workbook-form,
+.official-workbook-result {
+  margin-top: 16px;
+}
+
+.official-acceptance-note,
+.official-acceptance-result,
+.official-acceptance-form {
+  margin-top: 16px;
+}
+
+.official-acceptance-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .loading-state {

@@ -59,6 +59,7 @@ def test_create_case_rejects_illegal_case_type_patent_category_combo(
         headers=auth_headers,
         json={
             "case_no": _case_no("BADCOMBO"),
+            "fee_reduction": "0",
             "case_type": "SEARCH",
             "patent_category": "DES",
             "flow_dir": "CN_DOMESTIC",
@@ -86,6 +87,7 @@ def test_create_case_allows_normal_invention_combo(
         headers=auth_headers,
         json={
             "case_no": case_no,
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
@@ -110,6 +112,7 @@ def test_duplicate_case_no_keeps_duplicate_error_semantics(
     applicant_id = _seed_applicant(session_factory, applicant_type="ENTITY")
     payload = {
         "case_no": case_no,
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

@@ -57,6 +57,7 @@ def _create_client(client, auth_headers, **overrides) -> dict:
 def _create_case(client, auth_headers, client_id: str, **overrides) -> dict:
     payload = {
         "case_no": _uid("CASE"),
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

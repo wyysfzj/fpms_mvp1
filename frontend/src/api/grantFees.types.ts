@@ -5,6 +5,7 @@
 export type GrantFeeMoney = number | string
 
 export type GrantFeeTaskStatus = 'OPEN' | 'WAITING_CLIENT' | 'READY_TO_DRAFT' | 'DRAFT_GENERATED' | 'DONE'
+export type GrantFeeTaskLineageStatus = 'CONFIRMED' | 'LEGACY_UNVERIFIED' | 'SUPERSEDED'
 export type GrantFeeTaskClientInstruction = 'NONE' | 'PAY' | 'ABANDON'
 export type GrantFeeTaskStateAction =
     | 'mark_waiting_client'
@@ -37,6 +38,23 @@ export interface GrantFeeTaskBatchNoticeGenerateResult {
     items: GrantFeeTaskBatchNoticeGenerateItem[]
 }
 
+export interface GrantFeeTaskReplacementDocumentPayload {
+    doc_template_id: string
+    doc_date: string
+    title: string
+    ref_no: string
+    official_due_date: string
+    official_due_date_source: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE'
+    official_due_date_status: 'CONFIRMED'
+    description?: string
+}
+
+export interface GrantFeeTaskReplacementNoticePayload {
+    idempotency_key: string
+    reason: string
+    document: GrantFeeTaskReplacementDocumentPayload
+}
+
 export interface GrantFeeTaskListItem {
     task_id: string
     case_id: string
@@ -58,6 +76,10 @@ export interface GrantFeeTaskListItem {
     deadline_rule: string
     fee_basis: string
     fee_node_explanation: string
+    lineage_status: GrantFeeTaskLineageStatus
+    source_document_id: string | null
+    deadline_source: string | null
+    deadline_confirmed_at: string | null
 }
 
 export interface GrantFeeTaskListResponse {
@@ -65,6 +87,13 @@ export interface GrantFeeTaskListResponse {
     page: number
     page_size: number
     total: number
+}
+
+export interface GrantFeeTaskReplacementNoticeResult {
+    document: { id: string }
+    replacement_task: GrantFeeTaskListItem
+    superseded_task_id: string
+    reused: boolean
 }
 
 export interface GrantFeeDraftGenerateResult {
@@ -94,6 +123,10 @@ export interface GrantFeeTaskStateResult {
     deadline_rule: string
     fee_basis: string
     fee_node_explanation: string
+    lineage_status: GrantFeeTaskLineageStatus
+    source_document_id: string | null
+    deadline_source: string | null
+    deadline_confirmed_at: string | null
 }
 
 export interface GrantFeeTaskBatchInstructionPayload {

@@ -68,10 +68,12 @@
               <p>{{ ZH.docDetail.noContent }}</p>
             </div>
           </div>
+          <GrantEvidenceReviewPanel :document-id="doc.id" />
           <LetterHandoffPanel
             v-if="showLetterHandoffAction"
             class="letter-handoff-section"
             :document-id="doc.id"
+            :direction="doc.direction"
           />
         </div>
 
@@ -190,6 +192,7 @@ import type { Attachment, DocTemplate, Document } from '../../../api/documents.t
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import AttachmentList from '../components/AttachmentList.vue'
+import GrantEvidenceReviewPanel from '../components/GrantEvidenceReviewPanel.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import LetterHandoffPanel from '../../officialWorkflows/components/LetterHandoffPanel.vue'
 import { usePageContext } from '../../../stores/pageContext'
@@ -256,7 +259,7 @@ const oaReplyPackageRoute = computed(() => ({
     document_id: doc.value?.id || '',
   },
 }))
-const showLetterHandoffAction = computed(() => doc.value?.direction === 'OUT')
+const showLetterHandoffAction = computed(() => ['IN', 'OUT'].includes(normalizeCode(doc.value?.direction)))
 
 const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   TECHNICAL_DISCLOSURE: '技术交底书',

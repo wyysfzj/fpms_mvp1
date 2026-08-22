@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -22,6 +23,16 @@ from app.modules.cases.document_gate_service import (
     evaluate_material_gate,
 )
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    EvidenceReference,
+    LegalStatus,
+    LifecycleEventCommand,
+    OfficialProcedureStage,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import (
     Case,
     T_BioDeposit,
@@ -50,10 +61,28 @@ from app.modules.cases.schemas import (
     CaseUpdateLimited,
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
-from app.modules.documents.models import DocTemplate, Document
-from app.modules.fees.models import FeeDraft
+from app.modules.documents.evidence_contracts import EvidenceReviewState, EvidenceVersionState
+from app.modules.documents.evidence_workflow_service import (
+    FinalizeExternalSubmissionCommand,
+    finalize_external_submission,
+)
+from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
+from app.modules.fees.fee_reduction import (
+    FeeReductionApprovalContext,
+    FeeReductionApprovalScopeType,
+    FeeReductionEvaluationContext,
+    FeeReductionInput,
+    FeeReductionInputProvenance,
+    FeeReductionValidationError,
+    validate_fee_reduction,
+)
+from app.modules.fees.models import FeeDraft, FeeReductionApproval
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
+from app.modules.official_workflows.filing_evidence_resolver import (
+    resolve_filing_final_evidence,
+)
+from app.modules.official_workflows.models import OfficialWorkPackage
 from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 
@@ -308,6 +337,246 @@ def _normalize_create_case_applicants(db: Session, data: CaseCreate) -> list[Cas
     if applicants or "applicants" in data.model_fields_set:
         return applicants
     return [_default_legacy_case_applicant(db, data.client_id)]
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _approval_applicant_set_key(
+    approval: FeeReductionApproval,
+    submitted_ids: tuple[str, ...],
+) -> str | None:
+    try:
+        snapshot = json.loads(approval.eligibility_snapshot)
+        canonical_snapshot = _canonical_json(snapshot)
+    except (TypeError, ValueError, UnicodeEncodeError, json.JSONDecodeError):
+        return None
+    if (
+        canonical_snapshot != approval.eligibility_snapshot
+        or _sha256(canonical_snapshot) != approval.eligibility_snapshot_hash
+        or type(snapshot) is not dict
+        or set(snapshot) != {"applicants", "attributes_version", "schema"}
+        or snapshot["schema"] != "FPMS_FEE_REDUCTION_ELIGIBILITY_V1"
+        or type(snapshot["attributes_version"]) is not str
+        or not snapshot["attributes_version"]
+        or type(snapshot["applicants"]) is not list
+        or not snapshot["applicants"]
+    ):
+        return None
+    applicant_ids: list[str] = []
+    for applicant in snapshot["applicants"]:
+        if (
+            type(applicant) is not dict
+            or set(applicant) != {"applicant_id", "attributes"}
+            or type(applicant["applicant_id"]) is not str
+            or not applicant["applicant_id"]
+            or applicant["applicant_id"] != applicant["applicant_id"].strip()
+            or type(applicant["attributes"]) is not dict
+        ):
+            return None
+        applicant_ids.append(applicant["applicant_id"])
+    if tuple(applicant_ids) != submitted_ids:
+        return None
+    expected_key = _sha256(
+        _canonical_json(
+            {
+                "applicant_ids": list(submitted_ids),
+                "eligibility_snapshot_hash": approval.eligibility_snapshot_hash,
+                "schema": "FPMS_FEE_REDUCTION_APPLICANT_SET_V1",
+            }
+        )
+    )
+    return expected_key if approval.applicant_set_key == expected_key else None
+
+
+def _approval_fee_codes(approval: FeeReductionApproval) -> frozenset[str]:
+    try:
+        snapshot = json.loads(approval.fee_scope_snapshot)
+        canonical_snapshot = _canonical_json(snapshot)
+    except (TypeError, ValueError, UnicodeEncodeError, json.JSONDecodeError):
+        return frozenset()
+    if (
+        canonical_snapshot != approval.fee_scope_snapshot
+        or _sha256(canonical_snapshot) != approval.fee_scope_hash
+        or type(snapshot) is not dict
+        or set(snapshot) != {"fee_codes", "schema"}
+        or snapshot["schema"] != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+        or type(snapshot["fee_codes"]) is not list
+        or not snapshot["fee_codes"]
+        or any(
+            type(fee_code) is not str or not fee_code or fee_code != fee_code.strip()
+            for fee_code in snapshot["fee_codes"]
+        )
+        or snapshot["fee_codes"] != sorted(set(snapshot["fee_codes"]))
+    ):
+        return frozenset()
+    return frozenset(snapshot["fee_codes"])
+
+
+def _approval_source_is_current(source: DocumentEvidenceVersion | None) -> bool:
+    return bool(
+        source is not None
+        and type(source.case_id) is str
+        and bool(source.case_id)
+        and source.case_id == source.case_id.strip()
+        and type(source.lineage_key) is str
+        and bool(source.lineage_key)
+        and source.lineage_key == source.lineage_key.strip()
+        and "\x00" not in source.lineage_key
+        and len(source.lineage_key) <= 128
+        and source.state == EvidenceVersionState.FINAL.value
+        and source.review_state == EvidenceReviewState.APPROVED.value
+        and type(source.reviewer_id) is str
+        and bool(source.reviewer_id)
+        and source.reviewer_id == source.reviewer_id.strip()
+        and "\x00" not in source.reviewer_id
+        and len(source.reviewer_id) <= 36
+        and type(source.reviewed_at) is datetime
+        and source.reviewed_at.tzinfo is None
+        and source.reviewer_id != source.creator_id
+        and source.current_identity_key == f"{source.case_id}|{source.lineage_key}"
+    )
+
+
+def _raise_create_fee_reduction_error(exc: FeeReductionValidationError) -> None:
+    raise_business_error(
+        exc.code.value,
+        exc.code.value,
+        details=exc.details,
+        status_code=409,
+    )
+
+
+def _canonical_create_fee_reduction(
+    db: Session,
+    *,
+    reduction_value: str,
+    applicants: list[CaseApplicantIn],
+    case_id: str,
+) -> str:
+    reduction_input = FeeReductionInput(
+        reduction_ratio=Decimal(reduction_value),
+        provenance=FeeReductionInputProvenance.EXPLICIT_ENTRY,
+    )
+    evaluation_date = date.today()
+    base_context = FeeReductionEvaluationContext(
+        case_id=case_id,
+        applicant_set_key=None,
+        fee_code="CASE_CREATE",
+        fee_year_key=0,
+        as_of_date=evaluation_date,
+    )
+    if reduction_value == "0":
+        result = validate_fee_reduction(
+            reduction_input=reduction_input,
+            context=base_context,
+            approval=None,
+        )
+        return "0" if result.reduction_ratio == Decimal("0") else reduction_value
+
+    submitted_ids = tuple(
+        sorted(
+            applicant.applicant_id
+            for applicant in applicants
+            if type(applicant.applicant_id) is str and applicant.applicant_id
+        )
+    )
+    has_exact_composition = len(submitted_ids) == len(applicants) and len(
+        set(submitted_ids)
+    ) == len(submitted_ids)
+    approvals = (
+        db.query(FeeReductionApproval)
+        .filter(
+            FeeReductionApproval.scope_type == FeeReductionApprovalScopeType.APPLICANT_SET.value,
+            FeeReductionApproval.reduction_ratio == Decimal(reduction_value),
+            FeeReductionApproval.confirmation_status == "CONFIRMED",
+        )
+        .order_by(FeeReductionApproval.id)
+        .all()
+        if has_exact_composition
+        else []
+    )
+    matching = [
+        (approval, applicant_set_key)
+        for approval in approvals
+        if (applicant_set_key := _approval_applicant_set_key(approval, submitted_ids)) is not None
+    ]
+    last_error: FeeReductionValidationError | None = None
+    valid_results = []
+    for approval, applicant_set_key in matching:
+        fee_codes = _approval_fee_codes(approval)
+        source = db.get(DocumentEvidenceVersion, approval.source_evidence_version_id)
+        approval_context = FeeReductionApprovalContext(
+            approval_id=approval.id,
+            scope_type=FeeReductionApprovalScopeType.APPLICANT_SET,
+            case_id=None,
+            applicant_set_key=applicant_set_key,
+            reduction_ratio=approval.reduction_ratio,
+            fee_codes=fee_codes,
+            fee_year_from=approval.fee_year_from,
+            fee_year_to=approval.fee_year_to,
+            effective_from=approval.effective_from,
+            effective_to=approval.effective_to,
+            source_evidence_version_id=approval.source_evidence_version_id,
+            confirmation_status=approval.confirmation_status,
+            is_current=_approval_source_is_current(source),
+        )
+        context = FeeReductionEvaluationContext(
+            case_id=case_id,
+            applicant_set_key=applicant_set_key,
+            fee_code="CASE_CREATE",
+            fee_year_key=0,
+            as_of_date=evaluation_date,
+        )
+        try:
+            result = validate_fee_reduction(
+                reduction_input=reduction_input,
+                context=context,
+                approval=approval_context,
+            )
+        except FeeReductionValidationError as exc:
+            last_error = exc
+            continue
+        valid_results.append(result)
+
+    if len(valid_results) > 1:
+        raise_business_error(
+            "FEE_REDUCTION_AMBIGUOUS_PROVENANCE",
+            "FEE_REDUCTION_AMBIGUOUS_PROVENANCE",
+            details={
+                "scope_type": "APPLICANT_SET",
+                "fee_code": "CASE_CREATE",
+            },
+            status_code=409,
+        )
+    if valid_results:
+        return {
+            Decimal("0.7000"): "0.7",
+            Decimal("0.8500"): "0.85",
+        }[valid_results[0].reduction_ratio]
+
+    if last_error is not None:
+        _raise_create_fee_reduction_error(last_error)
+    try:
+        validate_fee_reduction(
+            reduction_input=reduction_input,
+            context=base_context,
+            approval=None,
+        )
+    except FeeReductionValidationError as exc:
+        _raise_create_fee_reduction_error(exc)
+    raise AssertionError("non-zero reduction unexpectedly validated without approval")
 
 
 def validate_foreign_agent(
@@ -1586,8 +1855,12 @@ def execute_batch_filing(
             status_code=404,
         )
 
+    valid_batch_statuses = {
+        CaseStatus.NOT_FILED.value,
+        CaseStatus.WAITING_RECEIPT.value,
+    }
     invalid_status_case_nos = [
-        case.case_no for case in cases if case.status != CaseStatus.NOT_FILED.value
+        case.case_no for case in cases if case.status not in valid_batch_statuses
     ]
     if invalid_status_case_nos:
         raise_business_error(
@@ -1627,32 +1900,209 @@ def execute_batch_filing(
             status_code=400,
         )
 
+    submitted_at = datetime.combine(submitted_date, time.min)
     updated_case_ids: list[str] = []
-    ordered_cases: list[Case] = []
+    fresh_cases: list[Case] = []
     for case_id in unique_case_ids:
         case = case_by_id[case_id]
+        package_ids = db.scalars(
+            select(OfficialWorkPackage.id)
+            .where(OfficialWorkPackage.resolve_key == f"FILING_PREP:{case_id}")
+            .limit(2)
+        ).all()
+        if not package_ids:
+            raise_business_error(
+                "OFFICIAL_WORK_PACKAGE_NOT_FOUND",
+                "Official work package not found",
+                status_code=404,
+            )
+        if len(package_ids) != 1:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing work package identity is ambiguous",
+                status_code=409,
+            )
+        package_id = package_ids[0]
+        initial_evidence = resolve_filing_final_evidence(package_id, db)
+        if initial_evidence.package_id != package_id or initial_evidence.case_id != case_id:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing evidence resolution does not match the selected case",
+                status_code=409,
+            )
+        is_fresh = (
+            initial_evidence.final_submitted_at is None
+            and initial_evidence.submission_activity_id is None
+            and initial_evidence.submission_activity_hash is None
+        )
+        is_document_replay = (
+            initial_evidence.final_submitted_at == submitted_at
+            and initial_evidence.submission_activity_id is not None
+            and initial_evidence.submission_activity_hash is not None
+        )
+        if not is_fresh and not is_document_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing submission evidence conflicts with this batch",
+                status_code=409,
+            )
+        fresh_projection_matches = (
+            case.status == CaseStatus.NOT_FILED.value
+            and case.business_stage == BusinessStage.FILING_PREPARATION.value
+            and case.official_procedure_stage == OfficialProcedureStage.NOT_SUBMITTED.value
+            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        )
+        replay_projection_matches = (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        )
+        if not (
+            (is_fresh and fresh_projection_matches)
+            or (is_document_replay and replay_projection_matches)
+        ):
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Case projection conflicts with the filing submission evidence",
+                status_code=409,
+            )
+
+        idempotency_key = f"batch-filing:{case_id}:{submitted_date.isoformat()}"
+        finalized = finalize_external_submission(
+            FinalizeExternalSubmissionCommand(
+                case_id=case_id,
+                evidence_version_id=initial_evidence.evidence_version_id,
+                actor_id=user_id,
+                submitted_at=submitted_at,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        db.flush()
+        resolved_evidence = resolve_filing_final_evidence(package_id, db)
+        unchanged_resolution = (
+            resolved_evidence.package_id == initial_evidence.package_id
+            and resolved_evidence.case_id == initial_evidence.case_id
+            and resolved_evidence.evidence_version_id == initial_evidence.evidence_version_id
+            and resolved_evidence.content_hash == initial_evidence.content_hash
+            and resolved_evidence.reviewer_id == initial_evidence.reviewer_id
+            and resolved_evidence.reviewed_at == initial_evidence.reviewed_at
+        )
+        exact_finalization = (
+            finalized.case_id == case_id
+            and finalized.evidence_version_id == initial_evidence.evidence_version_id
+            and finalized.content_hash == initial_evidence.content_hash
+            and finalized.submitted_at == submitted_at
+            and finalized.idempotency_key == idempotency_key
+            and finalized.reused is is_document_replay
+            and resolved_evidence.final_submitted_at == submitted_at
+            and resolved_evidence.submission_activity_id == finalized.activity_id
+            and resolved_evidence.submission_activity_hash is not None
+        )
+        exact_replay = is_fresh or (
+            resolved_evidence.submission_activity_id == initial_evidence.submission_activity_id
+            and resolved_evidence.submission_activity_hash
+            == initial_evidence.submission_activity_hash
+        )
+        if not unchanged_resolution or not exact_finalization or not exact_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Finalized filing evidence does not match the batch submission",
+                status_code=409,
+            )
+
+        lifecycle_idempotency_key = f"batch-filing-lifecycle:{case_id}:{submitted_date.isoformat()}"
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=case_id,
+                event_type="FILING_EXTERNAL_SUBMISSION_RECORDED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=submitted_at,
+                occurred_at=submitted_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolved_evidence.evidence_version_id,
+                        content_hash=resolved_evidence.content_hash,
+                        captured_at=resolved_evidence.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=case_id,
+                        evidence_kind="MANUAL_EXTERNAL_SUBMISSION_RECORD",
+                        object_type="CaseActivityEvent",
+                        object_id=resolved_evidence.submission_activity_id,
+                        content_hash=resolved_evidence.submission_activity_hash,
+                        captured_at=submitted_at,
+                    ),
+                ),
+                actor_id=user_id,
+                idempotency_key=lifecycle_idempotency_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        previous_projection = lifecycle_result.previous_projection
+        current_projection = lifecycle_result.current_projection
+        exact_lifecycle = (
+            lifecycle_result.case_id == case_id
+            and lifecycle_result.activity_id != finalized.activity_id
+            and lifecycle_result.sequence == finalized.activity_sequence + 1
+            and lifecycle_result.lifecycle_revision == finalized.lifecycle_revision + 1
+            and lifecycle_result.lane is ActivityLane.LIFECYCLE
+            and lifecycle_result.event_type == "FILING_EXTERNAL_SUBMISSION_RECORDED"
+            and lifecycle_result.confirmation_status is ConfirmationStatus.CONFIRMED
+            and lifecycle_result.idempotency_key == lifecycle_idempotency_key
+            and lifecycle_result.reused is is_document_replay
+            and lifecycle_result.legacy_case_status == CaseStatus.WAITING_RECEIPT.value
+            and lifecycle_result.conflict_codes == ()
+            and previous_projection.business_stage is BusinessStage.FILING_PREPARATION
+            and previous_projection.official_procedure_stage is OfficialProcedureStage.NOT_SUBMITTED
+            and previous_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and previous_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+            and current_projection.business_stage is BusinessStage.WAITING_EXTERNAL_RECEIPT
+            and current_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT
+            and current_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and current_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+        )
+        if not exact_lifecycle:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Lifecycle result conflicts with the filing submission evidence",
+                status_code=409,
+            )
+        db.flush()
+
         case.submitted_date = submitted_date
-        case.status = CaseStatus.WAITING_RECEIPT.value
         if apply_exam_now:
             case.has_exam_request = True
         case.updated_by = user_id
         updated_case_ids.append(case.id)
-        ordered_cases.append(case)
+        if is_fresh:
+            fresh_cases.append(case)
+        db.flush()
 
     document_ids = (
         _create_batch_filing_documents(
             db,
-            cases=ordered_cases,
-            selected_case_ids=unique_case_ids,
+            cases=fresh_cases,
+            selected_case_ids=[case.id for case in fresh_cases],
             submitted_date=submitted_date,
             user_id=user_id,
         )
-        if generate_list
+        if generate_list and fresh_cases
         else []
     )
     created_task_ids = _create_apply_fee_limit_tasks(
         db,
-        cases=ordered_cases,
+        cases=fresh_cases,
         submitted_date=submitted_date,
         user_id=user_id,
     )
@@ -1707,12 +2157,11 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     validate_bio_deposits(bio_deposits_dict)
     normalized_app_no = _normalize_app_no(
         data.app_no,
-        required=(data.status.value if data.status else None)
-        in {CaseStatus.PUBLISHED.value, CaseStatus.GRANTED.value},
+        required=False,
     )
     if "applicants" in data.model_fields_set:
         validate_status_required_fields(
-            status=data.status.value if data.status else None,
+            status=None,
             app_no=normalized_app_no,
             filing_date=data.filing_date,
             pub_no=data.pub_no,
@@ -1734,9 +2183,16 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         invalid_requester=data.invalid_requester,
         invalid_role=data.invalid_role,
     )
+    case_id = str(uuid4())
+    fee_reduction = _canonical_create_fee_reduction(
+        db,
+        reduction_value=data.fee_reduction,
+        applicants=applicants,
+        case_id=case_id,
+    )
 
     case = Case(
-        id=str(uuid4()),
+        id=case_id,
         case_no=data.case_no,
         case_type=data.case_type,
         patent_category=data.patent_category,
@@ -1751,7 +2207,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         title_cn=data.title_cn,
         title_en=data.title_en,
         app_no=normalized_app_no,
-        status=data.status.value if data.status else "NOT_FILED",
+        status="NOT_FILED",
         filing_date=data.filing_date,
         recv_date=data.recv_date,
         # A3 — Publication / Grant
@@ -1792,7 +2248,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         draftor_id=data.draftor_id,
         # A3 — Control flags
         is_fee_monitor=data.is_fee_monitor,
-        fee_reduction=data.fee_reduction,
+        fee_reduction=fee_reduction,
         applicant_kind=data.applicant_kind,
         discount_rate=data.discount_rate,
         no_power=data.no_power,
@@ -1863,6 +2319,50 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
             )
         )
 
+    source_snapshot = {
+        "case_id": case.id,
+        "case_no": case.case_no,
+        "case_type": case.case_type,
+        "client_id": case.client_id,
+    }
+    source_snapshot_bytes = json.dumps(
+        source_snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    source_snapshot_hash = f"sha256:{hashlib.sha256(source_snapshot_bytes).hexdigest()}"
+    opened_at = datetime.now(UTC).replace(tzinfo=None)
+    apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="CASE_OPENED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=opened_at,
+            occurred_at=opened_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="CASE_RECORD",
+                    object_type="Case",
+                    object_id=case.id,
+                    content_hash=source_snapshot_hash,
+                    captured_at=opened_at,
+                ),
+            ),
+            actor_id=user_id,
+            idempotency_key=f"case-opened:{case.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "evidence_schema": "FPMS_CASE_OPENED_EVIDENCE_V1",
+                "source_snapshot": source_snapshot,
+                "source_snapshot_hash": source_snapshot_hash,
+            },
+        ),
+        db,
+    )
+
     db.commit()
     db.refresh(case)
     return case
@@ -1932,7 +2432,37 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
 
     provided_fields = data.model_fields_set
-    target_status = data.status.value if data.status is not None else case.status
+    original_status = case.status
+    requested_status = data.status.value if data.status is not None else None
+    status_change_requested = (
+        "status" in provided_fields
+        and requested_status is not None
+        and requested_status != original_status
+    )
+    lifecycle_protected = any(
+        value is not None
+        for value in (
+            case.business_stage,
+            case.official_procedure_stage,
+            case.legal_status,
+            case.lifecycle_verification_status,
+            case.lifecycle_revision,
+        )
+    )
+    if status_change_requested and lifecycle_protected:
+        raise_business_error(
+            "CASE_STATUS_MANAGED_BY_LIFECYCLE",
+            "案件状态已由生命周期管理，不能直接修改",
+            details={
+                "case_id": case.id,
+                "current_status": original_status,
+                "requested_status": requested_status,
+                "lifecycle_revision": case.lifecycle_revision,
+            },
+            status_code=409,
+        )
+
+    target_status = requested_status if status_change_requested else original_status
     target_app_no = data.app_no if "app_no" in provided_fields else case.app_no
     target_filing_date = data.filing_date if "filing_date" in provided_fields else case.filing_date
     target_case_type = (
@@ -2045,6 +2575,115 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             earliest_priority_date=earliest_priority_date,
         )
 
+    if data.applicants is not None:
+        applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+        if applicants_dict:
+            validate_applicants(applicants_dict)
+            validate_case_applicant_links(db, data.applicants)
+            first_applicant = next(
+                (applicant for applicant in data.applicants if applicant.is_first), None
+            )
+            validate_case_applicant_kind_mismatch(
+                db,
+                applicant_kind=(
+                    data.applicant_kind
+                    if "applicant_kind" in provided_fields
+                    else case.applicant_kind
+                ),
+                first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+            )
+
+        current_applicants = (
+            db.query(T_CaseApplicant)
+            .filter(T_CaseApplicant.case_id == case_id)
+            .order_by(T_CaseApplicant.seq)
+            .all()
+        )
+        current_composition = tuple(applicant.applicant_id for applicant in current_applicants)
+        submitted_applicants = sorted(data.applicants, key=lambda applicant: applicant.seq)
+        submitted_composition = tuple(applicant.applicant_id for applicant in submitted_applicants)
+        if submitted_composition != current_composition and "fee_reduction" not in provided_fields:
+            raise_business_error(
+                "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
+                "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
+                details={"case_id": case.id, "field": "fee_reduction"},
+                status_code=409,
+            )
+    elif "applicant_kind" in provided_fields:
+        first_applicant = (
+            db.query(T_CaseApplicant.applicant_id)
+            .filter(T_CaseApplicant.case_id == case_id)
+            .order_by(T_CaseApplicant.seq)
+            .first()
+        )
+        validate_case_applicant_kind_mismatch(
+            db,
+            applicant_kind=data.applicant_kind,
+            first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+        )
+
+    canonical_fee_reduction: str | None = None
+    if "fee_reduction" in provided_fields:
+        if data.applicants is not None:
+            target_applicants = submitted_applicants
+        else:
+            target_applicants = (
+                db.query(T_CaseApplicant)
+                .filter(T_CaseApplicant.case_id == case_id)
+                .order_by(T_CaseApplicant.seq)
+                .all()
+            )
+        canonical_fee_reduction = _canonical_create_fee_reduction(
+            db,
+            reduction_value=data.fee_reduction,
+            applicants=target_applicants,
+            case_id=case.id,
+        )
+
+    if data.inventors is not None:
+        validate_inventor_official_fields(data.inventors)
+    if data.bio_deposits is not None:
+        validate_bio_deposits([bio_deposit.model_dump() for bio_deposit in data.bio_deposits])
+    if data.agent_splits is not None:
+        validate_case_agent_splits(db, data.agent_splits)
+
+    if status_change_requested:
+        status_update = db.execute(
+            update(Case)
+            .where(
+                Case.id == case_id,
+                Case.status == original_status,
+                Case.business_stage.is_(None),
+                Case.official_procedure_stage.is_(None),
+                Case.legal_status.is_(None),
+                Case.lifecycle_verification_status.is_(None),
+                Case.lifecycle_revision.is_(None),
+            )
+            .values(status=requested_status)
+            .execution_options(synchronize_session=False)
+        )
+        if status_update.rowcount != 1:
+            current_carriers = db.execute(
+                select(Case.status, Case.lifecycle_revision).where(Case.id == case_id)
+            ).one_or_none()
+            raise_business_error(
+                "CASE_STATUS_MANAGED_BY_LIFECYCLE",
+                "案件状态已由生命周期管理，不能直接修改",
+                details={
+                    "case_id": case.id,
+                    "current_status": (
+                        current_carriers.status if current_carriers else original_status
+                    ),
+                    "requested_status": requested_status,
+                    "lifecycle_revision": (
+                        current_carriers.lifecycle_revision
+                        if current_carriers
+                        else case.lifecycle_revision
+                    ),
+                },
+                status_code=409,
+            )
+
     if "case_type" in provided_fields and data.case_type is not None:
         case.case_type = data.case_type
     if "flow_dir" in provided_fields and data.flow_dir is not None:
@@ -2071,8 +2710,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         case.doc_address_id = data.doc_address_id
     if "bill_address_id" in provided_fields:
         case.bill_address_id = data.bill_address_id
-    if data.status is not None:
-        case.status = data.status
     # A3 — Publication / Grant
     if "pub_date" in provided_fields:
         case.pub_date = data.pub_date
@@ -2146,7 +2783,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     if "is_fee_monitor" in provided_fields:
         case.is_fee_monitor = data.is_fee_monitor
     if "fee_reduction" in provided_fields:
-        case.fee_reduction = data.fee_reduction
+        case.fee_reduction = canonical_fee_reduction
     if "applicant_kind" in provided_fields:
         case.applicant_kind = data.applicant_kind
     if "discount_rate" in provided_fields:
@@ -2163,23 +2800,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     case.updated_by = user_id
 
     if data.applicants is not None:
-        applicants_dict = [applicant.model_dump() for applicant in data.applicants]
-        if applicants_dict:
-            validate_applicants(applicants_dict)
-            validate_case_applicant_links(db, data.applicants)
-            first_applicant = next(
-                (applicant for applicant in data.applicants if applicant.is_first), None
-            )
-            validate_case_applicant_kind_mismatch(
-                db,
-                applicant_kind=(
-                    data.applicant_kind
-                    if "applicant_kind" in provided_fields
-                    else case.applicant_kind
-                ),
-                first_applicant_id=first_applicant.applicant_id if first_applicant else None,
-            )
-
         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
 
         for applicant in data.applicants:
@@ -2201,21 +2821,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     official_applicant_kind=applicant.official_applicant_kind,
                 )
             )
-    elif "applicant_kind" in provided_fields:
-        first_applicant = (
-            db.query(T_CaseApplicant.applicant_id)
-            .filter(T_CaseApplicant.case_id == case_id)
-            .order_by(T_CaseApplicant.seq)
-            .first()
-        )
-        validate_case_applicant_kind_mismatch(
-            db,
-            applicant_kind=data.applicant_kind,
-            first_applicant_id=first_applicant.applicant_id if first_applicant else None,
-        )
-
     if data.inventors is not None:
-        validate_inventor_official_fields(data.inventors)
         db.query(T_CaseInventor).filter(T_CaseInventor.case_id == case_id).delete()
         for inventor in data.inventors:
             db.add(
@@ -2245,8 +2851,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             )
 
     if data.bio_deposits is not None:
-        bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
-        validate_bio_deposits(bio_deposits_dict)
         db.query(T_BioDeposit).filter(T_BioDeposit.case_id == case_id).delete()
         for bio_deposit in data.bio_deposits:
             db.add(
@@ -2262,7 +2866,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             )
 
     if data.agent_splits is not None:
-        validate_case_agent_splits(db, data.agent_splits)
         db.query(T_CaseAgentSplit).filter(T_CaseAgentSplit.case_id == case_id).delete()
         for split in data.agent_splits:
             db.add(

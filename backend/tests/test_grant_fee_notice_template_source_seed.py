@@ -37,8 +37,10 @@ def test_seed_doc_templates_configures_renderable_grant_fee_notice_source(
             db.delete(existing_doc_template)
         db.commit()
 
-        seed_dev.seed_doc_templates(db)
-        seed_dev.seed_doc_templates(db)
+        assert seed_dev.seed_grant_fee_notice_template_source(db) is True
+        db.flush()
+        assert seed_dev.seed_grant_fee_notice_template_source(db) is False
+        db.flush()
 
         doc_template = db.execute(
             select(DocTemplate).where(DocTemplate.code == "GRANT_FEE_NOTICE")

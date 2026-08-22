@@ -95,6 +95,7 @@ def test_create_case_rejects_applicant_kind_mismatch(
         headers=auth_headers,
         json={
             "case_no": _case_no("APPKIND-ERR"),
+            "fee_reduction": "0",
             "applicants": _first_applicant_payload(
                 applicant_id,
                 name_cn=f"{first_applicant_type} 申请人",
@@ -136,6 +137,7 @@ def test_create_case_allows_matching_or_blank_applicant_kind(
     )
     payload: dict[str, object] = {
         "case_no": _case_no("APPKIND-OK"),
+        "fee_reduction": "0",
         "applicants": _first_applicant_payload(
             applicant_id,
             name_cn=f"{first_applicant_type} 申请人",
@@ -169,6 +171,7 @@ def test_create_case_keeps_duplicate_first_error_when_applicant_kind_present(
         headers=auth_headers,
         json={
             "case_no": _case_no("APPKIND-DUP"),
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -200,6 +203,7 @@ def test_create_case_keeps_empty_applicant_error_when_applicant_kind_present(
         headers=auth_headers,
         json={
             "case_no": _case_no("APPKIND-EMPTY"),
+            "fee_reduction": "0",
             "applicants": [],
             "applicant_kind": "ENTITY",
         },
@@ -224,6 +228,7 @@ def test_put_case_rejects_applicant_kind_change_mismatch(
         headers=auth_headers,
         json={
             "case_no": _case_no("APPKIND-PUT"),
+            "fee_reduction": "0",
             "applicants": _first_applicant_payload(applicant_id, name_cn="自然人申请人"),
             "applicant_kind": "INDIVIDUAL",
         },
@@ -264,6 +269,7 @@ def test_put_case_rejects_applicant_update_kind_mismatch(
         headers=auth_headers,
         json={
             "case_no": _case_no("APPKIND-PUT2"),
+            "fee_reduction": "0",
             "applicants": _first_applicant_payload(entity_applicant_id, name_cn="法人申请人"),
             "applicant_kind": "ENTITY",
         },

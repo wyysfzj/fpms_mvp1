@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -40,6 +39,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "Wizard Task Preview Case",
             "applicants": [
                 {
@@ -76,6 +76,9 @@ def test_document_wizard_task_preview_success(client: TestClient, auth_headers: 
                 "doc_template_id": template["id"],
                 "direction": "IN",
                 "doc_date": "2026-01-15",
+                "official_due_date": "2026-05-15",
+                "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+                "official_due_date_status": "CONFIRMED",
             },
             "rows": [
                 {"case_id": case_one["id"], "title": "第一次审查意见通知书"},
@@ -92,7 +95,7 @@ def test_document_wizard_task_preview_success(client: TestClient, auth_headers: 
     assert item["case_no"] == case_one["case_no"]
     assert item["task_template_code"] == "OA_REPLY"
     assert item["document_title"] == "第一次审查意见通知书"
-    assert item["due_date"] == (date(2026, 1, 15) + timedelta(days=120)).isoformat()
+    assert item["due_date"] == "2026-05-15"
 
 
 def test_document_wizard_task_preview_returns_empty_for_non_deadline_template(

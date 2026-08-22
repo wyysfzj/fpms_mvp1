@@ -35,6 +35,7 @@ def _create_case(
         headers=auth_headers,
         json={
             "case_no": _unique(case_no_prefix),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

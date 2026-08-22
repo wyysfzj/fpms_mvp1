@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.errors import BusinessError
 from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.official_workflows.schemas import (
@@ -12,6 +15,8 @@ from app.modules.official_workflows.schemas import (
     FilingPreparationExternalOperationIn,
     FilingPreparationPackageOut,
     FilingPreparationRefreshIn,
+    FormatLetterArchiveIn,
+    FormatLetterArchiveOut,
     LetterHandoffCreateIn,
     LetterHandoffPreviewOut,
     LetterHandoffResultOut,
@@ -30,13 +35,19 @@ from app.modules.official_workflows.schemas import (
     OfficialWorkPackageReceiptOut,
 )
 from app.modules.official_workflows.service import (
+    FormatLetterArchiveCommand,
+    PendingFormatLetterArchiveOperation,
+    _remove_format_letter_archive_file,
     archive_official_work_package,
+    ensure_filing_preparation_package,
+    ensure_oa_reply_package,
     evaluate_official_work_package,
     get_filing_preparation_package,
     get_letter_handoff_preview,
     get_oa_reply_package,
     get_official_fee_linkage,
     link_oa_reply_document,
+    prepare_format_letter_archive,
     prepare_letter_handoff,
     record_filing_preparation_external_operation,
     record_letter_handoff_status,
@@ -48,6 +59,30 @@ from app.modules.official_workflows.service import (
 )
 
 router = APIRouter()
+
+
+def format_letter_archive_out(
+    db: Session,
+    pending: PendingFormatLetterArchiveOperation,
+    *,
+    reused: bool,
+) -> FormatLetterArchiveOut:
+    del db
+    result = pending.result
+    return FormatLetterArchiveOut(
+        handoff=result.handoff,
+        evidence_version_id=result.evidence_version_id,
+        version_number=result.version_number,
+        content_hash=result.content_hash,
+        generated_document_id=result.generated_document_id,
+        attachment_id=result.attachment_id,
+        file_name=result.file_name,
+        role=result.role.value,
+        state=result.state.value,
+        review_state=result.review_state.value,
+        is_current=result.is_current,
+        reused=reused,
+    )
 
 
 @router.get(
@@ -82,6 +117,61 @@ def create_letter_handoff_endpoint(
     )
 
 
+@router.post(
+    "/official-documents/{source_document_id}/format-letter-archive",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FormatLetterArchiveOut,
+    summary="Generate and archive format letter",
+)
+def archive_format_letter_endpoint(
+    source_document_id: UUID,
+    payload: FormatLetterArchiveIn,
+    _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FormatLetterArchiveOut:
+    try:
+        pending = prepare_format_letter_archive(
+            FormatLetterArchiveCommand(
+                source_document_id=str(source_document_id),
+                operation_id=str(payload.operation_id),
+                selected_contact_id=(
+                    str(payload.selected_contact_id)
+                    if payload.selected_contact_id is not None
+                    else None
+                ),
+                remark=payload.remark,
+                actor_id=current_user.id,
+            ),
+            db,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if (
+            not pending.reused
+            and pending.managed_file_path is not None
+            and pending.managed_file_identity is not None
+        ):
+            _remove_format_letter_archive_file(
+                pending.managed_file_path,
+                expected_identity=pending.managed_file_identity,
+                original_error=exc,
+            )
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_PERSIST_FAILED",
+            "Format-letter archive could not be persisted",
+            status_code=500,
+        ) from exc
+
+    return format_letter_archive_out(db, pending, reused=pending.reused)
+
+
 @router.patch(
     "/official-documents/{document_id}/letter-handoff/{handoff_id}/status",
     response_model=LetterHandoffResultOut,
@@ -102,6 +192,20 @@ def record_letter_handoff_status_endpoint(
         longxia_handoff_payload=payload.longxia_handoff_payload,
         handoff_at=payload.handoff_at,
     )
+
+
+@router.post(
+    "/official-documents/{document_id}/official-work-packages/oa-reply/resolve",
+    status_code=status.HTTP_200_OK,
+    response_model=OaReplyPackageOut,
+    summary="Resolve OA reply package",
+)
+def resolve_oa_reply_package_endpoint(
+    document_id: UUID,
+    _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    db: Session = Depends(get_db),
+) -> OaReplyPackageOut:
+    return ensure_oa_reply_package(db, source_document_id=str(document_id))
 
 
 @router.get(
@@ -181,6 +285,27 @@ def update_oa_reply_checklist_endpoint(
     )
 
 
+@router.post(
+    "/cases/{case_id}/official-work-packages/filing-preparation/resolve",
+    status_code=status.HTTP_200_OK,
+    response_model=FilingPreparationPackageOut,
+    summary="Resolve filing preparation package",
+)
+def resolve_filing_preparation_package_endpoint(
+    case_id: UUID,
+    _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FilingPreparationPackageOut:
+    result = ensure_filing_preparation_package(
+        db,
+        case_id=str(case_id),
+        actor_id=current_user.id,
+    )
+    db.commit()
+    return result
+
+
 @router.get(
     "/official-work-packages/{package_id}/filing-preparation",
     response_model=FilingPreparationPackageOut,
@@ -249,6 +374,7 @@ def record_filing_preparation_external_operation_endpoint(
     package_id: str,
     payload: FilingPreparationExternalOperationIn,
     _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> FilingPreparationChecklistResultOut:
     checklist = record_filing_preparation_external_operation(
@@ -257,6 +383,7 @@ def record_filing_preparation_external_operation_endpoint(
         operation_code=payload.operation_code,
         occurred_at=payload.occurred_at,
         note=payload.note,
+        actor_id=current_user.id,
     )
     return FilingPreparationChecklistResultOut(
         package_id=package_id,

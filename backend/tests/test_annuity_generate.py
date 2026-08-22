@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
+from v8_annuity_obligation_test_support import seed_annuity_obligations_with_pay_instruction
 
 from app.modules.annuity.models import AnnuityTask
 from app.modules.cases.models import Case
@@ -38,13 +39,13 @@ def granted_case_id(
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Annuity Gen Test",
-            "filing_date": "2020-06-15",
-            "status": "GRANTED",
+            "filing_date": "2024-06-15",
         },
         headers=auth_headers,
     )
@@ -54,6 +55,7 @@ def granted_case_id(
     # Set first_annuity_year directly in DB (no API for this field yet)
     with session_factory() as db:
         case = db.query(Case).filter(Case.id == case_id).first()
+        case.status = "GRANTED"
         case.first_annuity_year = 3
         db.commit()
 
@@ -66,12 +68,12 @@ def not_granted_case_id(client: TestClient, auth_headers: dict, client_id: str) 
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-NG"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Not Granted Case",
-            "status": "NOT_FILED",
         },
         headers=auth_headers,
     )
@@ -80,23 +82,33 @@ def not_granted_case_id(client: TestClient, auth_headers: dict, client_id: str) 
 
 
 @pytest.fixture
-def granted_no_year_case_id(client: TestClient, auth_headers: dict, client_id: str) -> str:
+def granted_no_year_case_id(
+    client: TestClient,
+    auth_headers: dict,
+    client_id: str,
+    session_factory: sessionmaker,
+) -> str:
     resp = client.post(
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-NY"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Granted No Year",
-            "status": "GRANTED",
             "filing_date": "2020-01-01",
         },
         headers=auth_headers,
     )
     assert resp.status_code == 201
-    return resp.json()["id"]
+    case_id = resp.json()["id"]
+    with session_factory() as db:
+        case = db.query(Case).filter(Case.id == case_id).one()
+        case.status = "GRANTED"
+        db.commit()
+    return case_id
 
 
 def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
@@ -398,7 +410,12 @@ def test_list_is_overdue_false_when_done(
 # --- DRAFT GENERATED FLAG ---
 
 
-def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
+def test_draft_generated_flag_remains_false(
+    client: TestClient,
+    auth_headers: dict,
+    granted_case_id: str,
+    session_factory: sessionmaker,
+):
     _seed_annuity_rates(client, auth_headers)
 
     client.post(
@@ -417,6 +434,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
     task_ids = [i["id"] for i in items[:1]]  # just one
 
     if task_ids:
+        seed_annuity_obligations_with_pay_instruction(session_factory, task_ids)
         # Update instruction to PAY first
         client.put(
             f"/api/v1/annuity/tasks/{task_ids[0]}/instruction",
@@ -440,7 +458,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
         )
         for item in list_resp2.json()["items"]:
             if item["id"] == task_ids[0]:
-                assert item["draft_generated"] is True
+                assert item["draft_generated"] is False
 
 
 def test_annuity_draft_generation_creates_gov_only_items(
@@ -462,6 +480,7 @@ def test_annuity_draft_generation_creates_gov_only_items(
     )
     assert list_resp.status_code == 200, list_resp.text
     task = list_resp.json()["items"][0]
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task["id"]])
 
     client.put(
         f"/api/v1/annuity/tasks/{task['id']}/instruction",
@@ -484,7 +503,7 @@ def test_annuity_draft_generation_creates_gov_only_items(
 
     assert len(items) == 1
     assert items[0].fee_type == "GOV"
-    assert items[0].fee_code == "ANNUITY_GOV"
+    assert items[0].fee_code == "CN_ANNUITY_FEE_INV"
     assert Decimal(items[0].amount) == Decimal("900.00")
 
 

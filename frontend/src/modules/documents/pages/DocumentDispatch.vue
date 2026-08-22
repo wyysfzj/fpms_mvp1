@@ -161,6 +161,7 @@
     <LetterHandoffPanel
       class="action-panel"
       :document-id="selectedLetterHandoffDocumentId"
+      :direction="selectedLetterHandoffDocumentDirection"
     />
 
     <el-card v-if="dispatchDetail" class="action-panel" shadow="never">
@@ -263,6 +264,10 @@ const creatingDispatch = ref(false)
 const dispatchDetail = ref<DocumentDispatchOut | null>(null)
 const currentDispatchId = ref('')
 const selectedLetterHandoffDocumentId = computed(() => selectedIds.value.length === 1 ? selectedIds.value[0] : '')
+const selectedLetterHandoffDocumentDirection = computed(() => {
+  if (selectedIds.value.length !== 1) return ''
+  return documents.value.find((item) => item.id === selectedIds.value[0])?.direction || ''
+})
 
 const filters = reactive<DocumentDispatchMailingListParams>({
   q: '',

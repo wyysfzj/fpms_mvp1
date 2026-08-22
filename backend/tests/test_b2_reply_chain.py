@@ -1,20 +1,25 @@
-"""Tests for Batch B2: Document Reply Chain + Auto Write-off.
+"""Tests for Batch B2: Document Reply Chain + scoped Auto Write-off.
 
 TDD tests — written against the B2 specification. Tests may fail until
 the backend implementation is complete.
 
 Covers:
 - Document reply chain fields (reply_to_id, need_reply, reply_date)
-- Auto write-off: OUT document reply → close linked OPEN tasks
+- Auto write-off: ordinary OUT reply → close linked OPEN tasks
 - DocTemplate cascade: status_effect, need_reply propagation
-- Full OA lifecycle (OA_IN → task created → OA_OUT reply → task closed)
+- Full OA lifecycle (OA_IN → task created → OA_OUT reply → task remains open)
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
+
+from app.modules.cases.models import Case
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -24,6 +29,11 @@ DOC_BASE = "/api/v1/documents"
 TASK_BASE = "/api/v1/tasks"
 DOC_TMPL_BASE = "/api/v1/doc-templates"
 CASE_BASE = "/api/v1/cases"
+OA_CONFIRMED_DUE = {
+    "official_due_date": "2026-04-15",
+    "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+    "official_due_date_status": "CONFIRMED",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +66,7 @@ def _create_case(client: TestClient, auth_headers: dict, **overrides) -> dict:
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
+        "fee_reduction": "0",
         "title_cn": "B2 Test Case",
         "applicants": [
             {
@@ -186,9 +197,11 @@ def test_create_document_with_reply_fields(client: TestClient, auth_headers: dic
 # ---------------------------------------------------------------------------
 
 
-def test_reply_chain_auto_writeoff(client: TestClient, auth_headers: dict) -> None:
+def test_oa_reply_leaves_date_unset_without_auto_writeoff(
+    client: TestClient, auth_headers: dict
+) -> None:
     """Full lifecycle: IN doc (OA_IN template) → task auto-created →
-    OUT reply (OA_OUT template with reply_to_id) → task DONE + reply_date set."""
+    OUT reply (OA_OUT template with reply_to_id) → task OPEN + reply_date unset."""
     # 1. Create case
     case = _create_case(client, auth_headers)
 
@@ -203,6 +216,7 @@ def test_reply_chain_auto_writeoff(client: TestClient, auth_headers: dict) -> No
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="OA Received",
+        **OA_CONFIRMED_DUE,
     )
 
     # 4. Verify task was auto-created and is OPEN
@@ -227,18 +241,18 @@ def test_reply_chain_auto_writeoff(client: TestClient, auth_headers: dict) -> No
         reply_to_id=in_doc["id"],
     )
 
-    # 7. Verify task status → DONE (auto write-off)
+    # 7. Verify task remains OPEN until official receipt archive
     tasks_after = _get_tasks_for_document(client, auth_headers, case["id"], in_doc["id"])
     assert len(tasks_after) >= 1
     for t in tasks_after:
-        assert t["status"] == "DONE", (
-            f"Expected task status DONE after auto write-off, got {t['status']}"
+        assert t["status"] == "OPEN", (
+            f"Expected OA task status OPEN before receipt archive, got {t['status']}"
         )
 
-    # 8. Verify original IN document reply_date is set
+    # 8. Verify receipt-owned reply_date remains unset
     in_doc_refreshed = _get_document(client, auth_headers, in_doc["id"])
-    assert in_doc_refreshed.get("reply_date") is not None, (
-        "reply_date should be set on the original IN document after reply"
+    assert in_doc_refreshed.get("reply_date") is None, (
+        "reply_date must remain unset until the official receipt is archived"
     )
 
 
@@ -282,9 +296,9 @@ def test_reply_chain_no_writeoff_if_no_open_tasks(client: TestClient, auth_heade
 # ---------------------------------------------------------------------------
 
 
-def test_reply_chain_only_closes_linked_tasks(client: TestClient, auth_headers: dict) -> None:
+def test_oa_reply_keeps_all_oa_tasks_open(client: TestClient, auth_headers: dict) -> None:
     """Two IN docs on same case. Reply to first only →
-    only first doc's tasks closed, second's still OPEN."""
+    both OA tasks remain OPEN until their receipt archive events."""
     case = _create_case(client, auth_headers)
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
 
@@ -297,6 +311,7 @@ def test_reply_chain_only_closes_linked_tasks(client: TestClient, auth_headers: 
         doc_template_id=oa_in_tmpl["id"],
         title="OA First",
         doc_date="2026-01-10",
+        **OA_CONFIRMED_DUE,
     )
     in_doc_2 = _create_document(
         client,
@@ -306,6 +321,7 @@ def test_reply_chain_only_closes_linked_tasks(client: TestClient, auth_headers: 
         doc_template_id=oa_in_tmpl["id"],
         title="OA Second",
         doc_date="2026-02-10",
+        **OA_CONFIRMED_DUE,
     )
 
     # Verify both have auto-created tasks
@@ -326,10 +342,10 @@ def test_reply_chain_only_closes_linked_tasks(client: TestClient, auth_headers: 
         reply_to_id=in_doc_1["id"],
     )
 
-    # First doc's tasks → DONE
+    # First doc's tasks → still OPEN after internal OA reply
     tasks_1_after = _get_tasks_for_document(client, auth_headers, case["id"], in_doc_1["id"])
     for t in tasks_1_after:
-        assert t["status"] == "DONE", f"First doc's task should be DONE, got {t['status']}"
+        assert t["status"] == "OPEN", f"First doc's task should remain OPEN, got {t['status']}"
 
     # Second doc's tasks → still OPEN
     tasks_2_after = _get_tasks_for_document(client, auth_headers, case["id"], in_doc_2["id"])
@@ -427,7 +443,7 @@ def test_reply_to_template_mismatch_is_rejected(client: TestClient, auth_headers
 
 
 def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: dict) -> None:
-    """Create doc with template that has status_effect → case status updated."""
+    """Create doc with template status metadata without changing case status."""
     case = _create_case(client, auth_headers)
     # Case starts with NOT_FILED status
     case_before = _get_case(client, auth_headers, case["id"])
@@ -445,19 +461,20 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="OA for status effect test",
+        **OA_CONFIRMED_DUE,
     )
 
-    # Case status should now be OA1
+    # Template metadata remains readable but does not authorize a transition.
     case_after = _get_case(client, auth_headers, case["id"])
-    assert case_after["status"] == "OA1", (
-        f"Expected case status 'OA1' after status_effect cascade, got '{case_after['status']}'"
-    )
+    assert case_after["status"] == case_before["status"]
 
 
 def test_doc_template_cascade_rejects_illegal_status_regression(
-    client: TestClient, auth_headers: dict
+    client: TestClient,
+    auth_headers: dict,
+    session_factory: sessionmaker,
 ) -> None:
-    """Terminal case status must not be regressed by document status_effect."""
+    """Terminal case status remains unchanged by document status metadata."""
     case = _create_case(client, auth_headers)
 
     promote_resp = client.put(
@@ -475,7 +492,21 @@ def test_doc_template_cascade_rejects_illegal_status_regression(
             "valid_until": "2045-01-15",
         },
     )
-    assert promote_resp.status_code == 200, promote_resp.text
+    assert promote_resp.status_code == 409, promote_resp.text
+    assert promote_resp.json()["error"]["code"] == "CASE_STATUS_MANAGED_BY_LIFECYCLE"
+
+    with session_factory() as db:
+        case_model = db.execute(select(Case).where(Case.id == case["id"])).scalar_one()
+        case_model.status = "GRANTED"
+        case_model.app_no = "CN202510123456.7"
+        case_model.filing_date = date(2025, 1, 15)
+        case_model.pub_no = "CN123456789A"
+        case_model.pub_date = date(2025, 7, 15)
+        case_model.grant_no = "ZL202510123456.7"
+        case_model.grant_date = date(2026, 1, 15)
+        case_model.first_annuity_year = 1
+        case_model.valid_until = date(2045, 1, 15)
+        db.commit()
 
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
     resp = client.post(
@@ -487,11 +518,10 @@ def test_doc_template_cascade_rejects_illegal_status_regression(
             "doc_date": "2026-01-15",
             "title": "Illegal regression OA",
             "doc_template_id": oa_in_tmpl["id"],
+            **OA_CONFIRMED_DUE,
         },
     )
-    assert resp.status_code == 409, resp.text
-    payload = resp.json()["error"]
-    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
+    assert resp.status_code == 201, resp.text
 
     case_after = _get_case(client, auth_headers, case["id"])
     assert case_after["status"] == "GRANTED"
@@ -517,6 +547,7 @@ def test_doc_template_cascade_need_reply(client: TestClient, auth_headers: dict)
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="OA for need_reply test",
+        **OA_CONFIRMED_DUE,
     )
 
     assert doc.get("need_reply") is True, "Document should inherit need_reply=True from DocTemplate"
@@ -595,7 +626,7 @@ def test_document_update_reply_fields(client: TestClient, auth_headers: dict) ->
 def test_reply_document_applies_status_restore_when_template_configured(
     client: TestClient, auth_headers: dict
 ) -> None:
-    """Reply template status_restore should bring the case back to configured status."""
+    """Reply template status_restore remains metadata without transition authority."""
     case = _create_case(client, auth_headers)
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
 
@@ -606,9 +637,10 @@ def test_reply_document_applies_status_restore_when_template_configured(
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="Incoming OA",
+        **OA_CONFIRMED_DUE,
     )
     case_after_in = _get_case(client, auth_headers, case["id"])
-    assert case_after_in["status"] == "OA1"
+    assert case_after_in["status"] == "NOT_FILED"
 
     restore_tmpl = _create_doc_template(
         client,
@@ -632,7 +664,7 @@ def test_reply_document_applies_status_restore_when_template_configured(
     assert reply["case_no"] == case["case_no"]
 
     case_after_reply = _get_case(client, auth_headers, case["id"])
-    assert case_after_reply["status"] == "ACCEPTED"
+    assert case_after_reply["status"] == "NOT_FILED"
 
 
 # ---------------------------------------------------------------------------
@@ -674,15 +706,17 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="OA awaiting reply",
+        **OA_CONFIRMED_DUE,
     )
-    replied_doc = _create_document(
+    reply_prepared_doc = _create_document(
         client,
         auth_headers,
         case["id"],
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
-        title="OA replied",
+        title="OA reply prepared",
         doc_date="2026-01-20",
+        **OA_CONFIRMED_DUE,
     )
     _create_document(
         client,
@@ -692,7 +726,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
         doc_template_id=oa_out_tmpl["id"],
         title="OA reply sent",
         doc_date="2026-02-01",
-        reply_to_id=replied_doc["id"],
+        reply_to_id=reply_prepared_doc["id"],
     )
     plain_doc = _create_document(
         client,
@@ -711,7 +745,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     assert need_reply_resp.status_code == 200, need_reply_resp.text
     need_reply_ids = {item["id"] for item in need_reply_resp.json()["items"]}
     assert awaiting_reply["id"] in need_reply_ids
-    assert replied_doc["id"] in need_reply_ids
+    assert reply_prepared_doc["id"] in need_reply_ids
     assert plain_doc["id"] not in need_reply_ids
 
     pending_resp = client.get(
@@ -722,7 +756,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     assert pending_resp.status_code == 200, pending_resp.text
     pending_ids = {item["id"] for item in pending_resp.json()["items"]}
     assert awaiting_reply["id"] in pending_ids
-    assert replied_doc["id"] not in pending_ids
+    assert reply_prepared_doc["id"] in pending_ids
 
     replied_resp = client.get(
         DOC_BASE,
@@ -731,7 +765,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     )
     assert replied_resp.status_code == 200, replied_resp.text
     replied_ids = {item["id"] for item in replied_resp.json()["items"]}
-    assert replied_doc["id"] in replied_ids
+    assert reply_prepared_doc["id"] not in replied_ids
     assert awaiting_reply["id"] not in replied_ids
     assert plain_doc["id"] not in replied_ids
 
@@ -741,8 +775,8 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
 # ---------------------------------------------------------------------------
 
 
-def test_auto_writeoff_task_log_created(client: TestClient, auth_headers: dict) -> None:
-    """After auto write-off, GET /tasks/{id}/logs → log with action=AUTO_WRITEOFF."""
+def test_oa_reply_does_not_create_auto_writeoff_log(client: TestClient, auth_headers: dict) -> None:
+    """Internal OA reply must not emit task completion evidence."""
     case = _create_case(client, auth_headers)
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
 
@@ -754,12 +788,13 @@ def test_auto_writeoff_task_log_created(client: TestClient, auth_headers: dict) 
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
         title="OA for log test",
+        **OA_CONFIRMED_DUE,
     )
     tasks = _get_tasks_for_document(client, auth_headers, case["id"], in_doc["id"])
     assert len(tasks) >= 1
     task_id = tasks[0]["id"]
 
-    # Create OUT reply → auto write-off
+    # Create OUT reply → task remains open
     oa_out_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_OUT")
     _create_document(
         client,
@@ -771,15 +806,12 @@ def test_auto_writeoff_task_log_created(client: TestClient, auth_headers: dict) 
         reply_to_id=in_doc["id"],
     )
 
-    # Verify task logs contain AUTO_WRITEOFF
+    # Verify task logs do not contain completion evidence
     logs = _get_task_logs(client, auth_headers, task_id)
     actions = [log_entry["action"] for log_entry in logs]
-    assert "AUTO_WRITEOFF" in actions, f"Expected AUTO_WRITEOFF in task logs, got: {actions}"
-
-    # Verify the writeoff log has correct status transition
-    writeoff_log = next(log_entry for log_entry in logs if log_entry["action"] == "AUTO_WRITEOFF")
-    assert writeoff_log["from_status"] == "OPEN"
-    assert writeoff_log["to_status"] == "DONE"
+    assert "AUTO_WRITEOFF" not in actions, (
+        f"OA reply must not create AUTO_WRITEOFF before receipt archive: {actions}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -788,7 +820,7 @@ def test_auto_writeoff_task_log_created(client: TestClient, auth_headers: dict) 
 
 
 def test_full_oa_lifecycle(client: TestClient, auth_headers: dict) -> None:
-    """End-to-end: create case → OA_IN → cascade + task → OA_OUT reply → auto close."""
+    """End-to-end: create case → OA_IN → task → OA_OUT reply → task stays open."""
     # 1. Create case
     case = _create_case(client, auth_headers)
     case_detail = _get_case(client, auth_headers, case["id"])
@@ -809,13 +841,12 @@ def test_full_oa_lifecycle(client: TestClient, auth_headers: dict) -> None:
         doc_template_id=oa_in_tmpl["id"],
         title="Official Action Received",
         doc_date="2026-01-15",
+        **OA_CONFIRMED_DUE,
     )
 
-    # 4a. Verify case status changed to OA1 (status_effect cascade)
+    # 4a. Verify ordinary document registration does not change case status.
     case_updated = _get_case(client, auth_headers, case["id"])
-    assert case_updated["status"] == "OA1", (
-        f"Case status should be 'OA1', got '{case_updated['status']}'"
-    )
+    assert case_updated["status"] == case_detail["status"]
 
     # 4b. Verify document need_reply=True (need_reply cascade)
     assert oa_in_doc.get("need_reply") is True, (
@@ -844,22 +875,26 @@ def test_full_oa_lifecycle(client: TestClient, auth_headers: dict) -> None:
         reply_to_id=oa_in_doc["id"],
     )
 
-    # 6a. Task status → DONE (auto write-off)
+    # 6a. Task remains OPEN until official receipt archive
     tasks_after = _get_tasks_for_document(client, auth_headers, case["id"], oa_in_doc["id"])
     for t in tasks_after:
-        assert t["status"] == "DONE", f"Task should be DONE after OA_OUT reply, got '{t['status']}'"
+        assert t["status"] == "OPEN", (
+            f"Task should remain OPEN after OA_OUT reply, got '{t['status']}'"
+        )
 
-    # 6b. reply_date set on original IN document
+    # 6b. Receipt-owned reply_date remains unset
     oa_in_refreshed = _get_document(client, auth_headers, oa_in_doc["id"])
-    assert oa_in_refreshed.get("reply_date") is not None, (
-        "OA_IN reply_date should be set after OA_OUT reply"
+    assert oa_in_refreshed.get("reply_date") is None, (
+        "OA_IN reply_date must remain unset until the official receipt is archived"
     )
 
     # 6c. OUT doc has reply_to_id pointing to IN doc
     assert oa_out_doc.get("reply_to_id") == oa_in_doc["id"]
 
-    # 6d. Task log includes AUTO_WRITEOFF entry
+    # 6d. Task log has no completion entry before receipt archive
     task_id = tasks[0]["id"]
     logs = _get_task_logs(client, auth_headers, task_id)
     actions = [log_entry["action"] for log_entry in logs]
-    assert "AUTO_WRITEOFF" in actions, f"Task logs should include AUTO_WRITEOFF, got: {actions}"
+    assert "AUTO_WRITEOFF" not in actions, (
+        f"Task logs must not include AUTO_WRITEOFF before receipt archive: {actions}"
+    )

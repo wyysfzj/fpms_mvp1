@@ -92,6 +92,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
         "/api/v1/cases",
         json={
             "case_no": f"CASE-SPLIT-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

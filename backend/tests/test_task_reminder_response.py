@@ -40,12 +40,12 @@ def _create_case(client: TestClient, auth_headers: dict[str, str], session_facto
         "/api/v1/cases",
         json={
             "case_no": f"TRR-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_response.json()["id"],
             "title_cn": "提醒响应案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "applicants": [
                 {

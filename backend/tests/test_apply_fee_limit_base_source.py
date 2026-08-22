@@ -9,6 +9,10 @@ from app.modules.annuity.models import PayList  # noqa: F401
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
 from app.modules.tasks.models import Task, TaskTemplate
+from tests.test_v8_batch_filing_lifecycle_adapter import (
+    _seed_filing_evidence_for_case,
+    _start_filing_preparation,
+)
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -80,12 +84,12 @@ def _create_not_filed_case(
         "/api/v1/cases",
         json={
             "case_no": f"AFB-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "申请费基准测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "applicants": [
                 {
@@ -181,6 +185,9 @@ def test_batch_filing_apply_fee_limit_uses_filing_date_base_source(
         filing_date="2026-03-08",
     )
     _create_filing_materials(client, auth_headers, case_id=case_data["id"])
+    _start_filing_preparation(client, auth_headers, case_id=case_data["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_data["id"], marker="filing-date")
 
     payload = _submit_batch(
         client,
@@ -217,6 +224,9 @@ def test_batch_filing_apply_fee_limit_keeps_case_event_base_source(
         applicant_id=applicant_id,
     )
     _create_filing_materials(client, auth_headers, case_id=case_data["id"])
+    _start_filing_preparation(client, auth_headers, case_id=case_data["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_data["id"], marker="case-event")
 
     payload = _submit_batch(
         client,

@@ -16,6 +16,7 @@ from tests.test_commission_waitpay_threshold import (
     _create_client,
     _seed_applicant,
 )
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_oa_fee_draft_for_case(
@@ -93,6 +94,7 @@ def test_oa_service_fee_bill_enters_commission_pipeline(
 ) -> None:
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     main_agent_id = _create_agent_user(session_factory, "oa-main")
     co_agent_id = _create_agent_user(session_factory, "oa-co")
     rule_id = _create_oa_commission_rule(client, auth_headers)

@@ -1,0 +1,2898 @@
+{
+  "schema_version": 1,
+  "source_head": "afa58429e6b6e80b85f76055139e18fbe38ec9e8",
+  "archive_commit": "6b2ef89da447353380b99853168d4d38aaf9210a",
+  "source_path_manifest_sha256": "f4baccb49ea2cd331c76aa9c3b41dc4a4952be7be22a1e03ebac2524b0d22ab0",
+  "total_paths": 474,
+  "rule": "Every visible dirty path from the quarantined workspace appears exactly once. Archive-only paths are preserved but never enter active ancestry; adoption paths may enter only through their named reviewed story.",
+  "story_counts": {
+    "ARCHIVE_ONLY_HISTORY": 283,
+    "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION": 8,
+    "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 10,
+    "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
+    "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 11,
+    "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION": 11,
+    "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION": 3,
+    "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
+    "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
+    "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 2,
+    "V8-ADOPT-LIFECYCLE-CENTER": 21,
+    "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
+    "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 27,
+    "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION": 1,
+    "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION": 11,
+    "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION": 8,
+    "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION": 4,
+    "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 2,
+    "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
+    "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 1,
+    "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 3,
+    "V8-ADOPT-FEE-OBLIGATION": 4,
+    "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION": 2,
+    "V8-PCT-FEE-POLICY-CURRENT-ADOPTION": 2,
+    "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION": 3,
+    "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 2,
+    "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 4,
+    "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 5,
+    "V8-ADOPT-OFFICIAL-WORKFLOW": 5,
+    "V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION": 2,
+    "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION": 2,
+    "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
+    "V8-ADOPT-LEGACY-RECONCILIATION": 9,
+    "V8-ADOPT-DECISION-GATES": 2,
+    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 1,
+    "V8-ADOPT-PAYLIST-PAYMENT": 2,
+    "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION": 3,
+    "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION": 2,
+    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
+    "C3-LEAN-GOVERNANCE-ADOPTION": 2
+  },
+  "entries": [
+    {
+      "path": "AGENTS.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-fee-reduction.spec.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence review UI verification"
+    },
+    {
+      "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-fee-reduction-approval-case-edit.spec.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
+    },
+    {
+      "path": "backend/alembic/versions/v8_delta27_future_annuity_reduction_lineage.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION",
+      "rationale": "schema and durable-lineage migration"
+    },
+    {
+      "path": "backend/alembic/versions/v8_delta4_evidence_kind_capacity.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
+    },
+    {
+      "path": "backend/app/modules/annuity/api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "annuity domain behavior"
+    },
+    {
+      "path": "backend/app/modules/annuity/models.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION",
+      "rationale": "annuity domain behavior"
+    },
+    {
+      "path": "backend/app/modules/annuity/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList creation fee-activity adapter"
+    },
+    {
+      "path": "backend/app/modules/cases/lifecycle_activity_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
+    },
+    {
+      "path": "backend/app/modules/cases/lifecycle_rules.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES",
+      "rationale": "current-reviewed lifecycle rules through application/patent terminal and restoration outcomes"
+    },
+    {
+      "path": "backend/app/modules/cases/lifecycle_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle service with exact patent-register predecessor context and replay"
+    },
+    {
+      "path": "backend/app/modules/cases/models.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
+    },
+    {
+      "path": "backend/app/modules/cases/schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "backend/app/modules/cases/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "backend/app/modules/documents/api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API routes"
+    },
+    {
+      "path": "backend/app/modules/documents/application_fee_notice_contracts.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
+      "rationale": "direct frozen application-fee notice input/error contract"
+    },
+    {
+      "path": "backend/app/modules/documents/evidence_contracts.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/evidence_policy.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
+      "rationale": "current-reviewed filing XML derivation lineage gate"
+    },
+    {
+      "path": "backend/app/modules/documents/evidence_review_schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence review request contract"
+    },
+    {
+      "path": "backend/app/modules/documents/evidence_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special-fee evidence review snapshot"
+    },
+    {
+      "path": "backend/app/modules/documents/evidence_workflow_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/extra_data.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/fee_linking_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special-fee evidence-to-obligation adapters"
+    },
+    {
+      "path": "backend/app/modules/documents/letter_context.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/letter_render_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/lifecycle_evidence_adapters.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence adapters"
+    },
+    {
+      "path": "backend/app/modules/documents/oa_attachment_promotion_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/official_notice_catalog.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document attachment evidence read projection"
+    },
+    {
+      "path": "backend/app/modules/documents/semantics.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage and workflow"
+    },
+    {
+      "path": "backend/app/modules/documents/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed receipt-owned OA reply-date projection"
+    },
+    {
+      "path": "backend/app/modules/fees/api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
+    },
+    {
+      "path": "backend/app/modules/fees/cnipa_annuity_rate_candidate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "activated official rate source/candidate"
+    },
+    {
+      "path": "backend/app/modules/fees/cnipa_layout_rate_candidate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 rate-book candidate materializer"
+    },
+    {
+      "path": "backend/app/modules/fees/data/cnipa_246_layout_rate.json",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 rate-book candidate data"
+    },
+    {
+      "path": "backend/app/modules/fees/data/cnipa_payment_guide_20260330_annuity_rates.json",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "activated official rate source/candidate"
+    },
+    {
+      "path": "backend/app/modules/fees/fee_reduction_approval_schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "strict fee-reduction approval HTTP schemas"
+    },
+    {
+      "path": "backend/app/modules/fees/obligation_schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+    },
+    {
+      "path": "backend/app/modules/fees/obligation_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation detail-read and prepare-draft story"
+    },
+    {
+      "path": "backend/app/modules/fees/official_rate_book.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/app/modules/fees/pct_policy.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed pure PCT national-stage fee policy"
+    },
+    {
+      "path": "backend/app/modules/fees/schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
+    },
+    {
+      "path": "backend/app/modules/fees/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed obligation-linked generic fee draft behavior"
+    },
+    {
+      "path": "backend/app/modules/grant_fees/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "grant and annuity official-fee behavior"
+    },
+    {
+      "path": "backend/app/modules/official_workflows/api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
+      "rationale": "official workflow API/service"
+    },
+    {
+      "path": "backend/app/modules/official_workflows/schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
+      "rationale": "official workflow API/service"
+    },
+    {
+      "path": "backend/app/modules/official_workflows/service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed receipt-owned OA reply-date projection"
+    },
+    {
+      "path": "backend/app/modules/system/api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
+      "rationale": "customer/source decision-gate API"
+    },
+    {
+      "path": "backend/app/modules/system/decision_gate_schemas.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
+      "rationale": "customer/source decision-gate API"
+    },
+    {
+      "path": "backend/scripts/backfill_v8_document_evidence.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "one-time legacy reconciliation script"
+    },
+    {
+      "path": "backend/scripts/backfill_v8_fee_reduction.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "one-time legacy reconciliation script"
+    },
+    {
+      "path": "backend/scripts/backfill_v8_fee_truth.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "one-time legacy reconciliation script"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_deadline_create_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_deadline_impact_preview.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_deadline_read_projection.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_deadline_update_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_semantic_state_effect.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_document_wizard_deadline_backend.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_filing_ensure_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
+      "rationale": "official workflow behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_filing_resolve_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
+      "rationale": "official workflow behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_legacy_deadline_task_sync.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy data reconciliation behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_notice_catalog_reference_gate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DECISION-GATES",
+      "rationale": "source/customer decision-gate behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_notice_grant_activation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_oa_deadline_fail_closed.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_addgap_oa_out_keeps_task_open.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_b2_reply_chain.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_document_ui_deadline_generation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_spec_alignment_e2e.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "cross-lane lifecycle specification regression"
+    },
+    {
+      "path": "backend/tests/test_v8_acceptance_notice_evidence_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_application_fee_notice_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-FEE-OBLIGATION",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_application_fee_notice_source_carrier.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DECISION-GATES",
+      "rationale": "source/customer decision-gate behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_attachment_evidence_read_projection.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed attachment evidence read projection behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_batch_filing_lifecycle_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_case_create_fee_reduction.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "backend/tests/test_v8_case_update_fee_reduction.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "backend/tests/test_v8_certificate_archived_activity.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_cnipa_246_layout_rate_candidate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 candidate behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_cnipa_annuity_rate_candidate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_compensation_period_annuity_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed compensation-period annuity obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_compensation_period_annuity_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_decision_gate_list_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
+      "rationale": "source/customer decision-gate behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_document_evidence_contracts.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage contract"
+    },
+    {
+      "path": "backend/tests/test_v8_document_evidence_review_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence review API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_document_semantics_event_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_obligation_detail_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_obligation_detail_read.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation detail-read and prepare-draft story"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_obligation_prepare_draft.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation detail-read and prepare-draft story"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_reduction_approval_create_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "fee-reduction approval create API decisive regression"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_reduction_approval_list_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "fee-reduction approval list API decisive regression"
+    },
+    {
+      "path": "backend/tests/test_v8_fee_reduction_approval_notice_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-FEE-OBLIGATION",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_filing_external_submission_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_filing_full_word_gate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
+      "rationale": "official workflow behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_filing_preparation_started_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_filing_receipt_lifecycle_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_filing_xml_derivation_gate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
+      "rationale": "current-reviewed filing XML derivation lineage gate"
+    },
+    {
+      "path": "backend/tests/test_v8_format_letter_archive.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_format_letter_context.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_format_letter_render.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_future_annuity_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_future_annuity_reduction_lineage_carrier.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_generated_attachment_evidence_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed generated attachment evidence behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_generic_fee_draft_activity_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed obligation-linked generic fee draft behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_generic_fee_draft_obligation_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-FEE-OBLIGATION",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_grant_notice_lifecycle_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_bibliographic_change_submission_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout bibliographic-change obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_extension_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout extension obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_nonvoluntary_license_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout nonvoluntary-licence obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_reexamination_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout reexamination obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_registration_filed_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout registration obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_remuneration_adjudication_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout remuneration-adjudication obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_ic_layout_right_restoration_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout restoration obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_internal_pay_list_export.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
+      "rationale": "internal PayList export service decisive regression"
+    },
+    {
+      "path": "backend/tests/test_v8_internal_pay_list_export_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
+      "rationale": "payment and PayList boundary behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_bibliographic_change_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_extension_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_nonvoluntary_license_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_reexamination_active_source_gate.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_reexamination_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_registration_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_remuneration_adjudication_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_layout_restoration_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_legacy_document_evidence_import.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy data reconciliation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_legacy_fee_reduction_import.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy data reconciliation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_legacy_fee_truth_link.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy data reconciliation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_acceptance_notice.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_application_rejection.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_evidence_kind_capacity.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_grant_announcement.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_grant_registration_notice.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_oa_notice.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_oa_receipt.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_preliminary_passed.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_preliminary_started.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_publication_notice.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_rectification_notice.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_reexamination_started.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_register_status.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_register_status_conflict_service.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_lifecycle_substantive_started.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "rationale": "case lifecycle behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_copyable_attachment_policy.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_external_submission_evidence.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_external_submission_http_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_noncopyable_appendix_policy.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_notice_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_out_package_atomic_link.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_prepared_activity.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_oa_structured_attachment_promotion.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_official_payment_evidence_activity_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY",
+      "rationale": "official-payment evidence status and activity adapter"
+    },
+    {
+      "path": "backend/tests/test_v8_open_license_annuity_obligation_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official-fee or obligation behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_open_license_annuity_reduction_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_patent_term_compensation_request_obligation.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed patent-term-compensation request obligation"
+    },
+    {
+      "path": "backend/tests/test_v8_pay_list_create_activity_adapter.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList creation fee-activity adapter"
+    },
+    {
+      "path": "backend/tests/test_v8_pay_list_create_transaction_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
+      "rationale": "payment and PayList boundary behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_pay_list_export_artifact_read.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList export/payment boundary story"
+    },
+    {
+      "path": "backend/tests/test_v8_pay_list_payment_export_decouple.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList export/payment boundary story"
+    },
+    {
+      "path": "backend/tests/test_v8_pct_fee_policy.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed pure PCT national-stage fee policy"
+    },
+    {
+      "path": "backend/tests/test_v8_preliminary_passed_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_preliminary_started_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_prepare_oa_reply_seam.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_publication_notice_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_rectification_notice_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_reexamination_started_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_substantive_started_evidence_api.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_term_compensation_request_fee_rule.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
+    },
+    {
+      "path": "backend/tests/test_v8_w1_l3_case_activity_evidence.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "backend/tests/test_v8_work_package_manifest_evidence_version.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "rationale": "document/evidence lineage behavior"
+    },
+    {
+      "path": "docs/agents/evidence.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/agents/execution.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/agents/manifest.json",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/agents/scope_protocol_v3.json",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/agents/scope_protocol_v3_annuity_ordinal19.json",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/agents/source-authority.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/postdemo/postdemo_application_fee_notice_preview_source_decision_20260721.md",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "C3-LEAN-GOVERNANCE-ADOPTION",
+      "rationale": "pending customer decision preserved in active source registry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-17-fpms-governance-final-close-convergence.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-17-fpms-scope-protocol-v3-compatibility.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-21-fpms-taskctl-direct-scope-interrupted-record-compat.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-22-evidence-scope-v2-active-owner-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-22-evidence-scope-v2-fixture-state-compat.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-22-fpms-v8-delta13-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-22-fpms-v8-delta14-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-23-fpms-v8-delta26-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-24-fpms-v8-delta27-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-24-fpms-v8-delta28-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-24-fpms-v8-delta29-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-25-fpms-v8-delta30-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-25-fpms-v8-delta31-high-handoff.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-17-fpms-governance-final-close-convergence-design.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-17-fpms-scope-protocol-v3-compatibility-design.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-18-fpms-v8-ultra-contract-freeze-delta-5.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-18-fpms-v8-ultra-contract-freeze-delta-6.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-19-fpms-v8-ultra-contract-freeze-delta-7.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-20-fpms-v8-ultra-contract-freeze-delta-8.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-21-fpms-taskctl-direct-scope-interrupted-record-compat-design.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-21-fpms-v8-ultra-contract-freeze-delta-10.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-21-fpms-v8-ultra-contract-freeze-delta-11.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-21-fpms-v8-ultra-contract-freeze-delta-9.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-evidence-scope-v2-active-owner-handoff-design.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-evidence-scope-v2-fixture-state-compat-design.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-fpms-v8-ultra-contract-freeze-delta-12.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-fpms-v8-ultra-contract-freeze-delta-13.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-fpms-v8-ultra-contract-freeze-delta-14.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-23-fpms-v8-ultra-contract-freeze-delta-26.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-24-fpms-v8-ultra-contract-freeze-delta-27.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-24-fpms-v8-ultra-contract-freeze-delta-28.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-24-fpms-v8-ultra-contract-freeze-delta-29.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-25-fpms-v8-ultra-contract-freeze-delta-30.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-25-fpms-v8-ultra-contract-freeze-delta-31.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-28-fpms-c3-git-native-lean-56-reset-design.md",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "C3-LEAN-GOVERNANCE-ADOPTION",
+      "rationale": "approved C3.1 authority adopted with a status-only update reflecting subsequent user approval"
+    },
+    {
+      "path": "frontend/src/api/cases.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "frontend/src/api/cases.types.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_document_evidence_review.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence review frontend contract"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_fee_draft_obligation.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-FEE-OBLIGATION",
+      "rationale": "fee obligation frontend API contract"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_fee_estimate_preview.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_fee_obligation_detail.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_fee_obligation_instruction.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+    },
+    {
+      "path": "frontend/src/api/contracts/v8_pay_list_boundary.contract.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
+    },
+    {
+      "path": "frontend/src/api/documents.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence review frontend adapter"
+    },
+    {
+      "path": "frontend/src/api/documents.types.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed document evidence projection types"
+    },
+    {
+      "path": "frontend/src/api/fees.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
+    },
+    {
+      "path": "frontend/src/api/fees.types.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
+    },
+    {
+      "path": "frontend/src/api/govPayments.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
+    },
+    {
+      "path": "frontend/src/api/govPayments.types.ts",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
+    },
+    {
+      "path": "frontend/src/modules/cases/pages/CaseCreate.vue",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
+    },
+    {
+      "path": "frontend/src/modules/cases/pages/CaseEdit.vue",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
+    },
+    {
+      "path": "frontend/src/modules/documents/components/AttachmentList.vue",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed attachment evidence review UI"
+    },
+    {
+      "path": "reference/cnipa/announcement_246_20170630.normalized.txt",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION",
+      "rationale": "official-source snapshot and provenance"
+    },
+    {
+      "path": "reference/cnipa/announcement_246_20170630.provenance.json",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION",
+      "rationale": "official-source snapshot and provenance"
+    },
+    {
+      "path": "scripts/evidence_scope.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/evidence_validate.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/governance_validate.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/release_gate.sh",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/scope_protocol_v3.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/taskctl",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy control-plane implementation retired from new work"
+    },
+    {
+      "path": "scripts/tests/test_atomic_evidence_validate.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_cnipa_246_source_adoption.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official source/rate adoption verification"
+    },
+    {
+      "path": "scripts/tests/test_evidence_scope_snapshot_cache.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_evidence_scope_v2.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_evidence_scope_v2_active_owner_handoff.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_format_letter_legacy_revision_compat.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy document/revision reconciliation verification"
+    },
+    {
+      "path": "scripts/tests/test_governance_reset_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_governance_reset_consumers.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_governance_reset_taskctl.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_governance_validate.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_executable_peer_owner_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_fast_accept_recovery_owner_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_postbaseline_cohort_compat_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_postbaseline_extra_owner_routing_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_postbaseline_partition_routing_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_import_release_gate_owner_compat_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_fee_reduction_import_executable_peer_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_legacy_revision_witness_compat.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-LEGACY-RECONCILIATION",
+      "rationale": "legacy document/revision reconciliation verification"
+    },
+    {
+      "path": "scripts/tests/test_postcheckpoint_legacy_baseline_selection.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_postcheckpoint_zero_revision_cohort.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_annuity_ordinal19_registry_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_annuity_release_gate_owner_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_bound_result_owner_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_current_owner_command_cache_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_peer_owned_executable_mode_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_scope_protocol_v3.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_task_file_active_owner_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_taskctl.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_taskctl_targeted_eslint_record_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_taskctl_targeted_playwright_record_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_annuity_source_contract_correction.py",
+      "disposition": "ADOPTION_STORY",
+      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "rationale": "official source/rate adoption verification"
+    },
+    {
+      "path": "scripts/tests/test_v8_de_review_api_predecessor_overlay_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta12_path_specific_transition_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta13_legacy_prefix_scope_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta14_executable_peer_cohort_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta16_postbaseline_zero_owner_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta17_zero_owner_partition_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta18_scope_successor_handoff_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta19_legacy_filing_zero_owner_final_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta20_filing_fresh_baseline_overlay_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta21_filing_source_successor_handoff_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta22_filing_authority_route_complete_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta24_path_specific_source_successor_handoff_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta25_legacy_product_cohort_filing_canary_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta30_review_api_successor_pair_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta30_terminal_peer_authority_activation.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_delta30_terminal_peer_authority_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_fee_candidate_task_contract_metadata.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_filing_adapter_task_contract_metadata.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_filing_preparation_baseline_extension.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_generated_adapter_baseline_extension.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_grant_obligation_task_contract_metadata.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_legacy_fee_reduction_import_start_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_legacy_taskctl_metadata_compat.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_next_wave_task_contract_metadata.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_paylist_create_transaction_successor_materialization.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_pilot_task_contract_metadata.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta10.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta11.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta12.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta13.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta14.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta26.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta27.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta28.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta29.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta31.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta5.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta6.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta7.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta8.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "scripts/tests/test_v8_ultra_contract_delta9.py",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "legacy governance/taskctl/scope compatibility test"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-10-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-11-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-12-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-13-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-14-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-26-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-27-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-28-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-29-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-31-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-5-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-6-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-7-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-8-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-FREEZE-DELTA-9-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-ACCEPTANCE-NOTICE-EVIDENCE-ADAPTER-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-ACTIVATION-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-DEADLINE-TEST-ALIGNMENT-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-OBLIGATION-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-OFFICIAL-PREVIEW-CARRIER-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-POST-REVIEW-DISPATCH-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-PREVIEW-SOURCE-DECISION-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-APPLICATION-FEE-NOTICE-SOURCE-CARRIER-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CASE-BATCH-FILING-EVENT-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CASE-CREATE-FEE-REDUCTION-AMBIGUOUS-APPROVAL-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CASE-CREATE-FEE-REDUCTION-UI-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CASE-UPDATE-FEE-REDUCTION-API-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-20260715-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CNIPA-246-SOURCE-ADOPTION-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-CNIPA-ANNUITY-RATE-CANDIDATE-20260715-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-COMPENSATION-PERIOD-ANNUITY-FEE-RULE-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-GENERATED-ATTACHMENT-EVIDENCE-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-OA-REPLY-PREPARATION-DERIVATION-TYPE-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-OA-STRUCTURED-ATTACHMENT-PROMOTION-20260715-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-PREPARE-OA-REPLY-SEAM-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-REVIEW-API-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DE-REVIEW-FE-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DECISION-GATE-LIST-API-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-DOCUMENT-IMMEDIATE-STATUS-REGRESSION-ALIGNMENT-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FE-AXIOS-CONTRACT-PROBE-ISOLATION-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FEE-REDUCTION-APPROVAL-CREATE-API-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FEE-REDUCTION-APPROVAL-CREATE-ROUTE-SELECTOR-ALIGNMENT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FEE-REDUCTION-APPROVAL-LIST-API-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-ENSURE-INHERITED-TEST-CONTRACT-ALIGNMENT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-RESOLVE-API-INHERITED-TEST-CONTRACT-ALIGNMENT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FILING-XML-DERIVATION-GATE-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FO-OBLIGATION-DETAIL-FE-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FO-OBLIGATION-DETAIL-HTTP-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FO-OBLIGATION-DETAIL-READ-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FORMAT-LETTER-CONTEXT-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FUTURE-ANNUITY-OBLIGATION-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-ANNUITY-OBLIGATION-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LAYOUT-REEXAMINATION-ACTIVE-SOURCE-GATE-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LAYOUT-REGISTRATION-FEE-RULE-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-ACCEPTANCE-NOTICE-RECORDED-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-OA-NOTICE-RECORDED-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-PATENT-REGISTER-STATUS-CONFLICT-CORRECTION-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-PRELIMINARY-EXAMINATION-PASSED-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-PRELIMINARY-EXAMINATION-STARTED-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LC-RECTIFICATION-NOTICE-RECORDED-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-20260715-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-LIFECYCLE-EVIDENCE-KIND-CAPACITY-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-COPYABLE-ATTACHMENT-POLICY-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-EXTERNAL-SUBMISSION-HTTP-ADAPTER-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-NONCOPYABLE-APPENDIX-POLICY-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-NOTICE-EVIDENCE-ADAPTER-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-NOTICE-TEMPLATE-IDENTITY-LIFECYCLE-CARRIER-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-OUT-CASE-CREATE-FEE-REDUCTION-TEST-ALIGNMENT-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-OA-OUT-PACKAGE-ATOMIC-LINK-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PATENT-TERM-COMPENSATION-REQUEST-FEE-RULE-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PAYLIST-CREATE-TRANSACTION-API-SUCCESSOR-20260726-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PAYLIST-EXPORT-ARTIFACT-READ-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PAYLIST-INTERNAL-EXPORT-API-SUCCESSOR-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PAYLIST-INTERNAL-EXPORT-SERVICE-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PCT-FEE-POLICY-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-PRELIMINARY-STARTED-EVIDENCE-API-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-RECTIFICATION-NOTICE-EVIDENCE-API-ADAPTER-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/postdemo/v8/FPMS-V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-20260712-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-CNIPA-ANNUITY-SOURCE-AUTHORITY-ACTIVATION-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-DIRECT-SCOPE-RECOVERY-DOC-OWNER-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-DELTA30-TERMINAL-PEER-AUTHORITY-ACTIVATION-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-DELTA30-TERMINAL-PEER-AUTHORITY-COMPAT-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-LEGACY-OWN-ARTIFACT-CONSUMER-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-LEGACY-OWN-ARTIFACT-EXACT-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-POSTCHECKPOINT-LEGACY-BASELINE-SELECTION-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-POSTCHECKPOINT-ZERO-REVISION-COHORT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-BOUND-RESULT-INDEX-20260726-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-BOUND-RESULT-OWNER-ACTIVATION-20260726-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-CLOSE-SNAPSHOT-CACHE-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-CURRENT-OWNER-COMMAND-CACHE-ACTIVATION-20260726-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-LEGACY-FEE-IMPORT-EXECUTABLE-PEER-OWNER-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-SNAPSHOT-TASK-RELEVANT-V2-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-V2-ACTIVE-OWNER-HANDOFF-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-V2-FIXTURE-STATE-COMPAT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-EVIDENCE-SCOPE-V2-HANDOFF-LEASE-AUTHORITY-COMPAT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-FAST-CLOSE-ORPHAN-RECEIPT-RECOVERY-COMPAT-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-ADOPTION-EXTERNAL-SCOPE-COMPAT-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-CONCURRENT-WAVE-SCOPE-RECONCILIATION-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-DYNAMIC-ACTIVATION-LIFECYCLE-COMPAT-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-DYNAMIC-ACTIVATION-UNCHANGED-KERNEL-COMPAT-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-FAST-CLOSE-CUTOVER-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-FINAL-CLOSE-CONVERGENCE-CANARY-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-INFLIGHT-SCOPE-OWNER-AUTHORITY-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-POST-CHECKPOINT-START-BASELINE-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-V8-ALLOWLIST-PROSE-COMPAT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-V8-LEGACY-CONSUMER-COMPAT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-V8-LEGACY-RUNTIME-BINDING-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-V8-LEGACY-START-COMPAT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-GOVERNANCE-WAVE-OWNER-AUTHORITY-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-ANNUITY-ORDINAL19-REGISTRY-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-ANNUITY-RELEASE-GATE-OWNER-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-PEER-OWNED-EXECUTABLE-MODE-COMPAT-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-PROTOCOL-V3-COMPAT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-PROTOCOL-V3-COMPAT-DESIGN-FREEZE-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-SCOPE-TERMINAL-TASK-FILE-OWNER-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-TASKCTL-DIRECT-SCOPE-INTERRUPTED-RECORD-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-TASKCTL-TARGETED-ESLINT-RECORD-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-TASKCTL-TARGETED-PLAYWRIGHT-RECORD-COMPAT-20260720-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DE-REVIEW-API-OVERLAY-INVALIDATION-TRANSITION-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DE-REVIEW-API-OVERLAY-SUCCESSOR-OWNER-COMPAT-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DE-REVIEW-API-OVERLAY-TERMINAL-REPLAY-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DE-REVIEW-API-PREDECESSOR-OVERLAY-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA11-TEST-OWNER-COMPAT-20260721-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA12-PATH-SPECIFIC-TRANSITION-COMPAT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA13-LEGACY-PREFIX-SCOPE-COMPAT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA14-EXECUTABLE-PEER-COHORT-COMPAT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA15-ANNUITY-REGRESSION-AUTHORITY-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA16-POSTBASELINE-ZERO-OWNER-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA17-ZERO-OWNER-PARTITION-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA18-SCOPE-SUCCESSOR-HANDOFF-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA19-LEGACY-FILING-ZERO-OWNER-FINAL-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA20-FILING-FRESH-BASELINE-OVERLAY-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA21-FILING-SOURCE-SUCCESSOR-HANDOFF-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA22-FILING-AUTHORITY-ROUTE-COMPLETE-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA23-FILING-SUCCESSOR-REGRESSION-ALIGNMENT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA24-PATH-SPECIFIC-SOURCE-SUCCESSOR-HANDOFF-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA25-LEGACY-PRODUCT-COHORT-FILING-CANARY-COMPAT-20260723-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-DELTA30-REVIEW-API-SUCCESSOR-PAIR-COMPAT-20260725-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-FEE-CANDIDATE-TASKCTL-METADATA-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-FILING-ADAPTER-TASKCTL-METADATA-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-FILING-PREPARATION-BASELINE-EXTENSION-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-FORMAT-LETTER-LEGACY-REVISION-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-GENERATED-ADAPTER-BASELINE-EXTENSION-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-GRANT-OBLIGATION-TASKCTL-METADATA-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-GRANT-YEAR-PREMATURE-OWNER-PARK-RECOVERY-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-IMPORT-FAST-ACCEPT-RECOVERY-OWNER-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-IMPORT-POSTBASELINE-COHORT-COMPAT-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-IMPORT-POSTBASELINE-EXTRA-OWNER-ROUTING-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-IMPORT-POSTBASELINE-PARTITION-ROUTING-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-IMPORT-RELEASE-GATE-OWNER-COMPAT-ACTIVATION-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-REDUCTION-IMPORT-EXECUTABLE-PEER-COMPAT-20260727-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-FEE-REDUCTION-IMPORT-START-COMPAT-20260724-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-REVISION-AFTER-WITNESS-TERMINAL-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-REVISION-TERMINAL-REPLAY-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-REVISION-WITNESS-COMPAT-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-TASKCTL-METADATA-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-LEGACY-TASKPATH-CONSUMER-COMPAT-20260719-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-METADATA-TEST-PROVENANCE-ADOPTION-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-NEXT-WAVE-TASKCTL-METADATA-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-NOTICE-CASE-CREATE-FIXTURE-ALIGNMENT-20260722-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-PAYLIST-CREATE-TRANSACTION-SUCCESSOR-MATERIALIZATION-20260726-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-PILOT-WAVE-TASKCTL-METADATA-20260717-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    },
+    {
+      "path": "tasks/repo/REPO-V8-TASK-FILE-ACTIVE-OWNER-COMPAT-20260718-01.md",
+      "disposition": "ARCHIVE_ONLY_HISTORY",
+      "story_id": null,
+      "rationale": "preserved on archive-only checkpoint; not active lean ancestry"
+    }
+  ]
+}

@@ -23,7 +23,7 @@
     </div>
 
     <el-alert
-      v-if="!packageId"
+      v-if="!packageId && !documentId && !loading"
       type="info"
       :closable="false"
       title="请选择具体OA答复工作包"
@@ -124,7 +124,7 @@
             :package-id="oaPackage.package.id"
             :package-kind="oaPackage.package.package_kind"
             :package-status="oaPackage.package.status"
-            :archive-status="receiptChecklistItem?.status || oaPackage.package.status"
+            :archive-status="oaPackage.package.status"
             :receipt-evidence-ready="receiptEvidenceReady"
             receipt-gate-label="OA电子申请回执 / 附加文件归档"
             @refresh-requested="fetchPackage"
@@ -137,33 +137,14 @@
             <div class="widget-title">审核动作</div>
             <div class="review-actions">
               <el-button
+                v-for="action in requiredChecklistActions"
+                :key="action.code"
                 size="small"
-                type="primary"
-                :loading="reviewingCode === 'CLOUD_SECOND_DOWNLOAD_CONFIRMED'"
-                @click="handleChecklistDone('CLOUD_SECOND_DOWNLOAD_CONFIRMED', '云端二次下载已人工确认')"
+                :type="action.code === 'STATEMENT_TEXT_CONFIRMED' ? 'primary' : 'default'"
+                :loading="reviewingCode === action.code"
+                @click="handleChecklistDone(action.code, action.evidenceNote)"
               >
-                确认云端二次下载
-              </el-button>
-              <el-button
-                size="small"
-                :loading="reviewingCode === 'PREVIEW_TABS_CONFIRMED'"
-                @click="handleChecklistDone('PREVIEW_TABS_CONFIRMED', '预览标签页已人工确认')"
-              >
-                确认预览标签页
-              </el-button>
-              <el-button
-                size="small"
-                :loading="reviewingCode === 'SUBMISSION_CONFIRMED'"
-                @click="handleChecklistDone('SUBMISSION_CONFIRMED', '提交结果已人工确认')"
-              >
-                确认提交结果
-              </el-button>
-              <el-button
-                size="small"
-                :loading="reviewingCode === 'RECEIPT_CONFIRMED'"
-                @click="handleChecklistDone('RECEIPT_CONFIRMED', '电子申请回执已归档核对')"
-              >
-                确认回执归档
+                {{ action.label }}
               </el-button>
               <el-button
                 size="small"
@@ -218,6 +199,7 @@ import { ElMessage } from 'element-plus'
 import {
   getOaReplyPackage,
   refreshOaReplyPackage,
+  resolveOaReplyPackage,
   updateOaReplyChecklist,
 } from '../../../api/officialWorkflows'
 import type {
@@ -242,23 +224,62 @@ const experimentUpdating = ref(false)
 const error = ref<ApiError | null>(null)
 
 const packageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
+const documentId = computed(() => String(route.query.document_id || route.query.documentId || '').trim())
 
-const receiptChecklistItem = computed(() =>
-  (oaPackage.value?.official_page_checklist || []).find((item) => item.item_code === 'RECEIPT_CONFIRMED')
-)
-const receiptEvidenceReady = computed(() => isDone(receiptChecklistItem.value?.status))
+const receiptEvidenceReady = computed(() => isDone(oaPackage.value?.package.status))
 const receiptEvidenceStatus = computed(() => {
-  if (!receiptChecklistItem.value) return '待生成'
-  return getStatusText(receiptChecklistItem.value.status)
+  if (!oaPackage.value) return '待生成'
+  return receiptEvidenceReady.value ? '已归档' : '待回执归档'
 })
 
-watch(packageId, () => {
+const requiredChecklistActions = [
+  { code: 'STATEMENT_TEXT_CONFIRMED', label: '确认陈述意见文本', evidenceNote: '陈述意见文本已人工确认' },
+  { code: 'PDF_FIDELITY_CONFIRMED', label: '确认PDF保真附件', evidenceNote: 'PDF保真附件已人工确认' },
+  { code: 'MODIFIED_CLAIMS_CONFIRMED', label: '确认修改文件', evidenceNote: '修改文件已人工确认' },
+  { code: 'EXPERIMENT_DATA_FLAG_CONFIRMED', label: '确认实验数据标记', evidenceNote: '补交实验数据标记已人工确认' },
+  { code: 'PREVIEW_CONFIRMED', label: '确认官方页面预览', evidenceNote: '官方页面预览已人工确认' },
+  { code: 'SIGNATURE_CONFIRMED', label: '确认签名与提交', evidenceNote: '签名与提交已由人工确认' },
+]
+
+watch(packageId, (nextPackageId) => {
+  if (nextPackageId && nextPackageId === oaPackage.value?.package.id) return
   void fetchPackage()
 })
 
 onMounted(() => {
-  void fetchPackage()
+  void initializePackage()
 })
+
+async function initializePackage() {
+  if (packageId.value) {
+    await fetchPackage()
+    return
+  }
+  if (!documentId.value) {
+    oaPackage.value = null
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    const resolved = await resolveOaReplyPackage(documentId.value)
+    oaPackage.value = resolved
+    const query = { ...route.query }
+    delete query.document_id
+    delete query.documentId
+    await router.replace({
+      query: {
+        ...query,
+        package_id: resolved.package.id,
+      },
+    })
+  } catch (err) {
+    error.value = localizeResolveError(err)
+  } finally {
+    loading.value = false
+  }
+}
 
 async function fetchPackage() {
   if (!packageId.value) {
@@ -364,6 +385,23 @@ function goBack() {
   router.back()
 }
 
+function localizeResolveError(value: unknown): ApiError {
+  const apiError = value as ApiError
+  if (apiError.status === 404) {
+    return { ...apiError, message: '未找到对应官文，无法进入OA答复工作包。' }
+  }
+  if (apiError.status === 400) {
+    return { ...apiError, message: '当前文书方向不支持进入OA答复工作包。' }
+  }
+  if (apiError.status === 409) {
+    return { ...apiError, message: '当前官文状态、语义或工作包配置不允许进入OA答复工作包。' }
+  }
+  if (apiError.status === 422) {
+    return { ...apiError, message: '官文标识格式无效，请从文书详情重新进入。' }
+  }
+  return { ...apiError, message: '解析OA答复工作包失败，请稍后重试。' }
+}
+
 function isDone(status?: string | null): boolean {
   return ['DONE', 'READY', 'PASS', 'PRESENT', 'ARCHIVED'].includes(String(status || '').toUpperCase())
 }
@@ -390,16 +428,6 @@ function getReplyStatusText(status?: string | null): string {
   if (normalized === 'WAITING_RECEIPT') return '待回执'
   if (normalized === 'ARCHIVED') return '已归档'
   if (normalized === 'NEEDS_MAINTENANCE') return '需维护'
-  return status || '待核对'
-}
-
-function getStatusText(status?: string | null): string {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'DONE' || normalized === 'READY' || normalized === 'PASS') return '已确认'
-  if (normalized === 'PRESENT' || normalized === 'ARCHIVED') return '已满足'
-  if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE') return '需维护'
-  if (normalized === 'BLOCKED' || normalized === 'EXCEPTION') return '阻止'
-  if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION') return '待确认'
   return status || '待核对'
 }
 

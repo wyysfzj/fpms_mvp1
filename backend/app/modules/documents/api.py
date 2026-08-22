@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
+from typing import Annotated
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -9,6 +11,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Path,
     Query,
     Response,
     UploadFile,
@@ -18,12 +21,101 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.core.config import get_settings
+from app.core.errors import BusinessError
 from app.db.session import get_db
+from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.evidence_review_schemas import EvidenceVersionReviewIn
+from app.modules.documents.evidence_service import (
+    ReviewEvidenceVersionCommand,
+    ReviewEvidenceVersionResult,
+    review_evidence_version,
+)
+from app.modules.documents.export_excel import (
+    DOCUMENT_LIST_EXPORT_MIME_TYPE,
+    build_document_list_export_xlsx,
+)
+from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.grant_evidence_ingestion_service import (
+    GrantEvidenceConflict,
+    GrantEvidenceFact,
+    IngestGrantEvidenceCandidateCommand,
+    ListGrantEvidenceCandidatesCommand,
+    ingest_grant_evidence_candidate,
+    list_grant_evidence_candidates,
+)
+from app.modules.documents.grant_evidence_review_service import (
+    ReviewGrantEvidenceCandidateCommand,
+    review_grant_evidence_candidate,
+)
+from app.modules.documents.grant_evidence_schemas import (
+    GrantEvidenceCandidateIn,
+    GrantEvidenceCandidateOut,
+    GrantEvidenceCandidateReadOut,
+    GrantEvidenceReviewIn,
+    GrantEvidenceReviewOut,
+)
+from app.modules.documents.grant_official_copy_verification_schemas import (
+    GrantOfficialCopyEventIn,
+    GrantOfficialCopyEventOut,
+)
+from app.modules.documents.grant_official_copy_verification_service import (
+    GrantOfficialCopyDisposition,
+    RecordGrantOfficialCopyEventCommand,
+    record_grant_official_copy_event,
+)
+from app.modules.documents.lifecycle_evidence_adapters import (
+    AcceptanceNoticeIn,
+    ApplicationAbandonmentIn,
+    ApplicationRejectionIn,
+    ApplicationRestorationIn,
+    ApplicationWithdrawalEvidenceResult,
+    ApplicationWithdrawalIn,
+    OaNoticeIn,
+    PassPreliminaryExaminationCommand,
+    PassPreliminaryExaminationResult,
+    PreliminaryExaminationPassIn,
+    PreliminaryExaminationStartIn,
+    PublicationNoticeIn,
+    RecordAcceptanceNoticeCommand,
+    RecordAcceptanceNoticeResult,
+    RecordApplicationAbandonmentCommand,
+    RecordApplicationRejectionCommand,
+    RecordApplicationRestorationCommand,
+    RecordApplicationWithdrawalCommand,
+    RecordOaNoticeCommand,
+    RecordOaNoticeResult,
+    RecordPublicationNoticeCommand,
+    RecordPublicationNoticeResult,
+    RecordRectificationNoticeCommand,
+    RecordRectificationNoticeResult,
+    RectificationNoticeIn,
+    ReexaminationStartIn,
+    StartPreliminaryExaminationCommand,
+    StartPreliminaryExaminationResult,
+    StartReexaminationCommand,
+    StartReexaminationResult,
+    StartSubstantiveExaminationCommand,
+    StartSubstantiveExaminationResult,
+    SubstantiveExaminationStartIn,
+    TerminalLifecycleEvidenceResult,
+    pass_preliminary_examination_from_evidence,
+    record_acceptance_notice_from_evidence,
+    record_application_abandonment_from_evidence,
+    record_application_rejection_from_evidence,
+    record_application_restoration_from_evidence,
+    record_application_withdrawal_from_evidence,
+    record_oa_notice_from_evidence,
+    record_publication_notice_from_evidence,
+    record_rectification_notice_from_evidence,
+    start_preliminary_examination_from_evidence,
+    start_reexamination_from_evidence,
+    start_substantive_examination_from_evidence,
+)
 from app.modules.documents.models import DocTemplate
 from app.modules.documents.schemas import (
     DocAttachmentOut,
@@ -53,14 +145,13 @@ from app.modules.documents.schemas import (
     DocumentWizardTaskPreviewOut,
 )
 from app.modules.documents.service import (
-    add_attachment as add_attachment_service,
-)
-from app.modules.documents.service import (
+    _remove_managed_attachment_file,
     batch_register_document_mailing,
     create_doc_template,
     create_document_dispatch,
     create_document_wizard_batch,
     get_attachment_download,
+    get_current_attachment_evidence_versions,
     get_doc_template,
     get_document_dispatch,
     get_document_envelope_preview,
@@ -71,6 +162,9 @@ from app.modules.documents.service import (
     preview_document_wizard_fee_candidates,
     preview_document_wizard_tasks,
     update_doc_template,
+)
+from app.modules.documents.service import (
+    add_attachment as add_attachment_service,
 )
 from app.modules.documents.service import (
     create_document as create_document_service,
@@ -88,20 +182,209 @@ from app.modules.tasks.task_generation_service import TaskGenerationService
 router = APIRouter()
 
 
+def _utc_now() -> datetime:
+    return datetime.utcnow()
+
+
+@router.post(
+    "/documents/{document_id}/grant-evidence-candidates",
+    status_code=status.HTTP_201_CREATED,
+    response_model=GrantEvidenceCandidateOut,
+)
+def create_grant_evidence_candidate(
+    document_id: UUID,
+    payload: GrantEvidenceCandidateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceCandidateOut:
+    try:
+        result = ingest_grant_evidence_candidate(
+            IngestGrantEvidenceCandidateCommand(
+                case_id=str(payload.case_id),
+                document_id=str(document_id),
+                evidence_version_id=str(payload.evidence_version_id),
+                evidence_scope=payload.evidence_scope,
+                expected_terminal_event_id=str(payload.expected_terminal_event_id),
+                proposed_by=current_user.id,
+                proposed_at=_utc_now(),
+                facts=tuple(
+                    GrantEvidenceFact(name=fact.name, raw_value=fact.raw_value)
+                    for fact in payload.facts
+                ),
+                conflicts=tuple(
+                    GrantEvidenceConflict(
+                        name=conflict.name,
+                        raw_values=conflict.raw_values,
+                    )
+                    for conflict in payload.conflicts
+                ),
+            ),
+            db,
+        )
+        response_status = {
+            "CREATED": status.HTTP_201_CREATED,
+            "REUSED": status.HTTP_200_OK,
+        }.get(result.disposition)
+        if response_status is None:
+            raise RuntimeError("unexpected grant evidence ingestion disposition")
+        output = GrantEvidenceCandidateOut.model_validate(result, from_attributes=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    response.status_code = response_status
+    return output
+
+
+@router.get(
+    "/documents/{document_id}/grant-evidence-candidates",
+    status_code=status.HTTP_200_OK,
+    response_model=list[GrantEvidenceCandidateReadOut],
+)
+def get_grant_evidence_candidates(
+    document_id: UUID,
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> list[GrantEvidenceCandidateReadOut]:
+    read_at = _utc_now()
+    results = list_grant_evidence_candidates(
+        ListGrantEvidenceCandidatesCommand(document_id=str(document_id), read_at=read_at),
+        db,
+    )
+    return [
+        GrantEvidenceCandidateReadOut.model_validate(result, from_attributes=True)
+        for result in results
+    ]
+
+
+@router.post(
+    "/documents/grant-evidence-candidates/{candidate_id}/review",
+    status_code=status.HTTP_200_OK,
+    response_model=GrantEvidenceReviewOut,
+)
+def review_grant_evidence_candidate_endpoint(
+    candidate_id: UUID,
+    payload: GrantEvidenceReviewIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceReviewOut:
+    try:
+        result = review_grant_evidence_candidate(
+            ReviewGrantEvidenceCandidateCommand(
+                candidate_id=str(candidate_id),
+                decision=payload.decision,
+                reviewer_id=current_user.id,
+                reviewed_at=_utc_now(),
+                reason=payload.reason,
+            ),
+            db,
+        )
+        output = GrantEvidenceReviewOut.model_validate(result, from_attributes=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return output
+
+
+@router.post(
+    "/documents/evidence-versions/{evidence_version_id}/grant-official-copy-events",
+    status_code=status.HTTP_201_CREATED,
+    response_model=GrantOfficialCopyEventOut,
+)
+def record_grant_official_copy_verification_event(
+    evidence_version_id: UUID,
+    payload: GrantOfficialCopyEventIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantOfficialCopyEventOut:
+    try:
+        result = record_grant_official_copy_event(
+            RecordGrantOfficialCopyEventCommand(
+                evidence_version_id=str(evidence_version_id),
+                evidence_scope=payload.evidence_scope,
+                event_type=payload.event_type,
+                actor_id=current_user.id,
+                action_at=_utc_now(),
+                reason=payload.reason,
+                original_reference=payload.original_reference,
+                expected_current_event_id=payload.expected_current_event_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantOfficialCopyDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantOfficialCopyEventOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/documents/evidence-versions/{evidence_version_id}/review",
+    status_code=status.HTTP_200_OK,
+    response_model=ReviewEvidenceVersionResult,
+)
+def review_document_evidence_version(
+    evidence_version_id: str,
+    payload: EvidenceVersionReviewIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ReviewEvidenceVersionResult:
+    try:
+        result = review_evidence_version(
+            ReviewEvidenceVersionCommand(
+                case_id=payload.case_id,
+                evidence_version_id=evidence_version_id,
+                reviewer_id=current_user.id,
+                decision=payload.decision,
+                reviewed_at=payload.reviewed_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
 def _build_document_out(
-    document, *, case_no: str | None = None, attachments: list | None = None
+    document,
+    *,
+    case_no: str | None = None,
+    template_code: str | None = None,
+    attachments: list | None = None,
 ) -> DocumentOut:
+    extra_data = parse_document_extra_data(document.extra_data)
     return DocumentOut(
         id=document.id,
         case_id=document.case_id,
         case_no=case_no,
         doc_template_id=document.doc_template_id,
+        template_code=template_code,
         doc_type=document.doc_type,
         direction=document.direction,
         doc_date=document.doc_date,
         title=document.title,
         ref_no=document.ref_no,
         extra_data=document.extra_data,
+        official_due_date=extra_data.official_due_date,
+        official_due_date_source=extra_data.official_due_date_source,
+        official_due_date_status=extra_data.official_due_date_status,
+        description=extra_data.description,
         reply_to_id=document.reply_to_id,
         need_reply=document.need_reply,
         reply_date=document.reply_date,
@@ -228,6 +511,392 @@ def update_doc_template_endpoint(
 # ---------------------------------------------------------------------------
 
 
+@router.post(
+    "/documents/{document_id}/lifecycle/acceptance-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordAcceptanceNoticeResult,
+)
+def record_document_acceptance_notice(
+    document_id: Annotated[
+        str,
+        Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+    ],
+    payload: AcceptanceNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordAcceptanceNoticeResult:
+    try:
+        result = record_acceptance_notice_from_evidence(
+            RecordAcceptanceNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/oa-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordOaNoticeResult,
+)
+def record_document_oa_notice(
+    document_id: Annotated[
+        str,
+        Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+    ],
+    payload: OaNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordOaNoticeResult:
+    try:
+        result = record_oa_notice_from_evidence(
+            RecordOaNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/preliminary-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartPreliminaryExaminationResult,
+)
+def start_document_preliminary_examination(
+    document_id: str,
+    payload: PreliminaryExaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartPreliminaryExaminationResult:
+    try:
+        result = start_preliminary_examination_from_evidence(
+            StartPreliminaryExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/preliminary-pass",
+    status_code=status.HTTP_200_OK,
+    response_model=PassPreliminaryExaminationResult,
+)
+def pass_document_preliminary_examination(
+    document_id: str,
+    payload: PreliminaryExaminationPassIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> PassPreliminaryExaminationResult:
+    try:
+        result = pass_preliminary_examination_from_evidence(
+            PassPreliminaryExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/rectification-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordRectificationNoticeResult,
+)
+def record_document_rectification_notice(
+    document_id: str,
+    payload: RectificationNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordRectificationNoticeResult:
+    try:
+        result = record_rectification_notice_from_evidence(
+            RecordRectificationNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/publication-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordPublicationNoticeResult,
+)
+def record_document_publication_notice(
+    document_id: str,
+    payload: PublicationNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordPublicationNoticeResult:
+    try:
+        result = record_publication_notice_from_evidence(
+            RecordPublicationNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/substantive-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartSubstantiveExaminationResult,
+)
+def start_document_substantive_examination(
+    document_id: str,
+    payload: SubstantiveExaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartSubstantiveExaminationResult:
+    try:
+        result = start_substantive_examination_from_evidence(
+            StartSubstantiveExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/reexamination-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartReexaminationResult,
+)
+def start_document_reexamination(
+    document_id: str,
+    payload: ReexaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartReexaminationResult:
+    try:
+        result = start_reexamination_from_evidence(
+            StartReexaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-rejection",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_rejection(
+    document_id: str,
+    payload: ApplicationRejectionIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_rejection_from_evidence(
+            RecordApplicationRejectionCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                evidence_kind=payload.evidence_kind,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-withdrawal",
+    status_code=status.HTTP_200_OK,
+    response_model=ApplicationWithdrawalEvidenceResult,
+)
+def record_document_application_withdrawal(
+    document_id: str,
+    payload: ApplicationWithdrawalIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ApplicationWithdrawalEvidenceResult:
+    try:
+        result = record_application_withdrawal_from_evidence(
+            RecordApplicationWithdrawalCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                confirmation_evidence_version_id=(
+                    payload.confirmation_evidence_version_id
+                ),
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-abandonment",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_abandonment(
+    document_id: str,
+    payload: ApplicationAbandonmentIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_abandonment_from_evidence(
+            RecordApplicationAbandonmentCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                evidence_kind=payload.evidence_kind,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-restoration",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_restoration(
+    document_id: str,
+    payload: ApplicationRestorationIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_restoration_from_evidence(
+            RecordApplicationRestorationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                restored_official_procedure_stage=(
+                    payload.restored_official_procedure_stage
+                ),
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
 @router.get("/documents", response_model=DocumentListOut, summary="List documents")
 def get_documents(
     q: str | None = Query(default=None),
@@ -303,29 +972,116 @@ def get_documents(
         template_code_map = {t.id: t.code for t in templates}
 
     items = [
-        DocumentOut(
-            id=document.id,
-            case_id=document.case_id,
+        _build_document_out(
+            document,
             case_no=case_no_map.get(document.case_id) if document.case_id else None,
-            doc_template_id=document.doc_template_id,
             template_code=template_code_map.get(document.doc_template_id)
             if document.doc_template_id
             else None,
-            doc_type=document.doc_type,
-            direction=document.direction,
-            doc_date=document.doc_date,
-            title=document.title,
-            ref_no=document.ref_no,
-            extra_data=document.extra_data,
-            reply_to_id=document.reply_to_id,
-            need_reply=document.need_reply,
-            reply_date=document.reply_date,
-            created_at=document.created_at,
-            updated_at=document.updated_at,
         )
         for document in documents
     ]
     return DocumentListOut(items=items, page=page, page_size=page_size, total=total)
+
+
+@router.get(
+    "/documents/export",
+    summary="Export document list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {DOCUMENT_LIST_EXPORT_MIME_TYPE: {}},
+            "description": "Document list Excel export generated",
+        }
+    },
+)
+def export_documents(
+    q: str | None = Query(default=None),
+    doc_name: str | None = Query(default=None),
+    doc_type: list[DocumentDocType] | None = Query(default=None),
+    direction: DocumentDirection | None = Query(default=None),
+    template_code: str | None = Query(default=None),
+    doc_template_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    need_reply: bool | None = Query(default=None),
+    replied: bool | None = Query(default=None),
+    has_attachment: bool | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Export the filtered document list as an Excel file (US-WD-06)."""
+    documents, _total = list_documents(
+        db,
+        q=q,
+        doc_name=doc_name,
+        doc_types=doc_type,
+        direction=direction,
+        template_code=template_code,
+        doc_template_id=doc_template_id,
+        case_no=case_no,
+        case_id=case_id,
+        client_id=client_id,
+        need_reply=need_reply,
+        replied=replied,
+        has_attachment=has_attachment,
+        date_from=date_from,
+        date_to=date_to,
+        page=1,
+        page_size=1000,
+    )
+    case_ids = {doc.case_id for doc in documents if doc.case_id}
+    case_no_map: dict[str, str] = {}
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {c.id: c.case_no for c in cases}
+    template_ids = {doc.doc_template_id for doc in documents if doc.doc_template_id}
+    template_name_map: dict[str, str] = {}
+    if template_ids:
+        templates = (
+            db.query(DocTemplate.id, DocTemplate.name)
+            .filter(DocTemplate.id.in_(template_ids))
+            .all()
+        )
+        template_name_map = {t.id: t.name for t in templates}
+
+    direction_labels = {"IN": "收文", "OUT": "发文"}
+    rows: list[list[object]] = [
+        ["文书清单导出"],
+        [],
+        ["文书标题", "案号", "方向", "文书类型", "文书日期", "文号", "需答复", "答复日期"],
+    ]
+    for document in documents:
+        direction_value = (
+            document.direction.value
+            if hasattr(document.direction, "value")
+            else document.direction
+        )
+        rows.append(
+            [
+                document.title or "",
+                case_no_map.get(document.case_id) if document.case_id else "",
+                direction_labels.get(str(direction_value or ""), direction_value or ""),
+                template_name_map.get(document.doc_template_id)
+                if document.doc_template_id
+                else "",
+                document.doc_date,
+                document.ref_no or "",
+                "是" if document.need_reply else "否",
+                document.reply_date,
+            ]
+        )
+    content = build_document_list_export_xlsx(rows=rows)
+    return Response(
+        content=content,
+        media_type=DOCUMENT_LIST_EXPORT_MIME_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="document-list.xlsx"',
+        },
+    )
 
 
 @router.post(
@@ -483,9 +1239,10 @@ def preview_document_wizard_attachment_candidates_endpoint(
 def create_document_wizard_batch_endpoint(
     payload: DocumentWizardBatchCreateIn,
     _perm: None = Depends(require_perm("Doc.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> DocumentWizardBatchCreateOut:
-    created_rows = create_document_wizard_batch(db, payload)
+    created_rows = create_document_wizard_batch(db, payload, actor_id=current_user.id)
     case_ids = {document.case_id for _, document in created_rows}
     case_no_map: dict[str, str] = {}
     if case_ids:
@@ -652,10 +1409,14 @@ def get_document(
     """
     document = get_document_service(db, document_id)
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
-    return _build_document_out(
-        document,
-        case_no=case.case_no if case else None,
-        attachments=[
+    evidence_versions = get_current_attachment_evidence_versions(
+        db,
+        document=document,
+    )
+    attachments = []
+    for attachment in document.attachments:
+        evidence_version = evidence_versions.get(attachment.id)
+        attachments.append(
             {
                 "id": attachment.id,
                 "document_id": attachment.document_id,
@@ -670,9 +1431,35 @@ def get_document(
                 "package_usage_hint": attachment.package_usage_hint,
                 "is_archive_evidence": bool(attachment.is_archive_evidence),
                 "is_receipt_evidence": bool(attachment.is_receipt_evidence),
+                "evidence_version_id": (
+                    evidence_version.evidence_version_id
+                    if evidence_version is not None
+                    else None
+                ),
+                "role": (
+                    evidence_version.role.value if evidence_version is not None else None
+                ),
+                "creator_id": (
+                    evidence_version.creator_id if evidence_version is not None else None
+                ),
+                "reviewer_id": (
+                    evidence_version.reviewer_id if evidence_version is not None else None
+                ),
+                "review_state": (
+                    evidence_version.review_state.value
+                    if evidence_version is not None
+                    else None
+                ),
+                "is_current": bool(
+                    evidence_version is not None and evidence_version.is_current
+                ),
+                "is_final": bool(evidence_version is not None and evidence_version.is_final),
             }
-            for attachment in document.attachments
-        ],
+        )
+    return _build_document_out(
+        document,
+        case_no=case.case_no if case else None,
+        attachments=attachments,
     )
 
 
@@ -719,6 +1506,15 @@ def update_document(
     "/documents/{document_id}/attachments",
     status_code=status.HTTP_201_CREATED,
     response_model=DocAttachmentOut,
+    response_model_exclude={
+        "evidence_version_id",
+        "role",
+        "creator_id",
+        "reviewer_id",
+        "review_state",
+        "is_current",
+        "is_final",
+    },
     summary="Upload a document attachment",
 )
 def add_attachment(
@@ -727,6 +1523,7 @@ def add_attachment(
     official_file_role: str | None = Form(default=None),
     source_role_alias: str | None = Form(default=None),
     _perm: None = Depends(require_perm("Doc.Attach")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> DocAttachmentOut:
     """
@@ -753,15 +1550,32 @@ def add_attachment(
     - 422: VALIDATION_ERROR
     """
     settings = get_settings()
-    attachment = add_attachment_service(
-        db,
-        document_id,
-        upload_file=file,
-        storage_dir=settings.storage_dir,
-        actor_id=None,
-        official_file_role=official_file_role,
-        source_role_alias=source_role_alias,
-    )
+    try:
+        pending = add_attachment_service(
+            db,
+            document_id,
+            upload_file=file,
+            storage_dir=settings.storage_dir,
+            actor_id=current_user.id,
+            official_file_role=official_file_role,
+            source_role_alias=source_role_alias,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        _remove_managed_attachment_file(pending.managed_file_path, original_error=exc)
+        raise BusinessError(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        ) from exc
+
+    attachment = pending.attachment
     return DocAttachmentOut(
         id=attachment.id,
         document_id=attachment.document_id,

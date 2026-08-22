@@ -45,6 +45,13 @@
       >
         <div class="form-section">
           <h3 class="form-section-title">基础信息</h3>
+          <el-alert
+            title="创建成功后，系统将自动初始化案件生命周期；后续状态由业务事件推进，不能在新建页面直接指定。"
+            type="info"
+            show-icon
+            :closable="false"
+            class="lifecycle-init-alert"
+          />
 
           <el-row :gutter="20">
             <el-col :span="8">
@@ -752,23 +759,37 @@
             <CaseAgentSplitEditor v-model="form.agent_splits" :row-errors="agentSplitRowErrors" />
           </el-collapse-item>
 
-          <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
+          <el-collapse-item title="控制标记" name="flags">
             <el-row :gutter="20">
-              <el-col :span="8">
+              <el-col v-if="showSpecificationSection" :span="8">
                 <el-form-item label="费用监控">
                   <el-switch v-model="form.is_fee_monitor" />
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
-                <el-form-item label="减免类型">
-                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable class="full-width">
-                    <el-option label="不减免" value="NONE" />
-                    <el-option label="部分减免" value="PARTIAL" />
-                    <el-option label="全额减免" value="FULL" />
-                  </el-select>
+              <el-col :span="showSpecificationSection ? 8 : 24">
+                <el-form-item
+                  label="费用减缓比例"
+                  prop="fee_reduction"
+                  :error="fieldErrors.get('fee_reduction')?.join('，')"
+                >
+                  <div class="full-width">
+                    <el-select
+                      v-model="form.fee_reduction"
+                      placeholder="请选择费用减缓比例"
+                      clearable
+                      class="full-width"
+                    >
+                      <el-option label="不减免（0）" value="0" />
+                      <el-option label="减免 70%（0.7）" value="0.7" />
+                      <el-option label="减免 85%（0.85）" value="0.85" />
+                    </el-select>
+                    <div class="field-hint">
+                      选择 0.7 或 0.85 前，必须已记录与当前申请人组合匹配的费用减缓审批；系统不会自动选择审批依据。
+                    </div>
+                  </div>
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
+              <el-col v-if="showSpecificationSection" :span="8">
                 <el-form-item label="申请人类型">
                   <el-select v-model="form.applicant_kind" placeholder="请选择" clearable class="full-width">
                     <el-option label="个人" value="INDIVIDUAL" />
@@ -1135,6 +1156,7 @@ const form = reactive<CaseCreatePayload>({
   draw_pages: undefined,
   claim_pages: undefined,
   manuscript_words: undefined,
+  fee_reduction: undefined,
   discount_rate: '',
   no_power: false,
   no_prio_text: false,
@@ -1222,6 +1244,7 @@ const rules: FormRules = {
     },
   ],
   client_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
+  fee_reduction: [{ required: true, message: '请选择费用减缓比例', trigger: 'change' }],
 }
 
 function gateConclusionText(conclusion: CaseDocumentGateConclusion) {
@@ -1297,7 +1320,7 @@ watch(
       form.claim_count = undefined
       form.has_exam_request = undefined
       form.is_fee_monitor = undefined
-      form.fee_reduction = ''
+      form.fee_reduction = undefined
       form.applicant_kind = ''
       form.foreign_agent_id = ''
       form.foreign_ref = ''
@@ -1769,6 +1792,9 @@ async function handleSave() {
 
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) {
+    if (!form.fee_reduction) {
+      expandedSections.value = Array.from(new Set([...expandedSections.value, 'flags']))
+    }
     validationSummary.value = [{ key: 'form', message: '请先完成基础必填项。' }]
     return
   }
@@ -1906,6 +1932,10 @@ onMounted(() => {
 }
 
 .validation-summary {
+  margin-bottom: 20px;
+}
+
+.lifecycle-init-alert {
   margin-bottom: 20px;
 }
 

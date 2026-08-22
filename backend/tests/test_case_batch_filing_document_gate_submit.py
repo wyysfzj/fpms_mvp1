@@ -53,12 +53,12 @@ def _create_case(
         "/api/v1/cases",
         json={
             "case_no": f"CASEBF-SUBGATE-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "批量递交硬阻止测试案件",
-            "status": "NOT_FILED",
             "recv_date": "2026-04-05",
             "no_power": True,
             "applicants": [

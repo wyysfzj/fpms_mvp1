@@ -4,6 +4,8 @@ import type {
     FilingPreparationExternalOperationPayload,
     FilingPreparationPackage,
     FilingPreparationRefreshPayload,
+    FormatLetterArchivePayload,
+    FormatLetterArchiveResult,
     LetterHandoffCreatePayload,
     LetterHandoffPreview,
     LetterHandoffResult,
@@ -19,6 +21,15 @@ import type {
     OfficialWorkPackageReceipt,
     OfficialWorkPackageReceiptCreatePayload,
 } from './officialWorkflows.types'
+
+export async function resolveFilingPreparationPackage(
+    caseId: string
+): Promise<FilingPreparationPackage> {
+    const response = await http.post<FilingPreparationPackage>(
+        `/cases/${caseId}/official-work-packages/filing-preparation/resolve`
+    )
+    return response.data
+}
 
 export async function getFilingPreparationPackage(
     packageId: string
@@ -59,6 +70,13 @@ export async function recordFilingPreparationExternalOperation(
     const response = await http.post<FilingPreparationChecklistResult>(
         `/official-work-packages/${packageId}/filing-preparation/external-operations`,
         payload
+    )
+    return response.data
+}
+
+export async function resolveOaReplyPackage(documentId: string): Promise<OaReplyPackage> {
+    const response = await http.post<OaReplyPackage>(
+        `/official-documents/${documentId}/official-work-packages/oa-reply/resolve`
     )
     return response.data
 }
@@ -150,6 +168,17 @@ export async function createLetterHandoff(
 ): Promise<LetterHandoffResult> {
     const response = await http.post<LetterHandoffResult>(
         `/official-documents/${documentId}/letter-handoff`,
+        payload
+    )
+    return response.data
+}
+
+export async function archiveFormatLetter(
+    documentId: string,
+    payload: FormatLetterArchivePayload
+): Promise<FormatLetterArchiveResult> {
+    const response = await http.post<FormatLetterArchiveResult>(
+        `/official-documents/${documentId}/format-letter-archive`,
         payload
     )
     return response.data

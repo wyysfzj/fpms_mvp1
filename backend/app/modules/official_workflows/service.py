@@ -1,28 +1,98 @@
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
-from datetime import date, datetime
+import os
+import re
+import stat
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import raise_business_error
+from app.core.config import get_settings
+from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
-from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor
+from app.modules.cases.enums import CaseStatus
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    EvidenceReference,
+    LegalStatus,
+    LifecycleEventCommand,
+    OfficialProcedureStage,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
+from app.modules.cases.models import (
+    Case,
+    CaseActivityEvent,
+    CaseActivityEventEvidence,
+    T_CaseApplicant,
+    T_CaseInventor,
+)
+from app.modules.documents.evidence_contracts import (
+    EvidenceDerivationType,
+    EvidenceReviewState,
+    EvidenceRole,
+    EvidenceVersionResult,
+    EvidenceVersionState,
+    RegisterEvidenceDerivationCommand,
+    RegisterEvidenceVersionCommand,
+)
+from app.modules.documents.evidence_policy import (
+    _COPYABLE_OA_ATTACHMENT_ROLES,
+    CopyableOaAttachmentEvidence,
+    is_filing_full_word_ready,
+)
+from app.modules.documents.evidence_service import (
+    _capture_lifecycle_projection,
+    _stored_activity_projection,
+    register_evidence_derivation,
+    register_evidence_version,
+)
+from app.modules.documents.evidence_workflow_service import (
+    FinalizeExternalSubmissionCommand,
+    OaReplyPackageResult,
+    PrepareOaReplyCommand,
+    finalize_external_submission,
+    prepare_oa_reply,
+)
+from app.modules.documents.letter_context import (
+    BuildFormatLetterContextCommand,
+    FormatLetterContextResult,
+    build_format_letter_context,
+)
+from app.modules.documents.letter_render_service import (
+    RenderedFormatLetter,
+    render_format_letter,
+)
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
     Document,
+    DocumentEvidenceDerivation,
+    DocumentEvidenceVersion,
     LetterHandoff,
     LetterHandoffAttachment,
 )
 from app.modules.documents.schemas import LetterHandoffAttachmentOut, LetterHandoffOut
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.documents.service import summarize_attachment_manifest
 from app.modules.fees.models import FeeDraft, OfficialFeeChecklist
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import ClientContact
+from app.modules.official_workflows.filing_evidence_resolver import (
+    resolve_filing_final_evidence,
+)
 from app.modules.official_workflows.models import (
     OfficialWorkPackage,
     OfficialWorkPackageChecklist,
@@ -57,7 +127,8 @@ from app.modules.official_workflows.schemas import (
     OfficialWorkPackageOut,
     OfficialWorkPackageStatusEvaluationOut,
 )
-from app.modules.tasks.models import Task
+from app.modules.tasks.enums import TaskAction, TaskStatus
+from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.templates.models import FormatLetterMapping, Template
 
 CHECKLIST_COMPLETE_STATUSES = {"DONE", "NOT_APPLICABLE", "OVERRIDDEN"}
@@ -70,6 +141,69 @@ CONFIRMATION_MISSING_KINDS = {
 }
 RECEIPT_ARCHIVED_STATUSES = {"ARCHIVED", "CONFIRMED", "RECEIVED"}
 _MULTI_FILE_MANIFEST_ROLES = {"OA_ADDITIONAL_FILE", "OA_OTHER_PROOF"}
+_OA_EXTERNAL_ACTIVITY_PREFIX = "document-external-submission:oa-external:"
+_OA_EXTERNAL_CONTENT_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FinalizeOaExternalSubmissionCommand:
+    package_id: str
+    evidence_version_id: str
+    actor_id: str
+    submitted_at: datetime
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FinalizeOaExternalSubmissionResult:
+    package_id: str
+    evidence_version_id: str
+    checklist_item: OfficialWorkPackageChecklistOut
+    activity_id: str
+    activity_sequence: int
+    lifecycle_revision: int
+    submitted_at: datetime
+    idempotency_key: str
+    reused: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFormatLetterArchive:
+    evidence_version: EvidenceVersionResult
+    managed_file_path: Path
+    managed_file_identity: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FormatLetterArchiveCommand:
+    source_document_id: str
+    operation_id: str
+    selected_contact_id: str | None
+    remark: str | None
+    actor_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FormatLetterArchiveResult:
+    handoff: LetterHandoffOut
+    evidence_version_id: str
+    version_number: int
+    content_hash: str
+    generated_document_id: str
+    attachment_id: str
+    file_name: str
+    role: EvidenceRole
+    state: EvidenceVersionState
+    review_state: EvidenceReviewState
+    is_current: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFormatLetterArchiveOperation:
+    result: FormatLetterArchiveResult
+    managed_file_path: Path | None
+    managed_file_identity: tuple[int, int] | None
+    reused: bool
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -179,6 +313,7 @@ def _manifest_out(manifest: OfficialWorkPackageManifest) -> OfficialWorkPackageM
         id=manifest.id,
         package_id=manifest.package_id,
         attachment_id=manifest.attachment_id,
+        evidence_version_id=manifest.evidence_version_id,
         official_file_role=manifest.official_file_role,
         source_role_alias=manifest.source_role_alias,
         external_upload_position=manifest.external_upload_position,
@@ -437,7 +572,25 @@ def _upsert_manifest_role(
         package_id=package_id,
         official_file_role=role,
     )
+    evidence_version_ids = (
+        db.execute(
+            select(DocumentEvidenceVersion.id)
+            .where(DocumentEvidenceVersion.attachment_id == attachment.id)
+            .limit(2)
+        )
+        .scalars()
+        .all()
+        if attachment
+        else []
+    )
+    if len(evidence_version_ids) > 1:
+        raise_business_error(
+            "WORK_PACKAGE_MANIFEST_EVIDENCE_CONFLICT",
+            "Attachment evidence-version identity is ambiguous",
+            status_code=409,
+        )
     manifest.attachment_id = attachment.id if attachment else None
+    manifest.evidence_version_id = evidence_version_ids[0] if evidence_version_ids else None
     manifest.source_role_alias = (
         getattr(attachment, "source_role_alias", None) if attachment else None
     )
@@ -901,6 +1054,268 @@ def _filing_fee_summary(db: Session, *, package_id: str) -> FilingPackageFeeSumm
     )
 
 
+def ensure_filing_preparation_package(
+    db: Session,
+    *,
+    case_id: str,
+    actor_id: str,
+) -> FilingPreparationPackageOut:
+    if type(actor_id) is not str or not actor_id.strip() or len(actor_id) > 36:
+        raise_business_error(
+            "FILING_PREPARATION_ACTOR_INVALID",
+            "Filing preparation actor is invalid",
+            status_code=400,
+        )
+    case = _get_case(db, case_id)
+    resolve_key = f"FILING_PREP:{case.id}"
+    existing = (
+        db.execute(
+            select(OfficialWorkPackage)
+            .where(
+                OfficialWorkPackage.case_id == case.id,
+                OfficialWorkPackage.package_kind == "FILING_PREP",
+            )
+            .order_by(OfficialWorkPackage.created_at.asc(), OfficialWorkPackage.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if existing and (len(existing) != 1 or existing[0].resolve_key != resolve_key):
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={
+                "case_id": case.id,
+                "expected_resolve_key": resolve_key,
+                "packages": [
+                    {"id": package.id, "resolve_key": package.resolve_key} for package in existing
+                ],
+            },
+            status_code=409,
+        )
+    if existing:
+        package = existing[0]
+        if (
+            type(package.created_by) is not str
+            or not package.created_by.strip()
+            or len(package.created_by) > 36
+        ):
+            raise_business_error(
+                "FILING_PREPARATION_PROVENANCE_CONFLICT",
+                "Filing preparation package creator is missing or invalid",
+                status_code=409,
+            )
+        _record_filing_preparation_started(db, package=package, actor_id=actor_id)
+        return get_filing_preparation_package(db, package_id=package.id)
+
+    if _normalize_code(case.status) != "NOT_FILED":
+        raise_business_error(
+            "FILING_PREPARATION_CASE_STATE_INVALID",
+            "Filing preparation package can only be created for a NOT_FILED case",
+            details={"case_id": case.id, "case_status": case.status},
+            status_code=409,
+        )
+
+    package = OfficialWorkPackage(
+        id=str(uuid4()),
+        case_id=case.id,
+        package_kind="FILING_PREP",
+        status="PREPARING",
+        resolve_key=resolve_key,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    resolve_collision = db.execute(
+        select(OfficialWorkPackage).where(OfficialWorkPackage.resolve_key == resolve_key)
+    ).scalar_one_or_none()
+    if resolve_collision is not None:
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={"case_id": case.id, "expected_resolve_key": resolve_key},
+            status_code=409,
+        )
+    db.add(package)
+    try:
+        db.flush()
+    except IntegrityError:
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={"case_id": case.id, "expected_resolve_key": resolve_key},
+            status_code=409,
+        )
+    db.refresh(package)
+    result = _refresh_filing_preparation_package(db, package=package)
+    _record_filing_preparation_started(db, package=package, actor_id=actor_id)
+    return result
+
+
+def _canonical_filing_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _filing_snapshot(package: OfficialWorkPackage) -> dict[str, object]:
+    return {
+        "case_id": package.case_id,
+        "id": package.id,
+        "package_kind": package.package_kind,
+        "resolve_key": package.resolve_key,
+    }
+
+
+def _filing_snapshot_hash(snapshot: dict[str, object]) -> str:
+    canonical = _canonical_filing_json(snapshot).encode("utf-8")
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
+def _filing_provenance_conflict() -> None:
+    raise_business_error(
+        "LIFECYCLE_IDEMPOTENCY_CONFLICT",
+        "Persisted filing preparation provenance is inconsistent",
+        status_code=409,
+    )
+
+
+def _stored_filing_command(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str,
+    activity: CaseActivityEvent,
+) -> LifecycleEventCommand:
+    evidence_rows = (
+        db.execute(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _filing_provenance_conflict()
+    if (
+        type(payload) is not dict
+        or _canonical_filing_json(payload) != activity.payload_json
+        or set(payload) != {"evidence_schema", "source_snapshot", "source_snapshot_hash"}
+        or payload.get("evidence_schema") != "FPMS_FILING_PREPARATION_EVIDENCE_V1"
+    ):
+        _filing_provenance_conflict()
+    snapshot = payload.get("source_snapshot")
+    if (
+        type(snapshot) is not dict
+        or set(snapshot) != {"case_id", "id", "package_kind", "resolve_key"}
+        or any(type(snapshot.get(key)) is not str or not snapshot[key] for key in snapshot)
+        or snapshot["case_id"] != package.case_id
+        or snapshot["id"] != package.id
+        or snapshot["package_kind"] != "FILING_PREP"
+        or snapshot["resolve_key"] != f"FILING_PREP:{snapshot['case_id']}"
+    ):
+        _filing_provenance_conflict()
+    snapshot_hash = _filing_snapshot_hash(snapshot)
+    if payload.get("source_snapshot_hash") != snapshot_hash or len(evidence_rows) != 1:
+        _filing_provenance_conflict()
+    evidence = evidence_rows[0]
+    if (
+        activity.activity_type != "FILING_PREPARATION_STARTED"
+        or activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.effective_at != activity.occurred_at
+        or activity.effective_at != package.created_at
+        or activity.occurred_at != package.created_at
+        or evidence.case_id != package.case_id
+        or evidence.evidence_kind != "FILING_WORK_PACKAGE"
+        or evidence.object_type != "OfficialWorkPackage"
+        or evidence.object_id != package.id
+        or evidence.content_hash != snapshot_hash
+        or evidence.captured_at != activity.effective_at
+        or evidence.captured_at != package.created_at
+    ):
+        _filing_provenance_conflict()
+    return LifecycleEventCommand(
+        case_id=package.case_id,
+        event_type="FILING_PREPARATION_STARTED",
+        lane=ActivityLane.LIFECYCLE,
+        effective_at=activity.effective_at,
+        occurred_at=activity.occurred_at,
+        evidence_refs=(
+            EvidenceReference(
+                case_id=evidence.case_id,
+                evidence_kind=evidence.evidence_kind,
+                object_type=evidence.object_type,
+                object_id=evidence.object_id,
+                content_hash=evidence.content_hash,
+                captured_at=evidence.captured_at,
+            ),
+        ),
+        actor_id=actor_id,
+        idempotency_key=f"filing-preparation-started:{package.id}",
+        confirmation_status=ConfirmationStatus.CONFIRMED,
+        payload=payload,
+    )
+
+
+def _record_filing_preparation_started(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str,
+) -> None:
+    idempotency_key = f"filing-preparation-started:{package.id}"
+    activity = db.execute(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == package.case_id,
+            CaseActivityEvent.idempotency_key == idempotency_key,
+        )
+    ).scalar_one_or_none()
+    if activity is None:
+        snapshot = _filing_snapshot(package)
+        snapshot_hash = _filing_snapshot_hash(snapshot)
+        payload = {
+            "evidence_schema": "FPMS_FILING_PREPARATION_EVIDENCE_V1",
+            "source_snapshot": snapshot,
+            "source_snapshot_hash": snapshot_hash,
+        }
+        command = LifecycleEventCommand(
+            case_id=package.case_id,
+            event_type="FILING_PREPARATION_STARTED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=package.created_at,
+            occurred_at=package.created_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=package.case_id,
+                    evidence_kind="FILING_WORK_PACKAGE",
+                    object_type="OfficialWorkPackage",
+                    object_id=package.id,
+                    content_hash=snapshot_hash,
+                    captured_at=package.created_at,
+                ),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload=payload,
+        )
+    else:
+        command = _stored_filing_command(
+            db,
+            package=package,
+            actor_id=actor_id,
+            activity=activity,
+        )
+    apply_lifecycle_event(command, db)
+
+
 def get_filing_preparation_package(
     db: Session,
     *,
@@ -961,6 +1376,21 @@ def refresh_filing_preparation_package(
 ) -> FilingPreparationPackageOut:
     package = _get_package(db, package_id)
     _require_filing_package(package)
+    result = _refresh_filing_preparation_package(
+        db,
+        package=package,
+        require_commission_instruction=require_commission_instruction,
+    )
+    db.commit()
+    return result
+
+
+def _refresh_filing_preparation_package(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    require_commission_instruction: bool = False,
+) -> FilingPreparationPackageOut:
     attachments = _case_attachments(db, case_id=package.case_id)
     summary = summarize_attachment_manifest(
         attachments,
@@ -1003,6 +1433,50 @@ def refresh_filing_preparation_package(
             note=note,
         )
 
+    full_word_item = items_by_role.get("FILING_FULL_WORD")
+    existing_full_word_manifest = (
+        db.execute(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role == "FILING_FULL_WORD",
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if full_word_item is not None or existing_full_word_manifest is not None:
+        full_word_attachment = (
+            attachments_by_id.get(full_word_item.attachment_id) if full_word_item else None
+        )
+        evidence_versions = (
+            db.execute(
+                select(DocumentEvidenceVersion)
+                .where(DocumentEvidenceVersion.attachment_id == full_word_attachment.id)
+                .limit(2)
+            )
+            .scalars()
+            .all()
+            if full_word_attachment
+            else []
+        )
+        ready_attachment = (
+            full_word_attachment
+            if len(evidence_versions) == 1
+            and is_filing_full_word_ready(
+                case_id=package.case_id,
+                evidence_version=evidence_versions[0],
+            )
+            else None
+        )
+        _upsert_manifest_role(
+            db,
+            package_id=package.id,
+            role="FILING_FULL_WORD",
+            required=True,
+            sort_order=25,
+            attachment=ready_attachment,
+        )
+
     _upsert_checklist(
         db,
         package_id=package.id,
@@ -1025,8 +1499,8 @@ def refresh_filing_preparation_package(
     )
 
     package.status = "NEEDS_MAINTENANCE"
-    db.commit()
-    return get_filing_preparation_package(db, package_id=package_id)
+    db.flush()
+    return get_filing_preparation_package(db, package_id=package.id)
 
 
 def update_filing_preparation_checklist(
@@ -1061,7 +1535,142 @@ def record_filing_preparation_external_operation(
     operation_code: str,
     occurred_at: datetime,
     note: str | None = None,
+    actor_id: str | None = None,
 ) -> OfficialWorkPackageChecklist:
+    normalized_operation = _normalize_code(operation_code) or operation_code
+    if normalized_operation == "EXTERNAL_SUBMISSION_RECORDED":
+        initial_evidence = resolve_filing_final_evidence(package_id, db)
+        is_fresh = (
+            initial_evidence.final_submitted_at is None
+            and initial_evidence.submission_activity_id is None
+            and initial_evidence.submission_activity_hash is None
+        )
+        is_replay = (
+            initial_evidence.final_submitted_at == occurred_at
+            and initial_evidence.submission_activity_id is not None
+            and initial_evidence.submission_activity_hash is not None
+        )
+        if not is_fresh and not is_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing submission evidence conflicts with this external operation",
+                status_code=409,
+            )
+
+        idempotency_key = f"filing-external:{package_id}:{occurred_at.isoformat()}"
+        finalized = finalize_external_submission(
+            FinalizeExternalSubmissionCommand(
+                case_id=initial_evidence.case_id,
+                evidence_version_id=initial_evidence.evidence_version_id,
+                actor_id=actor_id,
+                submitted_at=occurred_at,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        db.flush()
+        resolved_evidence = resolve_filing_final_evidence(package_id, db)
+        unchanged_resolution = (
+            resolved_evidence.package_id == initial_evidence.package_id
+            and resolved_evidence.case_id == initial_evidence.case_id
+            and resolved_evidence.evidence_version_id == initial_evidence.evidence_version_id
+            and resolved_evidence.content_hash == initial_evidence.content_hash
+            and resolved_evidence.reviewer_id == initial_evidence.reviewer_id
+            and resolved_evidence.reviewed_at == initial_evidence.reviewed_at
+        )
+        exact_finalization = (
+            finalized.case_id == initial_evidence.case_id
+            and finalized.evidence_version_id == initial_evidence.evidence_version_id
+            and finalized.content_hash == initial_evidence.content_hash
+            and finalized.submitted_at == occurred_at
+            and finalized.idempotency_key == idempotency_key
+            and finalized.reused is is_replay
+            and resolved_evidence.final_submitted_at == occurred_at
+            and resolved_evidence.submission_activity_id == finalized.activity_id
+            and resolved_evidence.submission_activity_hash is not None
+        )
+        exact_replay = is_fresh or (
+            resolved_evidence.submission_activity_id == initial_evidence.submission_activity_id
+            and resolved_evidence.submission_activity_hash
+            == initial_evidence.submission_activity_hash
+        )
+        if not unchanged_resolution or not exact_finalization or not exact_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Finalized filing evidence does not match the external operation",
+                status_code=409,
+            )
+
+        lifecycle_idempotency_key = (
+            f"filing-external-lifecycle:{package_id}:{occurred_at.isoformat()}"
+        )
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=resolved_evidence.case_id,
+                event_type="FILING_EXTERNAL_SUBMISSION_RECORDED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=occurred_at,
+                occurred_at=occurred_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=resolved_evidence.case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolved_evidence.evidence_version_id,
+                        content_hash=resolved_evidence.content_hash,
+                        captured_at=resolved_evidence.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=resolved_evidence.case_id,
+                        evidence_kind="MANUAL_EXTERNAL_SUBMISSION_RECORD",
+                        object_type="CaseActivityEvent",
+                        object_id=resolved_evidence.submission_activity_id,
+                        content_hash=resolved_evidence.submission_activity_hash,
+                        captured_at=occurred_at,
+                    ),
+                ),
+                actor_id=actor_id,
+                idempotency_key=lifecycle_idempotency_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        if (
+            lifecycle_result.case_id != resolved_evidence.case_id
+            or lifecycle_result.activity_id == finalized.activity_id
+            or lifecycle_result.sequence != finalized.activity_sequence + 1
+            or lifecycle_result.lifecycle_revision != finalized.lifecycle_revision + 1
+            or lifecycle_result.lane is not ActivityLane.LIFECYCLE
+            or lifecycle_result.event_type != "FILING_EXTERNAL_SUBMISSION_RECORDED"
+            or lifecycle_result.confirmation_status is not ConfirmationStatus.CONFIRMED
+            or lifecycle_result.idempotency_key != lifecycle_idempotency_key
+            or lifecycle_result.reused is not is_replay
+        ):
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Lifecycle result conflicts with the filing submission evidence",
+                status_code=409,
+            )
+
+        evidence_parts = [f"occurred_at={occurred_at.isoformat()}"]
+        normalized_note = _normalize_text(note)
+        if normalized_note:
+            evidence_parts.append(f"note={normalized_note}")
+        checklist = _upsert_checklist(
+            db,
+            package_id=package_id,
+            section_code="OFFICIAL_PAGE",
+            item_code=normalized_operation,
+            item_label=normalized_operation,
+            status="DONE",
+            required=True,
+            evidence_note="; ".join(evidence_parts),
+        )
+        db.commit()
+        db.refresh(checklist)
+        return checklist
+
     evidence_parts = [f"occurred_at={occurred_at.isoformat()}"]
     normalized_note = _normalize_text(note)
     if normalized_note:
@@ -1208,6 +1817,473 @@ def _oa_reply_status(source: Document | None, reply: Document | None) -> str:
     return "WAITING_REPLY_DOCUMENT"
 
 
+def _oa_external_invalid(field: str) -> None:
+    raise_business_error(
+        "OA_EXTERNAL_SUBMISSION_INVALID",
+        f"Invalid OA external-submission field: {field}",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _oa_external_conflict(message: str) -> None:
+    raise_business_error(
+        "OA_EXTERNAL_SUBMISSION_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _validate_oa_external_command(command: FinalizeOaExternalSubmissionCommand) -> None:
+    if type(command) is not FinalizeOaExternalSubmissionCommand:
+        _oa_external_invalid("command")
+    for field in ("package_id", "evidence_version_id", "actor_id"):
+        value = getattr(command, field)
+        if type(value) is not str or not value or value != value.strip() or len(value) > 36:
+            _oa_external_invalid(field)
+    if type(command.submitted_at) is not datetime or command.submitted_at.tzinfo is not None:
+        _oa_external_invalid("submitted_at")
+    if (
+        type(command.idempotency_key) is not str
+        or not command.idempotency_key
+        or command.idempotency_key != command.idempotency_key.strip()
+        or len(command.idempotency_key) > 50
+    ):
+        _oa_external_invalid("idempotency_key")
+
+
+def _oa_external_activity(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> CaseActivityEvent | None:
+    expected_key = f"{_OA_EXTERNAL_ACTIVITY_PREFIX}{command.package_id}:{command.idempotency_key}"
+    package_ids = set(transaction.scalars(select(OfficialWorkPackage.id)))
+    package_ids.add(command.package_id)
+    candidate_keys = {
+        f"{_OA_EXTERNAL_ACTIVITY_PREFIX}{package_id}:{command.idempotency_key}"
+        for package_id in package_ids
+    }
+    same_upstream_key = [
+        activity
+        for activity in transaction.scalars(
+            select(CaseActivityEvent).where(CaseActivityEvent.idempotency_key.in_(candidate_keys))
+        )
+    ]
+    if len(same_upstream_key) > 1 or (
+        same_upstream_key and same_upstream_key[0].idempotency_key != expected_key
+    ):
+        _oa_external_conflict("OA external-submission idempotency key payload drifted")
+    return same_upstream_key[0] if same_upstream_key else None
+
+
+def _require_oa_external_carriers(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> tuple[OfficialWorkPackage, DocumentEvidenceVersion]:
+    package = transaction.get(OfficialWorkPackage, command.package_id)
+    if package is None:
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_NOT_FOUND",
+            "Official work package not found",
+            status_code=404,
+        )
+    source = (
+        transaction.get(Document, package.source_document_id)
+        if package.source_document_id
+        else None
+    )
+    reply = (
+        transaction.get(Document, package.reply_document_id) if package.reply_document_id else None
+    )
+    if (
+        package.package_kind != "OA_REPLY"
+        or source is None
+        or reply is None
+        or package.resolve_key != f"OA_REPLY:{source.id}"
+        or source.case_id != package.case_id
+        or reply.case_id != package.case_id
+        or reply.reply_to_id != source.id
+    ):
+        _oa_external_conflict("OA reply package identity is inconsistent")
+
+    manifests = list(
+        transaction.scalars(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role == "OFFICIAL_SUBMISSION_LIST",
+                OfficialWorkPackageManifest.present.is_(True),
+            )
+        )
+    )
+    if len(manifests) != 1:
+        _oa_external_conflict("OA official-submission-list manifest identity is not unique")
+    manifest = manifests[0]
+
+    version = transaction.get(
+        DocumentEvidenceVersion,
+        command.evidence_version_id,
+    )
+    if version is None:
+        raise_business_error(
+            "EVIDENCE_VERSION_NOT_FOUND",
+            "Evidence version not found",
+            status_code=404,
+        )
+    attachment = transaction.get(DocAttachment, version.attachment_id)
+    expected_current_identity = f"{package.case_id}|{version.lineage_key}"
+    if (
+        version.case_id != package.case_id
+        or version.document_id != reply.id
+        or version.role != "OFFICIAL_SUBMISSION_LIST"
+        or version.state != EvidenceVersionState.FINAL.value
+        or version.review_state != EvidenceReviewState.APPROVED.value
+        or type(version.reviewer_id) is not str
+        or not version.reviewer_id.strip()
+        or len(version.reviewer_id) > 36
+        or type(version.reviewed_at) is not datetime
+        or version.reviewed_at.tzinfo is not None
+        or version.reviewer_id == version.creator_id
+        or version.current_identity_key != expected_current_identity
+        or attachment is None
+        or attachment.document_id != reply.id
+        or attachment.id != version.attachment_id
+        or manifest.evidence_version_id != version.id
+        or manifest.attachment_id != attachment.id
+        or manifest.content_hash != version.content_hash
+        or attachment.content_hash != version.content_hash
+        or type(version.content_hash) is not str
+        or _OA_EXTERNAL_CONTENT_HASH_PATTERN.fullmatch(version.content_hash) is None
+    ):
+        _oa_external_conflict("OA external-submission evidence identity is inconsistent")
+    return package, version
+
+
+def _require_oa_external_replay(
+    command: FinalizeOaExternalSubmissionCommand,
+    *,
+    package: OfficialWorkPackage,
+    version: DocumentEvidenceVersion,
+    activity: CaseActivityEvent,
+    checklist: OfficialWorkPackageChecklist | None,
+) -> None:
+    submitted_at = command.submitted_at
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _oa_external_conflict("OA external-submission activity payload is malformed")
+    expected_note = f"evidence_version_id={version.id}; activity_id={activity.id}"
+    if (
+        activity.case_id != package.case_id
+        or activity.lane != ActivityLane.DOCUMENT.value
+        or activity.activity_type != "DOCUMENT_EVIDENCE_EXTERNAL_SUBMISSION_FINALIZED"
+        or activity.actor_id != command.actor_id
+        or activity.effective_at != submitted_at
+        or activity.occurred_at != submitted_at
+        or type(payload) is not dict
+        or payload.get("evidence_version_id") != version.id
+        or payload.get("role") != "OFFICIAL_SUBMISSION_LIST"
+        or payload.get("submitted_at") != submitted_at.isoformat()
+        or checklist is None
+        or checklist.section_code != "OA_REPLY"
+        or checklist.item_code != "SUBMISSION_CONFIRMED"
+        or checklist.item_label != "SUBMISSION_CONFIRMED"
+        or checklist.status != "DONE"
+        or checklist.required is not True
+        or checklist.evidence_note != expected_note
+    ):
+        _oa_external_conflict("OA external-submission replay payload drifted")
+
+
+def finalize_oa_external_submission(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> FinalizeOaExternalSubmissionResult:
+    _validate_oa_external_command(command)
+    activity = _oa_external_activity(command, transaction)
+    package, version = _require_oa_external_carriers(command, transaction)
+    checklists = list(
+        transaction.scalars(
+            select(OfficialWorkPackageChecklist).where(
+                OfficialWorkPackageChecklist.package_id == package.id,
+                OfficialWorkPackageChecklist.item_code == "SUBMISSION_CONFIRMED",
+            )
+        )
+    )
+    if len(checklists) > 1:
+        _oa_external_conflict("OA submission-confirmed checklist is not unique")
+    checklist = checklists[0] if checklists else None
+    if activity is not None:
+        _require_oa_external_replay(
+            command,
+            package=package,
+            version=version,
+            activity=activity,
+            checklist=checklist,
+        )
+
+    submitted_at = command.submitted_at
+    downstream_key = f"oa-external:{command.package_id}:{command.idempotency_key}"
+    finalized = finalize_external_submission(
+        FinalizeExternalSubmissionCommand(
+            case_id=package.case_id,
+            evidence_version_id=version.id,
+            actor_id=command.actor_id,
+            submitted_at=submitted_at,
+            idempotency_key=downstream_key,
+        ),
+        transaction,
+    )
+    if (
+        finalized.case_id != package.case_id
+        or finalized.evidence_version_id != version.id
+        or finalized.content_hash != version.content_hash
+        or finalized.submitted_at != submitted_at
+        or finalized.idempotency_key != downstream_key
+        or finalized.reused is not (activity is not None)
+    ):
+        _oa_external_conflict("Deep external-submission result is inconsistent")
+
+    evidence_note = f"evidence_version_id={version.id}; activity_id={finalized.activity_id}"
+    if checklist is None:
+        checklist = _upsert_checklist(
+            transaction,
+            package_id=package.id,
+            section_code="OA_REPLY",
+            item_code="SUBMISSION_CONFIRMED",
+            item_label="SUBMISSION_CONFIRMED",
+            status="DONE",
+            required=True,
+            evidence_note=evidence_note,
+        )
+        transaction.flush([checklist])
+    elif activity is None:
+        checklist.section_code = "OA_REPLY"
+        checklist.item_label = "SUBMISSION_CONFIRMED"
+        checklist.status = "DONE"
+        checklist.required = True
+        checklist.evidence_note = evidence_note
+        transaction.flush([checklist])
+
+    return FinalizeOaExternalSubmissionResult(
+        package_id=package.id,
+        evidence_version_id=version.id,
+        checklist_item=_checklist_out(checklist),
+        activity_id=finalized.activity_id,
+        activity_sequence=finalized.activity_sequence,
+        lifecycle_revision=finalized.lifecycle_revision,
+        submitted_at=command.submitted_at,
+        idempotency_key=command.idempotency_key,
+        reused=finalized.reused,
+    )
+
+
+def _oa_atomic_link_conflict(message: str) -> None:
+    raise_business_error(
+        "OA_REPLY_IDENTITY_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _oa_evidence_result(version: DocumentEvidenceVersion) -> EvidenceVersionResult:
+    try:
+        role = EvidenceRole(version.role)
+        state = EvidenceVersionState(version.state)
+        review_state = EvidenceReviewState(version.review_state)
+    except (TypeError, ValueError):
+        _oa_atomic_link_conflict("OA reply attachment evidence identity is invalid")
+    return EvidenceVersionResult(
+        evidence_version_id=version.id,
+        case_id=version.case_id,
+        document_id=version.document_id,
+        attachment_id=version.attachment_id,
+        lineage_key=version.lineage_key,
+        role=role,
+        version_number=version.version_number,
+        state=state,
+        creator_id=version.creator_id,
+        review_state=review_state,
+        reviewer_id=version.reviewer_id,
+        reviewed_at=version.reviewed_at,
+        final_submitted_at=version.final_submitted_at,
+        content_hash=version.content_hash,
+        is_current=version.current_identity_key is not None,
+        is_final=state is EvidenceVersionState.FINAL,
+    )
+
+
+def prepare_oa_out_package_link(
+    db: Session,
+    *,
+    reply_document: Document,
+    actor_id: str,
+) -> OaReplyPackageResult:
+    packages = list(
+        db.scalars(
+            select(OfficialWorkPackage).where(
+                OfficialWorkPackage.source_document_id == reply_document.reply_to_id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+            )
+        )
+    )
+    if len(packages) != 1:
+        _oa_atomic_link_conflict("OA reply package identity is not unique")
+    package = packages[0]
+
+    source_versions = list(
+        db.scalars(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.case_id == reply_document.case_id,
+                DocumentEvidenceVersion.document_id == package.source_document_id,
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+    )
+    if len(source_versions) != 1:
+        _oa_atomic_link_conflict("Source OA notice evidence identity is not unique")
+    source_version = source_versions[0]
+
+    reply_attachments = list(
+        db.scalars(select(DocAttachment).where(DocAttachment.document_id == reply_document.id))
+    )
+    if len(reply_attachments) != 1:
+        _oa_atomic_link_conflict("OA reply attachment identity is not unique")
+    reply_attachment = reply_attachments[0]
+
+    manifests = list(
+        db.scalars(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role.in_(_COPYABLE_OA_ATTACHMENT_ROLES),
+                OfficialWorkPackageManifest.present.is_(True),
+            )
+        )
+    )
+    selected: list[CopyableOaAttachmentEvidence] = []
+    for manifest in manifests:
+        if not manifest.evidence_version_id:
+            _oa_atomic_link_conflict("OA reply manifest evidence identity is missing")
+        version = db.get(DocumentEvidenceVersion, manifest.evidence_version_id)
+        if version is None:
+            _oa_atomic_link_conflict("OA reply manifest evidence identity is missing")
+        selected.append(
+            CopyableOaAttachmentEvidence(
+                evidence_version=_oa_evidence_result(version),
+                manifest_id=manifest.id,
+                manifest_case_id=package.case_id,
+                manifest_package_id=package.id,
+                manifest_role=manifest.official_file_role,
+                manifest_evidence_version_id=manifest.evidence_version_id,
+                manifest_content_hash=manifest.content_hash,
+            )
+        )
+
+    result = prepare_oa_reply(
+        PrepareOaReplyCommand(
+            case_id=reply_document.case_id,
+            source_document_id=package.source_document_id,
+            source_evidence_version_id=source_version.id,
+            package_id=package.id,
+            reply_document_id=reply_document.id,
+            reply_attachment_id=reply_attachment.id,
+            reply_content_hash=reply_attachment.content_hash,
+            actor_id=actor_id,
+            attachments=tuple(selected),
+        ),
+        db,
+    )
+    reply_version = db.get(DocumentEvidenceVersion, result.reply_evidence_version_id)
+    preparations = list(
+        db.scalars(
+            select(DocumentEvidenceDerivation).where(
+                DocumentEvidenceDerivation.parent_evidence_version_id
+                == result.source_evidence_version_id,
+                DocumentEvidenceDerivation.child_evidence_version_id
+                == result.reply_evidence_version_id,
+                DocumentEvidenceDerivation.derivation_type
+                == EvidenceDerivationType.OA_REPLY_PREPARATION.value,
+            )
+        )
+    )
+    if len(preparations) != 1:
+        _oa_atomic_link_conflict("OA preparation derivation identity is not unique")
+    preparation = preparations[0]
+    if preparation.case_id != result.case_id:
+        _oa_atomic_link_conflict("OA preparation derivation case identity is invalid")
+    case = _get_case(db, result.case_id)
+    current_projection = _capture_lifecycle_projection(case)
+    activity_key = f"oa-reply-prepared:{result.package_id}"
+    existing_activity = db.scalar(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == result.case_id,
+            CaseActivityEvent.idempotency_key == activity_key,
+        )
+    )
+    previous_projection = current_projection
+    if existing_activity is not None:
+        previous_projection = _stored_activity_projection(
+            existing_activity,
+            old=True,
+            verification_status=current_projection.lifecycle_verification_status,
+        )
+        current_projection = _stored_activity_projection(
+            existing_activity,
+            old=False,
+            verification_status=current_projection.lifecycle_verification_status,
+        )
+        if previous_projection != current_projection:
+            _oa_atomic_link_conflict(
+                "Stored OA reply prepared activity changed the central lifecycle projection"
+            )
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=result.case_id,
+            event_type="OA_REPLY_PREPARED",
+            lane=ActivityLane.DOCUMENT,
+            effective_at=preparation.derived_at,
+            occurred_at=preparation.derived_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=result.case_id,
+                    evidence_kind="OA_REPLY_WORK_PACKAGE",
+                    object_type="OfficialWorkPackage",
+                    object_id=result.package_id,
+                    content_hash=(
+                        f"sha256:{hashlib.sha256(preparation.source_snapshot.encode()).hexdigest()}"
+                    ),
+                    captured_at=preparation.derived_at,
+                ),
+                EvidenceReference(
+                    case_id=result.case_id,
+                    evidence_kind="OA_REPLY_DOCUMENT",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=result.reply_evidence_version_id,
+                    content_hash=reply_version.content_hash,
+                    captured_at=preparation.derived_at,
+                ),
+            ),
+            actor_id=actor_id,
+            idempotency_key=activity_key,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "actor_id": actor_id,
+                "center_changes": {},
+                "package_id": result.package_id,
+                "reply_document_id": result.reply_document_id,
+                "reply_evidence_version_id": result.reply_evidence_version_id,
+                "schema": "FPMS_OA_REPLY_PREPARED_ACTIVITY_V1",
+                "source_document_id": result.source_document_id,
+            },
+        ),
+        db,
+        previous_projection=previous_projection,
+        current_projection=current_projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
+    return result
+
+
 def _oa_manifest_roles(
     db: Session,
     *,
@@ -1307,6 +2383,135 @@ def _oa_checklist_defaults(db: Session, *, package_id: str) -> None:
             required=True,
             sort_order=sort_order,
         )
+
+
+def ensure_oa_reply_package(
+    db: Session,
+    *,
+    source_document_id: str,
+) -> OaReplyPackageOut:
+    source = _get_document(db, source_document_id)
+    resolve_key = f"OA_REPLY:{source.id}"
+    existing = (
+        db.execute(
+            select(OfficialWorkPackage)
+            .where(
+                OfficialWorkPackage.source_document_id == source.id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+            )
+            .order_by(OfficialWorkPackage.created_at.asc(), OfficialWorkPackage.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if existing and (
+        len(existing) != 1
+        or existing[0].case_id != source.case_id
+        or existing[0].resolve_key != resolve_key
+    ):
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package identity is inconsistent",
+            details={
+                "source_document_id": source.id,
+                "expected_case_id": source.case_id,
+                "expected_resolve_key": resolve_key,
+                "packages": [
+                    {
+                        "id": package.id,
+                        "case_id": package.case_id,
+                        "resolve_key": package.resolve_key,
+                    }
+                    for package in existing
+                ],
+            },
+            status_code=409,
+        )
+    if _normalize_code(source.direction) != "IN":
+        raise_business_error(
+            "OA_REPLY_SOURCE_DIRECTION_INVALID",
+            "OA reply package source must be an incoming document",
+            details={"source_document_id": source.id, "direction": source.direction},
+            status_code=400,
+        )
+
+    template = (
+        db.execute(select(DocTemplate).where(DocTemplate.id == source.doc_template_id))
+        .scalars()
+        .one_or_none()
+        if source.doc_template_id
+        else None
+    )
+    semantics = resolve_document_semantics(template)
+    expected_case_status = _normalize_code(semantics.case_status_effect)
+    if (
+        semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "OA_REPLY"
+        or expected_case_status not in {"OA1", "OA2"}
+    ):
+        raise_business_error(
+            "OA_REPLY_SOURCE_SEMANTICS_INVALID",
+            "Document does not have executable OA reply semantics",
+            details={
+                "source_document_id": source.id,
+                "catalog_status": semantics.catalog_status,
+                "execution_behavior": semantics.execution_behavior,
+                "case_status_effect": semantics.case_status_effect,
+            },
+            status_code=409,
+        )
+
+    if existing:
+        return get_oa_reply_package(db, package_id=existing[0].id)
+
+    case = _get_case(db, source.case_id)
+    if _normalize_code(case.status) != expected_case_status:
+        raise_business_error(
+            "OA_REPLY_CASE_STATE_INVALID",
+            "OA reply package case state does not match the source document semantics",
+            details={
+                "source_document_id": source.id,
+                "case_id": case.id,
+                "case_status": case.status,
+                "expected_case_status": expected_case_status,
+            },
+            status_code=409,
+        )
+
+    package = OfficialWorkPackage(
+        id=str(uuid4()),
+        case_id=case.id,
+        package_kind="OA_REPLY",
+        status="PREPARING",
+        source_document_id=source.id,
+        resolve_key=resolve_key,
+    )
+    db.add(package)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = db.execute(
+            select(OfficialWorkPackage).where(
+                OfficialWorkPackage.resolve_key == resolve_key,
+                OfficialWorkPackage.case_id == source.case_id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+                OfficialWorkPackage.source_document_id == source.id,
+            )
+        ).scalar_one_or_none()
+        if winner:
+            return get_oa_reply_package(db, package_id=winner.id)
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package identity is inconsistent",
+            details={
+                "source_document_id": source.id,
+                "expected_case_id": source.case_id,
+                "expected_resolve_key": resolve_key,
+            },
+            status_code=409,
+        )
+    return refresh_oa_reply_package(db, package_id=package.id)
 
 
 def get_oa_reply_package(
@@ -1466,11 +2671,32 @@ def link_oa_reply_document(
             "Reply document does not belong to the package case",
             status_code=400,
         )
+    _bind_oa_reply_identity(package, reply)
+    _mark_linked_oa_reply_waiting_receipt(package)
+    db.commit()
+    return get_oa_reply_package(db, package_id=package_id)
+
+
+def _mark_linked_oa_reply_waiting_receipt(package: OfficialWorkPackage) -> None:
+    package.status = "WAITING_RECEIPT"
+
+
+def _bind_oa_reply_identity(package: OfficialWorkPackage, reply: Document) -> None:
+    if package.reply_document_id and package.reply_document_id != reply.id:
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package is already linked to a different reply document",
+            status_code=409,
+        )
+    if reply.reply_to_id and reply.reply_to_id != package.source_document_id:
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply document is already linked to a different source document",
+            status_code=409,
+        )
     package.reply_document_id = reply.id
     if package.source_document_id:
         reply.reply_to_id = package.source_document_id
-    db.commit()
-    return get_oa_reply_package(db, package_id=package_id)
 
 
 def _find_letter_mapping(
@@ -1586,13 +2812,37 @@ def _letter_salutation(
     return "尊敬的：您好", "DEFAULT"
 
 
+def _letter_first_applicant_name(db: Session, *, case: Case) -> str:
+    """First applicant display name for letter filenames (信函生成 P0004)."""
+    first_applicant = (
+        db.execute(
+            select(T_CaseApplicant)
+            .where(T_CaseApplicant.case_id == case.id)
+            .order_by(T_CaseApplicant.seq.asc())
+        )
+        .scalars()
+        .first()
+    )
+    if first_applicant is None:
+        return ""
+    return (
+        _normalize_text(first_applicant.name_cn) or _normalize_text(first_applicant.name_en) or ""
+    )
+
+
 def _letter_output_filename(
+    db: Session,
     *,
     case: Case,
     document: Document,
     mapping: FormatLetterMapping | None,
 ) -> str:
-    default_name = f"{case.case_no}-格式函.docx"
+    applicant_name = _letter_first_applicant_name(db, case=case)
+    # 客户口径（信函生成操作 P0004）：{案号}-给{申请人名称}的邮件.docx
+    if applicant_name:
+        default_name = f"{case.case_no}-给{applicant_name}的邮件.docx"
+    else:
+        default_name = f"{case.case_no}-格式函.docx"
     rule = _normalize_text(mapping.output_name_rule if mapping else None)
     if not rule:
         return default_name
@@ -1601,6 +2851,7 @@ def _letter_output_filename(
             case_no=case.case_no,
             app_no=case.app_no or "",
             document_title=document.title or "",
+            applicant_name=applicant_name,
         )
     except (KeyError, ValueError):
         return default_name
@@ -1661,7 +2912,7 @@ def get_letter_handoff_preview(
     template_ready = _letter_template_ready(db, mapping)
     generated_word_path = None
     if template_ready:
-        output_filename = _letter_output_filename(case=case, document=document, mapping=mapping)
+        output_filename = _letter_output_filename(db, case=case, document=document, mapping=mapping)
         generated_word_path = f"letters/{case.case_no}/{output_filename}"
 
     mail_subject = f"{case.case_no} {document.title or '官方来文'}"
@@ -1821,6 +3072,761 @@ def _get_letter_handoff(db: Session, handoff_id: str) -> LetterHandoff:
     return handoff
 
 
+def _format_letter_storage_root() -> Path:
+    return (Path(__file__).resolve().parents[3] / "storage").resolve()
+
+
+def _format_letter_archive_conflict(message: str) -> None:
+    raise_business_error(
+        "FORMAT_LETTER_ARCHIVE_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _format_letter_archive_lock_path(managed_file_path: Path) -> Path:
+    return managed_file_path.parent / f".{managed_file_path.name}.archive.lock"
+
+
+@contextmanager
+def _format_letter_archive_lock(managed_file_path: Path):
+    lock_path = _format_letter_archive_lock_path(managed_file_path)
+    with lock_path.open("a+b") as descriptor:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+
+
+def _remove_format_letter_archive_file_locked(
+    managed_file_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+) -> None:
+    try:
+        current = managed_file_path.stat(follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (current.st_dev, current.st_ino) != expected_identity
+        ):
+            raise BusinessError(
+                "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+                "Rendered format-letter archive identity changed before compensation",
+                status_code=500,
+            )
+        managed_file_path.unlink()
+    except FileNotFoundError:
+        return
+    except BusinessError:
+        raise
+    except Exception as cleanup_error:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+            "Rendered format-letter archive compensation failed",
+            status_code=500,
+        ) from cleanup_error
+
+
+def _remove_format_letter_archive_file(
+    managed_file_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+    original_error: Exception,
+) -> None:
+    del original_error
+    try:
+        managed_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with _format_letter_archive_lock(managed_file_path):
+            _remove_format_letter_archive_file_locked(
+                managed_file_path,
+                expected_identity=expected_identity,
+            )
+    except BusinessError:
+        raise
+    except Exception as cleanup_error:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+            "Rendered format-letter archive compensation failed",
+            status_code=500,
+        ) from cleanup_error
+
+
+def _create_format_letter_archive_file(
+    managed_file_path: Path,
+    content: bytes,
+) -> tuple[int, int]:
+    identity: tuple[int, int] | None = None
+    try:
+        managed_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with _format_letter_archive_lock(managed_file_path):
+            try:
+                with managed_file_path.open("xb") as stream:
+                    created = os.fstat(stream.fileno())
+                    identity = (created.st_dev, created.st_ino)
+                    if stream.write(content) != len(content):
+                        raise OSError("short format-letter archive write")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except FileExistsError as exc:
+                raise BusinessError(
+                    "FORMAT_LETTER_ARCHIVE_CONFLICT",
+                    "Generated Word archive path already exists",
+                    status_code=409,
+                ) from exc
+            except Exception as exc:
+                if identity is not None:
+                    _remove_format_letter_archive_file_locked(
+                        managed_file_path,
+                        expected_identity=identity,
+                    )
+                if isinstance(exc, BusinessError):
+                    raise
+                raise BusinessError(
+                    "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+                    "Rendered format letter could not be archived",
+                    status_code=500,
+                ) from exc
+    except Exception as exc:
+        if isinstance(exc, BusinessError):
+            raise
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+            "Rendered format letter could not be archived",
+            status_code=500,
+        ) from exc
+    if identity is None:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+            "Rendered format letter could not be archived",
+            status_code=500,
+        )
+    return identity
+
+
+def _format_letter_archive_path(
+    *,
+    handoff: LetterHandoff,
+    rendered: RenderedFormatLetter,
+) -> tuple[str, Path]:
+    relative_path = _normalize_text(handoff.generated_word_path)
+    if not relative_path:
+        _format_letter_archive_conflict("Letter handoff has no generated Word path")
+    candidate = Path(relative_path)
+    if candidate.is_absolute() or ".." in candidate.parts or candidate.name != rendered.file_name:
+        _format_letter_archive_conflict("Generated Word path is inconsistent")
+    storage_root = _format_letter_storage_root().resolve()
+    managed_path = (storage_root / candidate).resolve()
+    try:
+        managed_path.relative_to(storage_root)
+    except ValueError:
+        _format_letter_archive_conflict("Generated Word path is outside managed storage")
+    return relative_path, managed_path
+
+
+def _format_letter_handoff_attachment(
+    db: Session,
+    *,
+    handoff: LetterHandoff,
+    rendered: RenderedFormatLetter,
+    relative_path: str,
+) -> LetterHandoffAttachment:
+    rows = (
+        db.execute(
+            select(LetterHandoffAttachment).where(
+                LetterHandoffAttachment.handoff_id == handoff.id,
+                LetterHandoffAttachment.attachment_role == "FORMAT_LETTER_WORD",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(rows) != 1:
+        _format_letter_archive_conflict(
+            "Letter handoff must have exactly one generated Word attachment row"
+        )
+    row = rows[0]
+    if (
+        row.attachment_id is not None
+        or row.file_name != rendered.file_name
+        or row.file_path != relative_path
+        or row.required is not True
+        or row.included is not True
+    ):
+        _format_letter_archive_conflict("Generated Word handoff row is inconsistent")
+    return row
+
+
+def _latest_format_letter_source_version(
+    db: Session,
+    *,
+    context_result: FormatLetterContextResult,
+    handoff: LetterHandoff,
+) -> DocumentEvidenceVersion:
+    source = _get_document(db, handoff.source_document_id)
+    if (
+        context_result.case_id != source.case_id
+        or context_result.source_document_id != source.id
+        or source.direction != "IN"
+    ):
+        _format_letter_archive_conflict("Letter context is not the handoff IN source")
+
+    latest_document = db.scalar(
+        select(Document)
+        .where(
+            Document.case_id == source.case_id,
+            Document.direction == "IN",
+        )
+        .order_by(
+            Document.doc_date.desc(),
+            Document.created_at.desc(),
+            Document.id.desc(),
+        )
+        .limit(1)
+    )
+    if latest_document is None or latest_document.id != source.id:
+        _format_letter_archive_conflict("Letter handoff source is not the latest IN document")
+
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.case_id == source.case_id,
+                DocumentEvidenceVersion.document_id == latest_document.id,
+                DocumentEvidenceVersion.role == EvidenceRole.OFFICIAL_FINAL_PDF.value,
+                DocumentEvidenceVersion.state == EvidenceVersionState.FINAL.value,
+                DocumentEvidenceVersion.review_state == EvidenceReviewState.APPROVED.value,
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(versions) != 1:
+        _format_letter_archive_conflict(
+            "Latest IN document must have exactly one qualifying evidence version"
+        )
+    latest_version = versions[0]
+    if latest_version.id != context_result.source_evidence_version_id:
+        _format_letter_archive_conflict(
+            "Letter context is not bound to the latest IN evidence version"
+        )
+    return latest_version
+
+
+def archive_format_letter(
+    db: Session,
+    *,
+    handoff_id: str,
+    context_result: FormatLetterContextResult,
+    rendered: RenderedFormatLetter,
+    actor_id: str,
+) -> PendingFormatLetterArchive:
+    if type(context_result) is not FormatLetterContextResult:
+        _format_letter_archive_conflict("Format-letter context is invalid")
+    if type(rendered) is not RenderedFormatLetter:
+        _format_letter_archive_conflict("Rendered format letter is invalid")
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id != actor_id.strip()
+        or len(actor_id) > 36
+    ):
+        _format_letter_archive_conflict("Format-letter archive actor is invalid")
+    expected_hash = f"sha256:{hashlib.sha256(rendered.content).hexdigest()}"
+    if rendered.content_hash != expected_hash:
+        _format_letter_archive_conflict("Rendered format-letter hash is inconsistent")
+
+    handoff = _get_letter_handoff(db, handoff_id)
+    if handoff.generated_document_id is not None:
+        _format_letter_archive_conflict("Letter handoff is already linked to a generated document")
+    if (
+        handoff.format_letter_mapping_id != context_result.mapping_id
+        or handoff.format_letter_template_id != context_result.template_id
+        or handoff.client_contact_id != context_result.selected_contact_id
+        or handoff.contact_selection_source != context_result.contact_selection_source
+        or handoff.salutation_source != context_result.salutation_source
+        or handoff.salutation_text != context_result.context.get("salutation_text")
+    ):
+        _format_letter_archive_conflict(
+            "Letter context provenance differs from the persisted handoff"
+        )
+    source_version = _latest_format_letter_source_version(
+        db,
+        context_result=context_result,
+        handoff=handoff,
+    )
+    relative_path, managed_path = _format_letter_archive_path(
+        handoff=handoff,
+        rendered=rendered,
+    )
+    handoff_attachment = _format_letter_handoff_attachment(
+        db,
+        handoff=handoff,
+        rendered=rendered,
+        relative_path=relative_path,
+    )
+
+    generated_document = Document(
+        id=str(uuid4()),
+        case_id=context_result.case_id,
+        direction="OUT",
+        title=rendered.file_name,
+        reply_to_id=source_version.document_id,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(generated_document)
+    db.flush()
+    generated_attachment = DocAttachment(
+        id=str(uuid4()),
+        document_id=generated_document.id,
+        file_name=rendered.file_name,
+        file_path=relative_path,
+        mime_type=rendered.media_type,
+        file_size=len(rendered.content),
+        official_file_role=EvidenceRole.CLIENT_LETTER_WORD.value,
+        content_hash=rendered.content_hash,
+        is_archive_evidence=True,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(generated_attachment)
+    db.flush()
+
+    version = register_evidence_version(
+        RegisterEvidenceVersionCommand(
+            case_id=context_result.case_id,
+            document_id=generated_document.id,
+            attachment_id=generated_attachment.id,
+            lineage_key=f"format-letter:{handoff.id}",
+            role=EvidenceRole.CLIENT_LETTER_WORD,
+            state=EvidenceVersionState.DRAFT,
+            creator_id=actor_id,
+            content_hash=rendered.content_hash,
+        ),
+        db,
+    )
+    derived_at = datetime.now()
+    register_evidence_derivation(
+        RegisterEvidenceDerivationCommand(
+            case_id=context_result.case_id,
+            parent_evidence_version_id=source_version.id,
+            child_evidence_version_id=version.evidence_version_id,
+            derivation_type=EvidenceDerivationType.CUSTOMER_LETTER_RENDER,
+            actor_id=actor_id,
+            derived_at=derived_at,
+            source_snapshot=json.dumps(
+                {
+                    "handoff_id": handoff.id,
+                    "format_letter_mapping_id": context_result.mapping_id,
+                    "format_letter_template_id": context_result.template_id,
+                    "client_contact_id": context_result.selected_contact_id,
+                    "contact_selection_source": (context_result.contact_selection_source),
+                    "salutation_source": context_result.salutation_source,
+                    "salutation_text": context_result.context.get("salutation_text"),
+                    "rendered_content_hash": rendered.content_hash,
+                    "source_document_id": source_version.document_id,
+                    "source_evidence_version_id": source_version.id,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        ),
+        db,
+    )
+    handoff.generated_document_id = generated_document.id
+    handoff_attachment.attachment_id = generated_attachment.id
+
+    managed_file_identity = _create_format_letter_archive_file(
+        managed_path,
+        rendered.content,
+    )
+    return PendingFormatLetterArchive(
+        evidence_version=version,
+        managed_file_path=managed_path,
+        managed_file_identity=managed_file_identity,
+    )
+
+
+def _require_clean_format_letter_archive_transaction(db: Session) -> None:
+    if db.new or db.dirty or db.deleted:
+        _format_letter_archive_conflict("Format-letter archive requires a clean caller transaction")
+
+
+def _format_letter_archive_result(
+    db: Session,
+    *,
+    handoff: LetterHandoff,
+    evidence_version: EvidenceVersionResult,
+    file_name: str,
+) -> FormatLetterArchiveResult:
+    return FormatLetterArchiveResult(
+        handoff=_letter_handoff_out(db, handoff=handoff),
+        evidence_version_id=evidence_version.evidence_version_id,
+        version_number=evidence_version.version_number,
+        content_hash=evidence_version.content_hash,
+        generated_document_id=evidence_version.document_id,
+        attachment_id=evidence_version.attachment_id,
+        file_name=file_name,
+        role=evidence_version.role,
+        state=evidence_version.state,
+        review_state=evidence_version.review_state,
+        is_current=evidence_version.is_current,
+    )
+
+
+def _stored_format_letter_archive_result(
+    db: Session,
+    *,
+    command: FormatLetterArchiveCommand,
+    handoff: LetterHandoff,
+    version: DocumentEvidenceVersion,
+) -> FormatLetterArchiveResult:
+    source = db.get(Document, command.source_document_id)
+    generated_document = db.get(Document, handoff.generated_document_id)
+    attachment = db.get(DocAttachment, version.attachment_id)
+    case = db.get(Case, version.case_id)
+    mapping = db.get(FormatLetterMapping, handoff.format_letter_mapping_id)
+    template = db.get(Template, handoff.format_letter_template_id)
+    handoff_attachments = (
+        db.execute(
+            select(LetterHandoffAttachment).where(LetterHandoffAttachment.handoff_id == handoff.id)
+        )
+        .scalars()
+        .all()
+    )
+    derivations = (
+        db.execute(
+            select(DocumentEvidenceDerivation).where(
+                DocumentEvidenceDerivation.child_evidence_version_id == version.id,
+                DocumentEvidenceDerivation.derivation_type
+                == EvidenceDerivationType.CUSTOMER_LETTER_RENDER.value,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if (
+        source is None
+        or generated_document is None
+        or attachment is None
+        or case is None
+        or mapping is None
+        or template is None
+        or len(handoff_attachments) != 1
+        or len(derivations) != 1
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive is partial")
+    handoff_attachment = handoff_attachments[0]
+    derivation = derivations[0]
+    source_version = db.get(
+        DocumentEvidenceVersion,
+        derivation.parent_evidence_version_id,
+    )
+    latest_source = db.scalar(
+        select(Document)
+        .where(
+            Document.case_id == source.case_id,
+            Document.direction == "IN",
+        )
+        .order_by(
+            Document.doc_date.desc(),
+            Document.created_at.desc(),
+            Document.id.desc(),
+        )
+        .limit(1)
+    )
+    if (
+        source.case_id != case.id
+        or source.direction != "IN"
+        or latest_source is None
+        or latest_source.id != source.id
+        or generated_document.case_id != case.id
+        or generated_document.direction != "OUT"
+        or generated_document.reply_to_id != source.id
+        or generated_document.id != handoff.generated_document_id
+        or generated_document.created_by != version.creator_id
+        or source_version is None
+        or source_version.case_id != case.id
+        or source_version.document_id != source.id
+        or source_version.role != EvidenceRole.OFFICIAL_FINAL_PDF.value
+        or source_version.state != EvidenceVersionState.FINAL.value
+        or source_version.review_state != EvidenceReviewState.APPROVED.value
+        or source_version.current_identity_key is None
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive source is inconsistent")
+    if (
+        mapping.format_letter_template_id != template.id
+        or mapping.format_letter_template_code != template.name
+        or mapping.enabled is not True
+        or template.enabled is not True
+        or template.group != "FORMAT_LETTER"
+        or not _normalize_text(template.file_path)
+        or handoff.contact_selection_source not in {"EXPLICIT", "PRIMARY", "DEFAULT"}
+        or handoff.salutation_source not in {"SELECTED_CONTACT", "DEFAULT"}
+        or not _normalize_text(handoff.salutation_text)
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive provenance is inconsistent")
+    if command.selected_contact_id is not None:
+        if (
+            handoff.client_contact_id != command.selected_contact_id
+            or handoff.contact_selection_source != "EXPLICIT"
+        ):
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact request has drifted"
+            )
+    elif handoff.contact_selection_source == "EXPLICIT":
+        _format_letter_archive_conflict("Stored format-letter archive contact request has drifted")
+    if handoff.client_contact_id is None:
+        if handoff.contact_selection_source != "DEFAULT" or handoff.salutation_source != "DEFAULT":
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact provenance is inconsistent"
+            )
+    else:
+        contact = db.get(ClientContact, handoff.client_contact_id)
+        if (
+            contact is None
+            or contact.client_id != case.client_id
+            or handoff.contact_selection_source not in {"EXPLICIT", "PRIMARY"}
+            or handoff.salutation_source != "SELECTED_CONTACT"
+        ):
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact provenance is inconsistent"
+            )
+    case_no = _normalize_text(case.case_no)
+    if not case_no:
+        _format_letter_archive_conflict("Stored format-letter archive case number is missing")
+    expected_path = f"letters/{case_no}/{attachment.file_name}"
+    if (
+        handoff.generated_word_path != expected_path
+        or attachment.document_id != generated_document.id
+        or attachment.file_name != Path(expected_path).name
+        or attachment.file_path != expected_path
+        or attachment.official_file_role != EvidenceRole.CLIENT_LETTER_WORD.value
+        or attachment.content_hash != version.content_hash
+        or attachment.is_archive_evidence is not True
+        or handoff_attachment.attachment_id != attachment.id
+        or handoff_attachment.file_name != attachment.file_name
+        or handoff_attachment.file_path != expected_path
+        or handoff_attachment.attachment_role != "FORMAT_LETTER_WORD"
+        or handoff_attachment.required is not True
+        or handoff_attachment.included is not True
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive attachment is inconsistent")
+    expected_current_identity = f"{case.id}|format-letter:{command.operation_id}"
+    expected_hash = _normalize_text(version.content_hash)
+    if (
+        version.document_id != generated_document.id
+        or version.lineage_key != f"format-letter:{command.operation_id}"
+        or version.role != EvidenceRole.CLIENT_LETTER_WORD.value
+        or version.version_number != 1
+        or version.state != EvidenceVersionState.DRAFT.value
+        or version.creator_id != command.actor_id
+        or version.review_state != EvidenceReviewState.PENDING.value
+        or version.reviewer_id is not None
+        or version.reviewed_at is not None
+        or version.current_identity_key != expected_current_identity
+        or expected_hash is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", expected_hash) is None
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive evidence is inconsistent")
+    try:
+        source_snapshot = json.loads(derivation.source_snapshot)
+    except (TypeError, json.JSONDecodeError):
+        _format_letter_archive_conflict("Stored format-letter archive provenance is invalid")
+    expected_snapshot = {
+        "handoff_id": handoff.id,
+        "format_letter_mapping_id": handoff.format_letter_mapping_id,
+        "format_letter_template_id": handoff.format_letter_template_id,
+        "client_contact_id": handoff.client_contact_id,
+        "contact_selection_source": handoff.contact_selection_source,
+        "salutation_source": handoff.salutation_source,
+        "salutation_text": handoff.salutation_text,
+        "rendered_content_hash": version.content_hash,
+        "source_document_id": source.id,
+        "source_evidence_version_id": source_version.id,
+    }
+    if (
+        source_snapshot != expected_snapshot
+        or derivation.case_id != case.id
+        or derivation.actor_id != version.creator_id
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive provenance has drifted")
+    candidate = Path(expected_path)
+    storage_root = _format_letter_storage_root().resolve()
+    managed_path = (storage_root / candidate).resolve()
+    if candidate.is_absolute() or ".." in candidate.parts:
+        _format_letter_archive_conflict("Stored format-letter archive path is invalid")
+    try:
+        managed_path.relative_to(storage_root)
+        managed_hash = f"sha256:{hashlib.sha256(managed_path.read_bytes()).hexdigest()}"
+    except (OSError, ValueError):
+        _format_letter_archive_conflict("Stored format-letter archive file is missing")
+    if managed_hash != version.content_hash:
+        _format_letter_archive_conflict("Stored format-letter archive file hash has drifted")
+    evidence_result = EvidenceVersionResult(
+        evidence_version_id=version.id,
+        case_id=version.case_id,
+        document_id=version.document_id,
+        attachment_id=version.attachment_id,
+        lineage_key=version.lineage_key,
+        role=EvidenceRole(version.role),
+        version_number=version.version_number,
+        state=EvidenceVersionState(version.state),
+        creator_id=version.creator_id,
+        review_state=EvidenceReviewState(version.review_state),
+        reviewer_id=version.reviewer_id,
+        reviewed_at=version.reviewed_at,
+        final_submitted_at=version.final_submitted_at,
+        content_hash=version.content_hash,
+        is_current=version.current_identity_key is not None,
+        is_final=False,
+    )
+    return _format_letter_archive_result(
+        db,
+        handoff=handoff,
+        evidence_version=evidence_result,
+        file_name=attachment.file_name,
+    )
+
+
+def prepare_format_letter_archive(
+    command: FormatLetterArchiveCommand,
+    db: Session,
+) -> PendingFormatLetterArchiveOperation:
+    if type(command) is not FormatLetterArchiveCommand:
+        _format_letter_archive_conflict("Format-letter archive command is invalid")
+    for value in (
+        command.source_document_id,
+        command.operation_id,
+        command.actor_id,
+    ):
+        if type(value) is not str or not value or value != value.strip() or len(value) > 36:
+            _format_letter_archive_conflict("Format-letter archive identity is invalid")
+    if command.selected_contact_id is not None and (
+        type(command.selected_contact_id) is not str
+        or not command.selected_contact_id
+        or command.selected_contact_id != command.selected_contact_id.strip()
+        or len(command.selected_contact_id) > 36
+    ):
+        _format_letter_archive_conflict("Format-letter archive contact is invalid")
+    normalized_remark = _normalize_text(command.remark)
+    if normalized_remark != command.remark or (
+        normalized_remark is not None and len(normalized_remark) > 2000
+    ):
+        _format_letter_archive_conflict("Format-letter archive remark is invalid")
+    _require_clean_format_letter_archive_transaction(db)
+
+    handoff = db.get(LetterHandoff, command.operation_id)
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.lineage_key == f"format-letter:{command.operation_id}"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if handoff is not None or versions:
+        if (
+            handoff is None
+            or len(versions) != 1
+            or handoff.source_document_id != command.source_document_id
+            or handoff.remark != normalized_remark
+            or handoff.generated_document_id is None
+        ):
+            _format_letter_archive_conflict("Format-letter archive operation has drifted")
+        result = _stored_format_letter_archive_result(
+            db,
+            command=command,
+            handoff=handoff,
+            version=versions[0],
+        )
+        return PendingFormatLetterArchiveOperation(
+            result=result,
+            managed_file_path=None,
+            managed_file_identity=None,
+            reused=True,
+        )
+
+    source = db.get(Document, command.source_document_id)
+    if source is None:
+        raise BusinessError(
+            "FORMAT_LETTER_SOURCE_NOT_FOUND",
+            "FORMAT_LETTER_SOURCE_NOT_FOUND",
+            status_code=404,
+        )
+    context_result = build_format_letter_context(
+        BuildFormatLetterContextCommand(
+            case_id=source.case_id,
+            source_document_id=command.source_document_id,
+            selected_contact_id=command.selected_contact_id,
+        ),
+        db,
+    )
+    rendered = render_format_letter(context_result)
+    case_no = _normalize_text(context_result.context.get("case_no"))
+    if not case_no:
+        _format_letter_archive_conflict("Format-letter archive case number is missing")
+    handoff = LetterHandoff(
+        id=command.operation_id,
+        source_document_id=command.source_document_id,
+        format_letter_mapping_id=context_result.mapping_id,
+        format_letter_template_id=context_result.template_id,
+        client_contact_id=context_result.selected_contact_id,
+        contact_selection_source=context_result.contact_selection_source,
+        salutation_source=context_result.salutation_source,
+        salutation_text=context_result.context.get("salutation_text"),
+        generated_word_path=f"letters/{case_no}/{rendered.file_name}",
+        longxia_handoff_status="READY",
+        remark=normalized_remark,
+    )
+    db.add(handoff)
+    db.flush()
+    db.add(
+        LetterHandoffAttachment(
+            id=str(uuid4()),
+            handoff_id=handoff.id,
+            attachment_id=None,
+            file_name=rendered.file_name,
+            file_path=handoff.generated_word_path,
+            attachment_role="FORMAT_LETTER_WORD",
+            required=True,
+            included=True,
+            sort_order=1,
+        )
+    )
+    db.flush()
+    pending = archive_format_letter(
+        db,
+        handoff_id=handoff.id,
+        context_result=context_result,
+        rendered=rendered,
+        actor_id=command.actor_id,
+    )
+    try:
+        result = _format_letter_archive_result(
+            db,
+            handoff=handoff,
+            evidence_version=pending.evidence_version,
+            file_name=rendered.file_name,
+        )
+    except Exception as exc:
+        _remove_format_letter_archive_file(
+            pending.managed_file_path,
+            expected_identity=pending.managed_file_identity,
+            original_error=exc,
+        )
+        raise
+    return PendingFormatLetterArchiveOperation(
+        result=result,
+        managed_file_path=pending.managed_file_path,
+        managed_file_identity=pending.managed_file_identity,
+        reused=False,
+    )
+
+
 def record_letter_handoff_status(
     db: Session,
     *,
@@ -1854,7 +3860,7 @@ def evaluate_official_work_package(
     *,
     package_id: str,
 ) -> OfficialWorkPackageStatusEvaluationOut:
-    _get_package(db, package_id)
+    package = _get_package(db, package_id)
     checklists = (
         db.execute(
             select(OfficialWorkPackageChecklist).where(
@@ -1909,6 +3915,21 @@ def evaluate_official_work_package(
                 )
             )
 
+    manifest_roles = {manifest.official_file_role for manifest in manifests}
+    if (
+        _normalize_code(package.package_kind) == "FILING_PREP"
+        and "FILING_FULL_WORD" not in manifest_roles
+    ):
+        blockers.append(
+            OfficialWorkPackageBlockerOut(
+                blocker_type="MANIFEST_MISSING",
+                item_code="FILING_FULL_WORD",
+                item_label="FILING_FULL_WORD",
+                status="NEEDS_MAINTENANCE",
+                message="Required package manifest file is missing",
+            )
+        )
+
     receipt_hard_gate_satisfied = _has_archived_receipt(list(receipts))
     if not receipt_hard_gate_satisfied:
         blockers.append(
@@ -1937,6 +3958,168 @@ def evaluate_official_work_package(
     )
 
 
+def _filing_receipt_conflict(message: str) -> None:
+    raise_business_error(
+        "FILING_RECEIPT_EVIDENCE_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _filing_receipt_attachment_hash(attachment: DocAttachment) -> str:
+    file_path = _normalize_text(attachment.file_path)
+    if not file_path:
+        _filing_receipt_conflict("Receipt attachment path is missing")
+    candidate = Path(file_path)
+    backend_root = Path(__file__).resolve().parents[3]
+    configured_storage = Path(get_settings().storage_dir)
+    storage_root = (
+        configured_storage.resolve()
+        if configured_storage.is_absolute()
+        else (backend_root / configured_storage).resolve()
+    )
+    if candidate.is_absolute():
+        resolved = candidate
+    elif file_path.startswith("storage/"):
+        resolved = (backend_root / candidate).resolve()
+    else:
+        resolved = (storage_root / candidate).resolve()
+    if not candidate.is_absolute():
+        try:
+            resolved.relative_to(storage_root)
+        except ValueError:
+            _filing_receipt_conflict("Receipt attachment path is invalid")
+    try:
+        content = resolved.read_bytes()
+    except OSError:
+        _filing_receipt_conflict("Receipt attachment bytes are unavailable")
+    content_hash = f"sha256:{hashlib.sha256(content).hexdigest()}"
+    if attachment.content_hash != content_hash:
+        _filing_receipt_conflict("Receipt attachment content hash is inconsistent")
+    return content_hash
+
+
+def _require_filing_submission_lifecycle_link(
+    db: Session,
+    *,
+    package_id: str,
+    case_id: str,
+    evidence_version_id: str,
+    evidence_content_hash: str,
+    reviewed_at: datetime,
+    submitted_at: datetime,
+    submission_activity_id: str,
+    submission_activity_hash: str,
+) -> CaseActivityEvent:
+    submission_activity = db.get(CaseActivityEvent, submission_activity_id)
+    lifecycle_key = f"filing-external-lifecycle:{package_id}:{submitted_at.isoformat()}"
+    lifecycle_activities = (
+        db.execute(
+            select(CaseActivityEvent)
+            .where(
+                CaseActivityEvent.case_id == case_id,
+                CaseActivityEvent.idempotency_key == lifecycle_key,
+            )
+            .limit(2)
+        )
+        .scalars()
+        .all()
+    )
+    if submission_activity is None or len(lifecycle_activities) != 1:
+        _filing_receipt_conflict("Final filing submission lifecycle link is missing")
+    lifecycle_activity = lifecycle_activities[0]
+    evidence_links = (
+        db.execute(
+            select(CaseActivityEventEvidence)
+            .where(CaseActivityEventEvidence.activity_id == lifecycle_activity.id)
+            .order_by(CaseActivityEventEvidence.evidence_kind)
+            .limit(3)
+        )
+        .scalars()
+        .all()
+    )
+    exact_activity = (
+        submission_activity.case_id == case_id
+        and lifecycle_activity.case_id == case_id
+        and lifecycle_activity.sequence == submission_activity.sequence + 1
+        and lifecycle_activity.lane == ActivityLane.LIFECYCLE.value
+        and lifecycle_activity.activity_type == "FILING_EXTERNAL_SUBMISSION_RECORDED"
+        and lifecycle_activity.confirmation_status == ConfirmationStatus.CONFIRMED.value
+        and lifecycle_activity.actor_id == submission_activity.actor_id
+        and lifecycle_activity.effective_at == submitted_at
+        and lifecycle_activity.occurred_at == submitted_at
+        and lifecycle_activity.idempotency_key == lifecycle_key
+        and lifecycle_activity.old_business_stage == BusinessStage.FILING_PREPARATION.value
+        and lifecycle_activity.new_business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+        and lifecycle_activity.old_official_procedure_stage
+        == OfficialProcedureStage.NOT_SUBMITTED.value
+        and lifecycle_activity.new_official_procedure_stage
+        == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+        and lifecycle_activity.old_legal_status == LegalStatus.NOT_ESTABLISHED.value
+        and lifecycle_activity.new_legal_status == LegalStatus.NOT_ESTABLISHED.value
+    )
+    exact_links = [
+        (
+            link.case_id,
+            link.evidence_kind,
+            link.object_type,
+            link.object_id,
+            link.content_hash,
+            link.captured_at,
+        )
+        for link in evidence_links
+    ] == [
+        (
+            case_id,
+            "FINAL_SUBMISSION_VERSION",
+            "DocumentEvidenceVersion",
+            evidence_version_id,
+            evidence_content_hash,
+            reviewed_at,
+        ),
+        (
+            case_id,
+            "MANUAL_EXTERNAL_SUBMISSION_RECORD",
+            "CaseActivityEvent",
+            submission_activity_id,
+            submission_activity_hash,
+            submitted_at,
+        ),
+    ]
+    if not exact_activity or not exact_links:
+        _filing_receipt_conflict("Final filing submission lifecycle link is inconsistent")
+    return lifecycle_activity
+
+
+def _filing_receipt_projection_matches(
+    case: Case,
+    *,
+    receipt_replay: bool,
+    latest_lifecycle_key: str | None,
+    submission_lifecycle_key: str,
+    replay_receipt_lifecycle_key: str | None,
+) -> bool:
+    if receipt_replay:
+        return (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.PROSECUTION_MANAGEMENT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE.value
+            and case.legal_status == LegalStatus.APPLICATION_PENDING.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+            and replay_receipt_lifecycle_key is not None
+            and latest_lifecycle_key == replay_receipt_lifecycle_key
+        )
+    return (
+        case.status == CaseStatus.WAITING_RECEIPT.value
+        and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+        and case.official_procedure_stage == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+        and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+        and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        and latest_lifecycle_key == submission_lifecycle_key
+    )
+
+
 def record_official_work_package_receipt(
     db: Session,
     *,
@@ -1951,8 +4134,15 @@ def record_official_work_package_receipt(
     note: str | None = None,
     actor_id: str | None = None,
 ) -> OfficialWorkPackageReceipt:
-    _get_package(db, package_id)
+    package = _get_package(db, package_id)
+    case = _get_case(db, package.case_id)
     normalized_receipt_kind = _normalize_code(receipt_kind) or "RECEIPT_PDF"
+    normalized_archive_status = _normalize_code(archive_status) or "PENDING"
+    normalized_receiving_case_no = _normalize_text(receiving_case_no)
+    normalized_submitter = _normalize_text(submitter)
+    normalized_received_file_list = _normalize_text(received_file_list)
+    normalized_note = _normalize_text(note)
+    normalized_actor = _normalize_text(actor_id)
     if normalized_receipt_kind not in OFFICIAL_WORK_PACKAGE_RECEIPT_KINDS:
         raise_business_error(
             "OFFICIAL_WORK_PACKAGE_RECEIPT_KIND_INVALID",
@@ -1961,30 +4151,546 @@ def record_official_work_package_receipt(
             status_code=400,
         )
 
+    attachment = None
     if receipt_attachment_id:
         attachment = _get_attachment(db, receipt_attachment_id)
+        attachment_document = _get_document(db, attachment.document_id)
+        if attachment_document.case_id != package.case_id:
+            raise_business_error(
+                "OFFICIAL_WORK_PACKAGE_RECEIPT_CASE_MISMATCH",
+                "Receipt attachment belongs to another case",
+                details={
+                    "package_id": package.id,
+                    "package_case_id": package.case_id,
+                    "attachment_id": attachment.id,
+                    "attachment_case_id": attachment_document.case_id,
+                },
+                status_code=400,
+            )
+        if (
+            _normalize_code(package.package_kind) == "OA_REPLY"
+            and attachment.document_id != package.reply_document_id
+        ):
+            manifest_id = db.execute(
+                select(OfficialWorkPackageManifest.id)
+                .where(
+                    OfficialWorkPackageManifest.package_id == package.id,
+                    OfficialWorkPackageManifest.attachment_id == attachment.id,
+                    OfficialWorkPackageManifest.present.is_(True),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if manifest_id is None:
+                raise_business_error(
+                    "OA_RECEIPT_ATTACHMENT_SOURCE_INVALID",
+                    "OA receipt attachment is not linked to the reply package",
+                    details={
+                        "package_id": package.id,
+                        "reply_document_id": package.reply_document_id,
+                        "attachment_id": attachment.id,
+                        "attachment_document_id": attachment.document_id,
+                    },
+                    status_code=400,
+                )
+
+    receipt_candidates: list[OfficialWorkPackageReceipt] = []
+    filing_archived = (
+        _normalize_code(package.package_kind) == "FILING_PREP"
+        and normalized_archive_status == "ARCHIVED"
+    )
+    if filing_archived and receipt_attachment_id is not None and received_at is not None:
+        receipt_candidates = (
+            db.execute(
+                select(OfficialWorkPackageReceipt)
+                .where(
+                    OfficialWorkPackageReceipt.package_id == package.id,
+                    OfficialWorkPackageReceipt.receipt_attachment_id == receipt_attachment_id,
+                    OfficialWorkPackageReceipt.received_at == received_at,
+                )
+                .order_by(OfficialWorkPackageReceipt.id)
+                .limit(2)
+            )
+            .scalars()
+            .all()
+        )
+    legacy_projection = (
+        case.business_stage is None
+        and case.official_procedure_stage is None
+        and case.legal_status is None
+        and case.lifecycle_verification_status is None
+        and case.lifecycle_revision is None
+    )
+    filing_lifecycle = filing_archived and (bool(receipt_candidates) or not legacy_projection)
+    receipt_replay = bool(receipt_candidates)
+
+    resolution = None
+    receipt_content_hash = None
+    prior_revision = case.lifecycle_revision
+    if filing_lifecycle:
+        _require_filing_package(package)
+        if (
+            attachment is None
+            or received_at is None
+            or received_at.tzinfo is not None
+            or normalized_actor is None
+        ):
+            _filing_receipt_conflict("Archived filing receipt identity is incomplete")
+        if len(receipt_candidates) > 1:
+            _filing_receipt_conflict("Archived filing receipt identity is ambiguous")
+        receipt_content_hash = _filing_receipt_attachment_hash(attachment)
+        resolution = resolve_filing_final_evidence(package.id, db)
+        if (
+            resolution.final_submitted_at is None
+            or resolution.submission_activity_id is None
+            or resolution.submission_activity_hash is None
+            or type(prior_revision) is not int
+            or prior_revision < 0
+        ):
+            _filing_receipt_conflict("Final filing submission evidence is incomplete")
+        submission_lifecycle = _require_filing_submission_lifecycle_link(
+            db,
+            package_id=package.id,
+            case_id=package.case_id,
+            evidence_version_id=resolution.evidence_version_id,
+            evidence_content_hash=resolution.content_hash,
+            reviewed_at=resolution.reviewed_at,
+            submitted_at=resolution.final_submitted_at,
+            submission_activity_id=resolution.submission_activity_id,
+            submission_activity_hash=resolution.submission_activity_hash,
+        )
+        latest_lifecycle_key = db.execute(
+            select(CaseActivityEvent.idempotency_key)
+            .where(
+                CaseActivityEvent.case_id == package.case_id,
+                CaseActivityEvent.lane == ActivityLane.LIFECYCLE.value,
+            )
+            .order_by(CaseActivityEvent.sequence.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        replay_receipt_lifecycle_key = (
+            f"filing-receipt-archived:{receipt_candidates[0].id}"
+            if receipt_replay
+            else None
+        )
+        if not _filing_receipt_projection_matches(
+            case,
+            receipt_replay=receipt_replay,
+            latest_lifecycle_key=latest_lifecycle_key,
+            submission_lifecycle_key=submission_lifecycle.idempotency_key,
+            replay_receipt_lifecycle_key=replay_receipt_lifecycle_key,
+        ):
+            _filing_receipt_conflict("Case projection conflicts with the archived filing receipt")
+
+    if receipt_replay:
+        receipt = receipt_candidates[0]
+        if (
+            receipt.receipt_kind != normalized_receipt_kind
+            or receipt.receiving_case_no != normalized_receiving_case_no
+            or receipt.submitter != normalized_submitter
+            or receipt.received_file_list != normalized_received_file_list
+            or receipt.archive_status != normalized_archive_status
+            or receipt.note != normalized_note
+            or receipt.created_by != normalized_actor
+            or receipt.updated_by != normalized_actor
+        ):
+            _filing_receipt_conflict("Archived filing receipt replay is inconsistent")
+    else:
+        receipt = OfficialWorkPackageReceipt(
+            id=str(uuid4()),
+            package_id=package_id,
+            receipt_kind=normalized_receipt_kind,
+            receipt_attachment_id=receipt_attachment_id,
+            receiving_case_no=normalized_receiving_case_no,
+            submitter=normalized_submitter,
+            received_at=received_at,
+            received_file_list=normalized_received_file_list,
+            archive_status=normalized_archive_status,
+            note=normalized_note,
+            created_by=normalized_actor,
+            updated_by=normalized_actor,
+        )
+        db.add(receipt)
+
+    if receipt_attachment_id and filing_lifecycle and receipt_replay:
+        if (
+            attachment.is_archive_evidence is not True
+            or attachment.is_receipt_evidence is not (normalized_receipt_kind != "MERGED_PDF")
+            or attachment.updated_by != normalized_actor
+        ):
+            _filing_receipt_conflict("Archived filing receipt attachment state is inconsistent")
+    elif receipt_attachment_id:
         attachment.is_archive_evidence = True
         attachment.is_receipt_evidence = normalized_receipt_kind != "MERGED_PDF"
-        attachment.updated_by = _normalize_text(actor_id)
+        attachment.updated_by = normalized_actor
+    db.flush()
 
-    receipt = OfficialWorkPackageReceipt(
-        id=str(uuid4()),
-        package_id=package_id,
-        receipt_kind=normalized_receipt_kind,
-        receipt_attachment_id=receipt_attachment_id,
-        receiving_case_no=_normalize_text(receiving_case_no),
-        submitter=_normalize_text(submitter),
-        received_at=received_at,
-        received_file_list=_normalize_text(received_file_list),
-        archive_status=_normalize_code(archive_status) or "PENDING",
-        note=_normalize_text(note),
-        created_by=_normalize_text(actor_id),
-        updated_by=_normalize_text(actor_id),
-    )
-    db.add(receipt)
+    if filing_lifecycle:
+        lifecycle_key = f"filing-receipt-archived:{receipt.id}"
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=package.case_id,
+                event_type="FILING_RECEIPT_ARCHIVED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=received_at,
+                occurred_at=received_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=package.case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolution.evidence_version_id,
+                        content_hash=resolution.content_hash,
+                        captured_at=resolution.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=package.case_id,
+                        evidence_kind="VALID_FILING_RECEIPT",
+                        object_type="OfficialWorkPackageReceipt",
+                        object_id=receipt.id,
+                        content_hash=receipt_content_hash,
+                        captured_at=received_at,
+                    ),
+                ),
+                actor_id=normalized_actor,
+                idempotency_key=lifecycle_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        previous_projection = lifecycle_result.previous_projection
+        current_projection = lifecycle_result.current_projection
+        expected_revision = prior_revision if receipt_replay else prior_revision + 1
+        exact_lifecycle = (
+            lifecycle_result.case_id == package.case_id
+            and lifecycle_result.activity_id != resolution.submission_activity_id
+            and lifecycle_result.sequence == expected_revision
+            and lifecycle_result.lifecycle_revision == expected_revision
+            and lifecycle_result.lane is ActivityLane.LIFECYCLE
+            and lifecycle_result.event_type == "FILING_RECEIPT_ARCHIVED"
+            and lifecycle_result.confirmation_status is ConfirmationStatus.CONFIRMED
+            and lifecycle_result.idempotency_key == lifecycle_key
+            and lifecycle_result.reused is receipt_replay
+            and lifecycle_result.legacy_case_status == CaseStatus.WAITING_RECEIPT.value
+            and lifecycle_result.conflict_codes == ()
+            and previous_projection.business_stage is BusinessStage.WAITING_EXTERNAL_RECEIPT
+            and previous_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT
+            and previous_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and previous_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+            and current_projection.business_stage is BusinessStage.PROSECUTION_MANAGEMENT
+            and current_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE
+            and current_projection.legal_status is LegalStatus.APPLICATION_PENDING
+            and current_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+        )
+        if not exact_lifecycle:
+            _filing_receipt_conflict("Lifecycle result conflicts with the archived filing receipt")
+
     db.commit()
-    db.refresh(receipt)
     return receipt
+
+
+def _raise_oa_receipt_archive_evidence_invalid(
+    *,
+    package: OfficialWorkPackage,
+    receipt: OfficialWorkPackageReceipt,
+    reason: str,
+    attachment_id: str | None = None,
+) -> None:
+    raise_business_error(
+        "OA_RECEIPT_ARCHIVE_EVIDENCE_INVALID",
+        "OA receipt archive evidence is invalid",
+        details={
+            "package_id": package.id,
+            "receipt_id": receipt.id,
+            "attachment_id": attachment_id or receipt.receipt_attachment_id,
+            "reason": reason,
+        },
+        status_code=409,
+    )
+
+
+def _revalidate_oa_archived_receipts(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+) -> list[str]:
+    archived_receipts = [
+        receipt
+        for receipt in (
+            db.execute(
+                select(OfficialWorkPackageReceipt)
+                .where(OfficialWorkPackageReceipt.package_id == package.id)
+                .order_by(
+                    OfficialWorkPackageReceipt.created_at.asc(),
+                    OfficialWorkPackageReceipt.id.asc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if _normalize_code(receipt.archive_status) in RECEIPT_ARCHIVED_STATUSES
+    ]
+    if not archived_receipts:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_EVIDENCE_INVALID",
+            "OA receipt archive evidence is missing",
+            details={"package_id": package.id, "reason": "ARCHIVED_RECEIPT_MISSING"},
+            status_code=409,
+        )
+
+    receipt_ids: list[str] = []
+    for receipt in archived_receipts:
+        if not receipt.receipt_attachment_id:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                reason="RECEIPT_ATTACHMENT_MISSING",
+            )
+        attachment = db.execute(
+            select(DocAttachment).where(DocAttachment.id == receipt.receipt_attachment_id)
+        ).scalar_one_or_none()
+        if attachment is None:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                reason="RECEIPT_ATTACHMENT_NOT_FOUND",
+            )
+        attachment_document = db.execute(
+            select(Document).where(Document.id == attachment.document_id)
+        ).scalar_one_or_none()
+        if attachment_document is None:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                attachment_id=attachment.id,
+                reason="RECEIPT_DOCUMENT_NOT_FOUND",
+            )
+        if attachment_document.case_id != package.case_id:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                attachment_id=attachment.id,
+                reason="RECEIPT_CASE_MISMATCH",
+            )
+        if attachment.document_id != package.reply_document_id:
+            manifest_id = db.execute(
+                select(OfficialWorkPackageManifest.id)
+                .where(
+                    OfficialWorkPackageManifest.package_id == package.id,
+                    OfficialWorkPackageManifest.attachment_id == attachment.id,
+                    OfficialWorkPackageManifest.present.is_(True),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if manifest_id is None:
+                _raise_oa_receipt_archive_evidence_invalid(
+                    package=package,
+                    receipt=receipt,
+                    attachment_id=attachment.id,
+                    reason="OA_RECEIPT_SOURCE_INVALID",
+                )
+        receipt_ids.append(receipt.id)
+    return receipt_ids
+
+
+def _prepare_oa_receipt_archive_event(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+) -> tuple[Case, Document, Task, str, list[str]] | None:
+    receipt_ids = _revalidate_oa_archived_receipts(db, package=package)
+    if not package.source_document_id:
+        return None
+
+    source = db.execute(
+        select(Document).where(Document.id == package.source_document_id)
+    ).scalar_one_or_none()
+    template = (
+        db.execute(select(DocTemplate).where(DocTemplate.id == source.doc_template_id))
+        .scalars()
+        .one_or_none()
+        if source and source.doc_template_id
+        else None
+    )
+    semantics = resolve_document_semantics(template)
+    expected_case_status = _normalize_code(semantics.case_status_effect)
+    restore_status = _normalize_code(semantics.archive_status_restore)
+    if (
+        source is None
+        or source.case_id != package.case_id
+        or _normalize_code(source.direction) != "IN"
+        or semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "OA_REPLY"
+        or semantics.completion_event != "OFFICIAL_RECEIPT_ARCHIVED"
+        or expected_case_status not in {"OA1", "OA2"}
+        or restore_status != "SUB_EXAM"
+        or not semantics.task_template_code
+    ):
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_SOURCE_INVALID",
+            "OA receipt archive source semantics are invalid",
+            details={
+                "package_id": package.id,
+                "source_document_id": package.source_document_id,
+                "catalog_status": semantics.catalog_status,
+                "execution_behavior": semantics.execution_behavior,
+                "completion_event": semantics.completion_event,
+                "case_status_effect": semantics.case_status_effect,
+                "archive_status_restore": semantics.archive_status_restore,
+            },
+            status_code=409,
+        )
+
+    task_template_id = db.execute(
+        select(TaskTemplate.id).where(TaskTemplate.code == semantics.task_template_code)
+    ).scalar_one_or_none()
+    matching_tasks = (
+        db.execute(
+            select(Task)
+            .where(
+                Task.case_id == package.case_id,
+                Task.document_id == source.id,
+                Task.task_template_id == task_template_id,
+                Task.status == TaskStatus.OPEN.value,
+            )
+            .order_by(Task.created_at.asc(), Task.id.asc())
+        )
+        .scalars()
+        .all()
+        if task_template_id
+        else []
+    )
+    if len(matching_tasks) != 1:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_TASK_MATCH_INVALID",
+            "OA receipt archive requires exactly one matching open task",
+            details={
+                "package_id": package.id,
+                "source_document_id": source.id,
+                "task_template_code": semantics.task_template_code,
+                "matching_open_task_count": len(matching_tasks),
+                "matching_open_task_ids": [task.id for task in matching_tasks],
+            },
+            status_code=409,
+        )
+
+    case = _get_case(db, package.case_id)
+    if _normalize_code(case.status) != expected_case_status:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_CASE_STATE_INVALID",
+            "OA receipt archive case state does not match source semantics",
+            details={
+                "package_id": package.id,
+                "case_id": case.id,
+                "case_status": case.status,
+                "expected_case_status": expected_case_status,
+            },
+            status_code=409,
+        )
+    return case, source, matching_tasks[0], restore_status, receipt_ids
+
+
+def _apply_oa_receipt_archive_event(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str | None,
+    event_context: tuple[Case, Document, Task, str, list[str]],
+) -> None:
+    case, source, task, restore_status, receipt_ids = event_context
+    from_case_status = case.status
+    receipt = db.execute(
+        select(OfficialWorkPackageReceipt).where(OfficialWorkPackageReceipt.id == receipt_ids[0])
+    ).scalar_one()
+    receipt_snapshot = {
+        "archive_status": receipt.archive_status,
+        "id": receipt.id,
+        "note": receipt.note,
+        "package_id": receipt.package_id,
+        "received_at": receipt.received_at.isoformat() if receipt.received_at else None,
+        "received_file_list": receipt.received_file_list,
+        "receipt_attachment_id": receipt.receipt_attachment_id,
+        "receipt_kind": receipt.receipt_kind,
+        "receiving_case_no": receipt.receiving_case_no,
+        "submitter": receipt.submitter,
+    }
+    receipt_content = json.dumps(
+        receipt_snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    captured_at = receipt.received_at or receipt.created_at
+    if captured_at.tzinfo is not None:
+        captured_at = captured_at.astimezone(timezone.utc).replace(tzinfo=None)
+    apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="OA_RECEIPT_ARCHIVED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=captured_at,
+            occurred_at=captured_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="OA_RECEIPT",
+                    object_type="OfficialWorkPackageReceipt",
+                    object_id=receipt.id,
+                    content_hash=(
+                        "sha256:" + hashlib.sha256(receipt_content.encode("utf-8")).hexdigest()
+                    ),
+                    captured_at=captured_at,
+                ),
+            ),
+            actor_id=_normalize_text(actor_id) or "",
+            idempotency_key=f"oa-receipt-archived:{receipt.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={},
+        ),
+        db,
+    )
+    source.reply_date = captured_at.date()
+    evidence_note = json.dumps(
+        {
+            "actor_id": _normalize_text(actor_id),
+            "case_transition": {
+                "from_status": from_case_status,
+                "to_status": restore_status,
+            },
+            "closed_task_id": task.id,
+            "event": "OFFICIAL_RECEIPT_ARCHIVED",
+            "receipt_ids": receipt_ids,
+            "source_document_id": source.id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    task.status = TaskStatus.DONE.value
+    task.done_at = datetime.utcnow()
+    db.add(
+        TaskLog(
+            id=str(uuid4()),
+            task_id=task.id,
+            action=TaskAction.CLOSE.value,
+            from_status=TaskStatus.OPEN.value,
+            to_status=TaskStatus.DONE.value,
+            remark=evidence_note,
+        )
+    )
+    _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="ARCHIVE",
+        item_code="OFFICIAL_RECEIPT_ARCHIVED",
+        item_label="官方回执已归档",
+        status="DONE",
+        required=False,
+        sort_order=70,
+        evidence_note=evidence_note,
+    )
 
 
 def _validate_archive_override(
@@ -2032,8 +4738,20 @@ def archive_official_work_package(
     follow_up_note: str | None = None,
 ) -> OfficialWorkPackage:
     package = _get_package(db, package_id)
+    if _normalize_code(package.status) == "ARCHIVED":
+        return package
     evaluation = evaluate_official_work_package(db, package_id=package_id)
     if evaluation.can_archive:
+        event_context = None
+        if _normalize_code(package.package_kind) == "OA_REPLY":
+            event_context = _prepare_oa_receipt_archive_event(db, package=package)
+        if event_context is not None:
+            _apply_oa_receipt_archive_event(
+                db,
+                package=package,
+                actor_id=actor_id,
+                event_context=event_context,
+            )
         package.status = "ARCHIVED"
         db.commit()
         db.refresh(package)

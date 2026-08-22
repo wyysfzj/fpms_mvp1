@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.modules.cases.models import Case
 from app.modules.masterdata.applicants.models import Applicant
 
 
@@ -57,6 +58,7 @@ def _case_payload(session_factory: sessionmaker, **overrides) -> dict:
     applicant_id = _seed_applicant(session_factory)
     payload = {
         "case_no": _case_no("DATERULE"),
+        "fee_reduction": "0",
         "applicants": _applicants_payload(applicant_id),
     }
     payload.update(overrides)
@@ -102,19 +104,24 @@ def _create_case_with_priority(
     )
 
 
+def _seed_case_status(session_factory: sessionmaker, *, case_id: str, status: str) -> None:
+    with session_factory() as db:
+        case = db.query(Case).filter(Case.id == case_id).one()
+        case.status = status
+        db.commit()
+
+
 def test_create_rejects_published_missing_required_fields(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
-    response = client.post(
-        "/api/v1/cases",
+    case = _create_case(client, auth_headers, session_factory)
+    _seed_case_status(session_factory, case_id=case["id"], status="PUBLISHED")
+    response = client.put(
+        f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
-        json=_case_payload(
-            session_factory,
-            case_no=_case_no("PUBLISHED"),
-            status="PUBLISHED",
-        ),
+        json={"title_cn": "Published fixture missing required fields"},
     )
 
     payload = _assert_error(response, 400, "CASE_PUBLISHED_FIELDS_REQUIRED")
@@ -128,14 +135,12 @@ def test_create_rejects_granted_missing_required_fields(
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
-    response = client.post(
-        "/api/v1/cases",
+    case = _create_case(client, auth_headers, session_factory)
+    _seed_case_status(session_factory, case_id=case["id"], status="GRANTED")
+    response = client.put(
+        f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
-        json=_case_payload(
-            session_factory,
-            case_no=_case_no("GRANTED"),
-            status="GRANTED",
-        ),
+        json={"title_cn": "Granted fixture missing required fields"},
     )
 
     payload = _assert_error(response, 400, "CASE_GRANTED_FIELDS_REQUIRED")
@@ -164,7 +169,6 @@ def test_create_preserves_priority_structural_errors(
         json=_case_payload(
             session_factory,
             case_no=_case_no("PRIORITY"),
-            status="PUBLISHED",
             priorities=[{"seq": 1, "country_code": "CN", "prio_no": "202610000002"}],
         ),
     )
@@ -180,12 +184,12 @@ def test_update_rejects_invalid_app_no_when_required(
     app_no: str,
 ) -> None:
     case = _create_case(client, auth_headers, session_factory)
+    _seed_case_status(session_factory, case_id=case["id"], status="PUBLISHED")
 
     response = client.put(
         f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
         json={
-            "status": "PUBLISHED",
             "filing_date": "2026-03-15",
             "app_no": app_no,
             "pub_no": "CN202610000001A",
@@ -208,12 +212,12 @@ def test_update_rejects_filing_before_priority(
         session_factory,
         prio_date="2026-03-15",
     )
+    _seed_case_status(session_factory, case_id=case["id"], status="PUBLISHED")
 
     response = client.put(
         f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
         json={
-            "status": "PUBLISHED",
             "filing_date": "2026-03-14",
             "app_no": "CN202610000003",
             "pub_no": "CN202610000003A",
@@ -238,12 +242,12 @@ def test_update_allows_filing_equal_priority_and_trims_app_no(
         session_factory,
         prio_date="2026-03-15",
     )
+    _seed_case_status(session_factory, case_id=case["id"], status="PUBLISHED")
 
     response = client.put(
         f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
         json={
-            "status": "PUBLISHED",
             "filing_date": "2026-03-15",
             "app_no": "  CN202610000004  ",
             "pub_no": "CN202610000004A",
@@ -264,12 +268,12 @@ def test_update_allows_minimal_granted_payload(
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers, session_factory)
+    _seed_case_status(session_factory, case_id=case["id"], status="GRANTED")
 
     response = client.put(
         f"/api/v1/cases/{case['id']}",
         headers=auth_headers,
         json={
-            "status": "GRANTED",
             "filing_date": "2026-03-20",
             "app_no": "CN202610000005",
             "pub_no": "CN202610000005A",

@@ -11,6 +11,7 @@ from app.modules.cases.models import T_CaseAgentSplit
 from app.modules.commission.models import Commission
 from app.modules.fees.models import FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_agent_user(session_factory: sessionmaker, username_prefix: str) -> str:
@@ -98,7 +99,6 @@ def _create_case(
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "提成测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
             "fee_reduction": "0.85",
@@ -196,6 +196,7 @@ def test_service_bill_generates_split_commission_readiness(
     service_rate_id = _seed_service_fee_rate(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     main_agent_id = _create_agent_user(session_factory, "commission-main")
     co_agent_id = _create_agent_user(session_factory, "commission-co")
     rule_id = _create_commission_rule(client, auth_headers)

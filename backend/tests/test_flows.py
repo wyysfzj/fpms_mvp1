@@ -19,6 +19,7 @@ def test_happy_path_clients_cases_tasks_fees(client, auth_headers) -> None:
 
     case_payload = {
         "case_no": f"CASE-{uuid4().hex[:8]}",
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

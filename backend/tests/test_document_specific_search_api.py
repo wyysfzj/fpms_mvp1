@@ -42,6 +42,7 @@ def _create_case(
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "client_id": client_id,
             "title_cn": f"专项查询案件-{case_no}",
         },
@@ -73,7 +74,15 @@ def _create_document(
     direction: str,
     doc_date: str,
     title: str,
+    official_due_date: str | None = None,
 ) -> dict:
+    deadline_fields = {}
+    if official_due_date is not None:
+        deadline_fields = {
+            "official_due_date": official_due_date,
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
+        }
     resp = client.post(
         DOC_BASE,
         headers=auth_headers,
@@ -84,6 +93,7 @@ def _create_document(
             "direction": direction,
             "doc_date": doc_date,
             "title": title,
+            **deadline_fields,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -130,6 +140,7 @@ def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
         direction="IN",
         doc_date="2026-02-01",
         title=f"审查意见通知书-{tag}",
+        official_due_date="2026-06-30",
     )
     _create_document(
         client,
@@ -150,6 +161,7 @@ def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
         direction="IN",
         doc_date="2026-02-03",
         title=f"审查意见通知书-其他-{tag}",
+        official_due_date="2026-06-30",
     )
 
     resp = client.get(
@@ -189,6 +201,7 @@ def test_document_specific_search_filters_need_reply_and_replied(
         direction="IN",
         doc_date="2026-03-01",
         title=f"待回复来文-{tag}",
+        official_due_date="2026-06-30",
     )
     replied_doc = _create_document(
         client,
@@ -199,6 +212,7 @@ def test_document_specific_search_filters_need_reply_and_replied(
         direction="IN",
         doc_date="2026-03-02",
         title=f"已回复来文-{tag}",
+        official_due_date="2026-06-30",
     )
 
     update_resp = client.put(
@@ -248,6 +262,7 @@ def test_document_specific_search_filters_by_independent_doctype_multi_select(
         direction="IN",
         doc_date="2026-03-11",
         title=f"官方来文-{tag}",
+        official_due_date="2026-06-30",
     )
     _create_document(
         client,
@@ -303,6 +318,7 @@ def test_document_specific_search_filters_by_has_attachment_true(
         direction="IN",
         doc_date="2026-03-21",
         title=f"有附件来文-{tag}",
+        official_due_date="2026-06-30",
     )
     _add_attachment(
         client,
@@ -319,6 +335,7 @@ def test_document_specific_search_filters_by_has_attachment_true(
         direction="IN",
         doc_date="2026-03-22",
         title=f"无附件来文-{tag}",
+        official_due_date="2026-06-30",
     )
 
     resp = client.get(
@@ -350,6 +367,7 @@ def test_document_specific_search_filters_by_has_attachment_false(
         direction="IN",
         doc_date="2026-03-23",
         title=f"有附件来文-否-{tag}",
+        official_due_date="2026-06-30",
     )
     _add_attachment(
         client,
@@ -366,6 +384,7 @@ def test_document_specific_search_filters_by_has_attachment_false(
         direction="IN",
         doc_date="2026-03-24",
         title=f"无附件来文-否-{tag}",
+        official_due_date="2026-06-30",
     )
 
     resp = client.get(
@@ -397,6 +416,7 @@ def test_document_specific_search_without_has_attachment_keeps_all_matching_rows
         direction="IN",
         doc_date="2026-03-25",
         title=f"有附件来文-省略-{tag}",
+        official_due_date="2026-06-30",
     )
     _add_attachment(
         client,
@@ -413,6 +433,7 @@ def test_document_specific_search_without_has_attachment_keeps_all_matching_rows
         direction="IN",
         doc_date="2026-03-26",
         title=f"无附件来文-省略-{tag}",
+        official_due_date="2026-06-30",
     )
 
     resp = client.get(DOC_BASE, headers=auth_headers, params={"case_no": case_row["case_no"]})
@@ -442,6 +463,9 @@ def test_document_create_and_update_persist_independent_doctype(
             "doc_date": "2026-03-20",
             "title": f"独立类型文件-{tag}",
             "ref_no": "REF-KEEP-001",
+            "official_due_date": "2026-06-30",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
     )
     assert create_resp.status_code == 201, create_resp.text

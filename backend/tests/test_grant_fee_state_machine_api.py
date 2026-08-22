@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.documents.models import Document
 from app.modules.fees.models import T_GrantFeeTask
 
 STATE_BASE = "/api/v1/grant-fee-tasks"
+GRANT_FEE_TEST_ACTOR_ID = "grant-fee-state-machine-actor"
 
 
 def _uid(prefix: str) -> str:
@@ -24,6 +27,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "Grant Fee State Machine Case",
         },
         headers=auth_headers,
@@ -38,8 +42,6 @@ def _set_case_grant_fields(
     case_id: str,
     complete: bool,
 ) -> None:
-    from app.modules.cases.models import Case
-
     with session_factory() as db:
         case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
         case.status = "GRANT_PENDING"
@@ -62,9 +64,21 @@ def _insert_task(
     **overrides,
 ) -> str:
     with session_factory() as db:
+        source_document = Document(
+            case_id=case_id,
+            doc_type="OFFICIAL_NOTICE",
+            direction="IN",
+            doc_date=date(2026, 4, 1),
+            title="授权费状态机测试来源文书",
+        )
+        db.add(source_document)
+        db.flush()
         task = T_GrantFeeTask(
             case_id=case_id,
             due_date=overrides.pop("due_date", date(2026, 4, 30)),
+            source_document_id=source_document.id,
+            deadline_source="MANUAL_OFFICIAL_NOTICE",
+            deadline_confirmed_at=datetime(2026, 4, 1, 9, 0),
             gov_fee_amt=overrides.pop("gov_fee_amt", 0),
             service_fee_amt=overrides.pop("service_fee_amt", 0),
             currency=overrides.pop("currency", "CNY"),
@@ -74,6 +88,8 @@ def _insert_task(
             notice_sent=overrides.pop("notice_sent", False),
             is_overdue=overrides.pop("is_overdue", False),
             remark=overrides.pop("remark", None),
+            created_by=GRANT_FEE_TEST_ACTOR_ID,
+            updated_by=GRANT_FEE_TEST_ACTOR_ID,
         )
         db.add(task)
         db.commit()
@@ -93,6 +109,10 @@ def _assert_state(
     assert payload["case_id"] == case_id
     assert payload["state"] == state
     assert payload["allowed_actions"] == allowed_actions
+    assert payload["lineage_status"] == "CONFIRMED"
+    assert payload["source_document_id"]
+    assert payload["deadline_source"] == "MANUAL_OFFICIAL_NOTICE"
+    assert payload["deadline_confirmed_at"] == "2026-04-01T09:00:00"
     assert set(payload) == {
         "task_id",
         "case_id",
@@ -103,6 +123,14 @@ def _assert_state(
         "notice_sent",
         "is_overdue",
         "allowed_actions",
+        "trigger_rule",
+        "deadline_rule",
+        "fee_basis",
+        "fee_node_explanation",
+        "lineage_status",
+        "source_document_id",
+        "deadline_source",
+        "deadline_confirmed_at",
     }
 
 
@@ -197,7 +225,7 @@ def test_grant_fee_state_machine_supports_pay_and_done_flow(
     assert task.notify_count == 4
 
 
-def test_grant_fee_done_advances_case_to_granted_when_grant_fields_present(
+def test_grant_fee_done_records_fee_activity_without_granting_case(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -221,9 +249,30 @@ def test_grant_fee_done_advances_case_to_granted_when_grant_fields_present(
     assert done_resp.status_code == 200, done_resp.text
     assert done_resp.json()["state"] == "DONE"
 
-    case_resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
-    assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    with session_factory() as db:
+        case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
+        activities = (
+            db.execute(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.case_id == case_id,
+                    CaseActivityEvent.activity_type == "GRANT_FEE_TASK_DONE",
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert case.status == "GRANT_PENDING"
+    assert len(activities) == 1
+    assert (
+        activities[0].lane,
+        activities[0].activity_type,
+        activities[0].actor_id,
+    ) == (
+        "FEE",
+        "GRANT_FEE_TASK_DONE",
+        GRANT_FEE_TEST_ACTOR_ID,
+    )
 
 
 def test_grant_fee_done_does_not_advance_case_without_required_grant_fields(

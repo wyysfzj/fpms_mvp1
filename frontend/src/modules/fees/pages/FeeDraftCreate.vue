@@ -32,6 +32,25 @@
             class="mode-alert"
           />
 
+          <div
+            v-if="hasObligationQuery"
+            class="obligation-card"
+            data-testid="linked-fee-obligation"
+          >
+            <h4 class="obligation-card-title">关联缴费义务</h4>
+            <p v-if="obligationLoading">正在读取缴费义务详情……</p>
+            <template v-else-if="linkedObligation">
+              <p>义务编号：{{ linkedObligation.id }}</p>
+              <p>来源活动：{{ linkedObligation.source.source_activity_id }}</p>
+              <p>来源文档：{{ linkedObligation.source.source_document_id || '无' }}</p>
+              <p>来源状态：{{ linkedObligation.source.status }}</p>
+              <p>客户指示：{{ linkedObligation.statuses.client_instruction_status }}</p>
+            </template>
+            <p v-if="linkedDraftBlockMessage" class="obligation-block-message">
+              {{ linkedDraftBlockMessage }}
+            </p>
+          </div>
+
           <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
             <el-input
               v-model.trim="form.case_id"
@@ -82,7 +101,12 @@
 
         <div class="form-actions">
           <el-button @click="goBack">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="handleSubmit">
+          <el-button
+            type="primary"
+            :loading="saving"
+            :disabled="linkedDraftBlocked"
+            @click="handleSubmit"
+          >
             {{ isApplyFeeMode ? '生成申请费草稿' : '创建草稿' }}
           </el-button>
         </div>
@@ -92,12 +116,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, onMounted, ref, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { createFeeDraft, generateApplyFeeDraft } from '../../../api/fees'
-import type { FeeDraftCreatePayload } from '../../../api/fees.types'
+import { createFeeDraft, generateApplyFeeDraft, getFeeObligation } from '../../../api/fees'
+import type { FeeDraftCreatePayload, FeeObligationDetail } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -108,6 +132,14 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const obligationLoading = ref(false)
+const linkedObligation = ref<FeeObligationDetail | null>(null)
+
+const obligationQuery = route.query.obligation_id
+const hasObligationQuery = obligationQuery !== undefined
+const obligationId = typeof obligationQuery === 'string' && obligationQuery !== ''
+  ? obligationQuery
+  : null
 
 const form = reactive({
   case_id: String(route.query.case_id || ''),
@@ -117,6 +149,25 @@ const form = reactive({
 })
 
 const isApplyFeeMode = computed(() => String(route.query.draft_type || '').toUpperCase() === 'APPLY_FEE')
+const linkedDraftBlocked = computed(() => hasObligationQuery && (
+  obligationId === null
+  || linkedObligation.value?.id !== obligationId
+  || linkedObligation.value.statuses.client_instruction_status !== 'PAY'
+  || isApplyFeeMode.value
+))
+const linkedDraftBlockMessage = computed(() => {
+  if (!hasObligationQuery || obligationLoading.value) return null
+  if (obligationId === null) return '链接中缺少唯一有效的缴费义务编号，无法创建关联草稿。'
+  if (!linkedObligation.value) return '缴费义务详情加载失败，无法创建关联草稿。'
+  if (linkedObligation.value.id !== obligationId) {
+    return '后端返回的缴费义务与链接不一致，无法创建关联草稿。'
+  }
+  if (isApplyFeeMode.value) return '关联缴费义务仅支持创建普通费用草稿。'
+  if (linkedObligation.value.statuses.client_instruction_status !== 'PAY') {
+    return '仅当客户指示为 PAY 时才可创建关联草稿。'
+  }
+  return null
+})
 
 const rules: FormRules = {
   case_id: [
@@ -127,12 +178,27 @@ const rules: FormRules = {
   ],
 }
 
+onMounted(async () => {
+  if (!hasObligationQuery || obligationId === null) return
+
+  obligationLoading.value = true
+  try {
+    linkedObligation.value = await getFeeObligation(obligationId)
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    obligationLoading.value = false
+  }
+})
+
 function goBack() {
   router.push('/fees/drafts')
 }
 
 async function handleSubmit() {
   fieldErrors.value = new Map()
+
+  if (linkedDraftBlocked.value) return
 
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -170,6 +236,9 @@ async function createGenericDraft() {
   if (form.client_id) {
     payload.client_id = form.client_id
   }
+  if (obligationId) {
+    payload.obligation_id = obligationId
+  }
   return createFeeDraft(payload)
 }
 </script>
@@ -200,5 +269,25 @@ async function createGenericDraft() {
 
 .mode-alert {
   margin-bottom: 16px;
+}
+
+.obligation-card {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-body);
+}
+
+.obligation-card-title {
+  margin: 0 0 10px;
+}
+
+.obligation-card p {
+  margin: 4px 0;
+}
+
+.obligation-block-message {
+  color: var(--color-warning);
 }
 </style>

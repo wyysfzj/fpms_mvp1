@@ -7,11 +7,19 @@ import type {
     HistoricalPayListCreateResult,
     ManualGovPaymentCreatePayload,
     ManualGovPaymentCreateResult,
+    OfficialPaymentWorkbookGeneratePayload,
+    OfficialWorkbookAcceptancePayload,
+    OfficialWorkbookAcceptanceResult,
+    OfficialWorkbookArtifact,
     PayListDetailResult,
     PayListListResult,
     PayListMarkPaidPayload,
     PayListMarkPaidResult,
     PayListQuery,
+    PayListExportArtifactInfo,
+    PayListInternalArtifactInfo,
+    PayListOfficialEvidenceInfo,
+    PayListOfficialWorkbookInfo,
     GovPaymentsApiError,
     GovPaymentsErrorCategory,
     PayListCreatePayload,
@@ -116,6 +124,7 @@ interface BackendPayListDetailResult {
         id: number
         pay_list_id: number
         case_id: string
+        case_no?: string | null
         fee_item_id: string | null
         status: string
         currency: string
@@ -124,6 +133,8 @@ interface BackendPayListDetailResult {
         official_receipt_no: string | null
         remark: string | null
     }[]
+    export_artifacts?: PayListExportArtifactInfo[]
+    official_workbook?: PayListOfficialWorkbookInfo
 }
 
 interface BackendHistoricalPayListCreateResult {
@@ -192,6 +203,247 @@ function isApiError(error: unknown): error is ApiError {
         && typeof candidate.code === 'string'
         && typeof candidate.message === 'string'
     )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function officialWorkbookAdapterError(
+    status: number,
+    field: string,
+    reason: string,
+): ApiError {
+    return {
+        status,
+        code: 'OFFICIAL_WORKBOOK_RESPONSE_INVALID',
+        message: '官方缴费工作簿响应格式无效。',
+        details: { field, reason },
+    }
+}
+
+function rawResponseHeader(headers: unknown, name: string): unknown {
+    return isRecord(headers) ? headers[name] : undefined
+}
+
+function containsHeaderControlCharacter(value: string): boolean {
+    return Array.from(value).some((character) => {
+        const codePoint = character.codePointAt(0)
+        return codePoint !== undefined && (codePoint <= 31 || codePoint === 127)
+    })
+}
+
+const officialWorkbookUuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function decodeOfficialWorkbookHeader(
+    headers: unknown,
+    name: string,
+    status: number,
+): string {
+    const raw = rawResponseHeader(headers, name)
+    if (typeof raw !== 'string' || raw.length === 0) {
+        throw officialWorkbookAdapterError(status, name, 'missing')
+    }
+
+    let decoded: string
+    try {
+        decoded = decodeURIComponent(raw)
+    } catch {
+        throw officialWorkbookAdapterError(status, name, 'invalid_percent_encoding')
+    }
+    if (!decoded || containsHeaderControlCharacter(decoded)) {
+        throw officialWorkbookAdapterError(status, name, 'invalid_value')
+    }
+    return decoded
+}
+
+function decodeOfficialWorkbookFilename(
+    headers: unknown,
+    status: number,
+): string {
+    const field = 'content-disposition'
+    const raw = rawResponseHeader(headers, field)
+    if (typeof raw !== 'string') {
+        throw officialWorkbookAdapterError(status, field, 'missing')
+    }
+    const match = /^attachment;\s*filename\*=UTF-8''([^;]+)$/i.exec(raw)
+    if (!match) {
+        throw officialWorkbookAdapterError(status, field, 'invalid_rfc5987_value')
+    }
+
+    let filename: string
+    try {
+        filename = decodeURIComponent(match[1])
+    } catch {
+        throw officialWorkbookAdapterError(status, field, 'invalid_percent_encoding')
+    }
+    if (
+        !filename
+        || filename === '.'
+        || filename === '..'
+        || filename.includes('/')
+        || filename.includes('\\')
+        || containsHeaderControlCharacter(filename)
+    ) {
+        throw officialWorkbookAdapterError(status, field, 'unsafe_filename')
+    }
+    return filename
+}
+
+async function decodeOfficialWorkbookApiError(
+    status: number,
+    body: Blob,
+    headers: unknown,
+): Promise<ApiError> {
+    let parsed: unknown
+    try {
+        parsed = JSON.parse(await body.text())
+    } catch {
+        throw officialWorkbookAdapterError(status, 'error', 'invalid_blob_error_envelope')
+    }
+    const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined
+    if (
+        !envelope
+        || typeof envelope.code !== 'string'
+        || typeof envelope.message !== 'string'
+        || (
+            envelope.details !== undefined
+            && envelope.details !== null
+            && !isRecord(envelope.details)
+        )
+    ) {
+        throw officialWorkbookAdapterError(status, 'error', 'invalid_blob_error_envelope')
+    }
+
+    const requestId = rawResponseHeader(headers, 'x-request-id')
+    return {
+        status,
+        code: envelope.code,
+        message: envelope.message,
+        ...(isRecord(envelope.details) ? { details: envelope.details } : {}),
+        ...(typeof requestId === 'string' ? { requestId } : {}),
+    }
+}
+
+export function normalizeOfficialPaymentWorkbookRequestError(error: unknown): ApiError {
+    if (isApiError(error)) return error
+    return officialWorkbookAdapterError(0, 'request', 'unexpected_error')
+}
+
+export async function parseOfficialPaymentWorkbookResponse(response: {
+    status: number
+    data: Blob
+    headers: unknown
+}): Promise<OfficialWorkbookArtifact> {
+    if ([400, 404, 409, 422].includes(response.status)) {
+        throw await decodeOfficialWorkbookApiError(
+            response.status,
+            response.data,
+            response.headers,
+        )
+    }
+    if (response.status !== 200 && response.status !== 201) {
+        throw officialWorkbookAdapterError(response.status, 'status', 'unexpected_status')
+    }
+    if (!(response.data instanceof Blob)) {
+        throw officialWorkbookAdapterError(response.status, 'body', 'not_a_blob')
+    }
+
+    const artifactId = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-artifact-id',
+        response.status,
+    )
+    const contentSha256 = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-content-sha256',
+        response.status,
+    )
+    const templateVersion = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-template-version',
+        response.status,
+    )
+    const templateContentSha256 = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-template-content-sha256',
+        response.status,
+    )
+    const workbookInputVersionId = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-workbook-input-version-id',
+        response.status,
+    )
+    const disposition = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-workbook-disposition',
+        response.status,
+    )
+    if (!officialWorkbookUuidPattern.test(artifactId)) {
+        throw officialWorkbookAdapterError(response.status, 'x-fpms-artifact-id', 'invalid_uuid')
+    }
+    if (!/^[0-9a-f]{64}$/i.test(contentSha256)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-content-sha256',
+            'invalid_sha256',
+        )
+    }
+    if (!/^[0-9a-f]{64}$/i.test(templateContentSha256)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-template-content-sha256',
+            'invalid_sha256',
+        )
+    }
+    if (!officialWorkbookUuidPattern.test(workbookInputVersionId)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-workbook-input-version-id',
+            'invalid_uuid',
+        )
+    }
+    if (
+        (disposition !== 'CREATED' || response.status !== 201)
+        && (disposition !== 'REUSED' || response.status !== 200)
+    ) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-workbook-disposition',
+            'invalid_status_disposition',
+        )
+    }
+
+    const rawGeneratedStatus = rawResponseHeader(response.headers, 'x-fpms-generated-status')
+    let generatedStatus: 'GENERATED' | undefined
+    if (rawGeneratedStatus !== undefined) {
+        const decodedGeneratedStatus = decodeOfficialWorkbookHeader(
+            response.headers,
+            'x-fpms-generated-status',
+            response.status,
+        )
+        if (decodedGeneratedStatus !== 'GENERATED') {
+            throw officialWorkbookAdapterError(
+                response.status,
+                'x-fpms-generated-status',
+                'invalid_generated_status',
+            )
+        }
+        generatedStatus = decodedGeneratedStatus
+    }
+
+    return {
+        filename: decodeOfficialWorkbookFilename(response.headers, response.status),
+        artifact_id: artifactId,
+        content_sha256: contentSha256,
+        template_version: templateVersion,
+        template_content_sha256: templateContentSha256,
+        workbook_input_version_id: workbookInputVersionId,
+        disposition,
+        ...(generatedStatus === undefined ? {} : { generated_status: generatedStatus }),
+        blob: response.data,
+    }
 }
 
 function resolveGovPaymentsErrorCategory(status: number): GovPaymentsErrorCategory {
@@ -336,16 +588,33 @@ export async function listPayLists(
 
 export async function getPayListDetail(payListId: number): Promise<PayListDetailResult> {
     const response = await http.get<BackendPayListDetailResult>(`/pay-lists/${payListId}`)
+    const payment = response.data.gov_payments.map((item) => ({
+        ...item,
+        paid_amount: asNumber(item.paid_amount),
+    }))
 
     return {
         pay_list: {
             ...response.data.pay_list,
             total_amount: asNumber(response.data.pay_list.total_amount),
         },
-        gov_payments: response.data.gov_payments.map((item) => ({
-            ...item,
-            paid_amount: asNumber(item.paid_amount),
-        })),
+        gov_payments: payment,
+        payment,
+        ...(response.data.export_artifacts === undefined
+            ? {}
+            : {
+                  internal_artifacts: response.data.export_artifacts.filter(
+                      (artifact): artifact is PayListInternalArtifactInfo =>
+                          artifact.kind === 'INTERNAL_XLSX',
+                  ),
+                  official_evidence: response.data.export_artifacts.filter(
+                      (artifact): artifact is PayListOfficialEvidenceInfo =>
+                          artifact.kind === 'OFFICIAL_XLSM',
+                  ),
+              }),
+        ...(response.data.official_workbook === undefined
+            ? {}
+            : { official_workbook: response.data.official_workbook }),
     }
 }
 
@@ -364,6 +633,44 @@ export async function exportPayList(payListId: number): Promise<Blob> {
     const response = await http.post<Blob>(`/pay-lists/${payListId}/export`, undefined, {
         responseType: 'blob',
     })
+    return response.data
+}
+
+export async function generateOfficialPaymentWorkbook(
+    payListId: number,
+    payload: OfficialPaymentWorkbookGeneratePayload,
+): Promise<OfficialWorkbookArtifact> {
+    try {
+        const response = await http.post<Blob>(
+            `/pay-lists/${payListId}/official-workbook`,
+            payload,
+            {
+                responseType: 'blob',
+                validateStatus: (status) =>
+                    (status >= 200 && status < 300) || [400, 404, 409, 422].includes(status),
+            },
+        )
+        return await parseOfficialPaymentWorkbookResponse(response)
+    } catch (error) {
+        throw normalizeOfficialPaymentWorkbookRequestError(error)
+    }
+}
+
+export async function recordOfficialWorkbookAcceptance(
+    payListId: number,
+    payload: OfficialWorkbookAcceptancePayload,
+): Promise<OfficialWorkbookAcceptanceResult> {
+    const request: OfficialWorkbookAcceptancePayload = {
+        artifact_id: payload.artifact_id,
+        evidence_ref: payload.evidence_ref,
+        evidence_sha256: payload.evidence_sha256,
+        accepted_at: payload.accepted_at,
+        idempotency_key: payload.idempotency_key,
+    }
+    const response = await http.post<OfficialWorkbookAcceptanceResult>(
+        `/pay-lists/${payListId}/official-workbook/acceptance`,
+        request,
+    )
     return response.data
 }
 

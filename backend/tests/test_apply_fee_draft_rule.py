@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.modules.fees.models import FeeDraft, FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -44,6 +45,8 @@ def _seed_applicant(session_factory) -> str:
 def _seed_apply_fee_rates(session_factory, *, include_exam: bool = True) -> None:
     rows = [
         ("CN_INV_APPLICATION_FEE", "发明申请费", "GOV", Decimal("900.00"), "FIXED", True),
+        ("CN_UM_APPLICATION_FEE", "实用新型申请费", "GOV", Decimal("500.00"), "FIXED", True),
+        ("CN_DES_APPLICATION_FEE", "外观设计申请费", "GOV", Decimal("500.00"), "FIXED", True),
         ("CN_EXCESS_CLAIM_FEE", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM", False),
         ("CN_PUBLICATION_PRINT_FEE", "公布印刷费", "GOV", Decimal("50.00"), "FIXED", False),
     ]
@@ -82,20 +85,22 @@ def _create_case(
     *,
     client_id: str,
     applicant_id: str,
+    patent_category: str = "INV",
+    claim_count: int = 12,
+    has_exam_request: bool = True,
 ) -> dict:
     response = client.post(
         "/api/v1/cases",
         json={
             "case_no": f"AFD-{uuid4().hex[:8]}",
             "case_type": "NORMAL",
-            "patent_category": "INV",
+            "patent_category": patent_category,
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "申请费草单测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
-            "claim_count": 12,
-            "has_exam_request": True,
+            "claim_count": claim_count,
+            "has_exam_request": has_exam_request,
             "fee_reduction": "0.85",
             "applicants": [
                 {
@@ -120,6 +125,7 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -192,6 +198,7 @@ def test_generate_apply_fee_draft_reports_missing_rate(
     _seed_apply_fee_rates(session_factory, include_exam=False)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -209,3 +216,86 @@ def test_generate_apply_fee_draft_reports_missing_rate(
     body = response.json()
     assert body["error"]["code"] == "APPLY_FEE_RATE_MISSING"
     assert body["error"]["details"]["missing_fee_codes"] == ["CN_SUBSTANTIVE_EXAM_FEE"]
+
+
+def test_generate_apply_fee_draft_supports_um_case(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory,
+) -> None:
+    """实用新型申请费草单：不含公布印刷费/实审费，费减 0.85 应缴 15%。"""
+    _seed_apply_fee_rates(session_factory)
+    client_id = _create_client(client, auth_headers)
+    applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
+    case_data = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+        patent_category="UM",
+        claim_count=8,
+        has_exam_request=False,
+    )
+
+    response = client.post(
+        "/api/v1/fees/drafts/apply-fee/generate",
+        json={"case_id": case_data["id"], "currency": "CNY"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    draft = response.json()
+    assert draft["draft_type"] == "APPLY_FEE"
+    assert Decimal(draft["total_gov"]) == Decimal("75.00")
+
+    items_response = client.get(
+        f"/api/v1/fees/drafts/{draft['id']}/items",
+        headers=auth_headers,
+    )
+    assert items_response.status_code == 200, items_response.text
+    items = {item["fee_code"]: item for item in items_response.json()}
+    assert set(items) == {"CN_UM_APPLICATION_FEE"}
+    assert Decimal(items["CN_UM_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
+
+
+def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory,
+) -> None:
+    """外观设计申请费草单：含权利要求附加费（不可费减，全额）。"""
+    _seed_apply_fee_rates(session_factory)
+    client_id = _create_client(client, auth_headers)
+    applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
+    case_data = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+        patent_category="DES",
+        claim_count=12,
+        has_exam_request=False,
+    )
+
+    response = client.post(
+        "/api/v1/fees/drafts/apply-fee/generate",
+        json={"case_id": case_data["id"], "currency": "CNY"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    draft = response.json()
+    assert Decimal(draft["total_gov"]) == Decimal("375.00")
+
+    items_response = client.get(
+        f"/api/v1/fees/drafts/{draft['id']}/items",
+        headers=auth_headers,
+    )
+    assert items_response.status_code == 200, items_response.text
+    items = {item["fee_code"]: item for item in items_response.json()}
+    assert set(items) == {"CN_DES_APPLICATION_FEE", "CN_EXCESS_CLAIM_FEE"}
+    assert Decimal(items["CN_DES_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
+    assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
+    assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")

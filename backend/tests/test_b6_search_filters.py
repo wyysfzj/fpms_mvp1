@@ -45,6 +45,7 @@ def _create_case(
         headers=auth_headers,
         json={
             "case_no": case_no,
+            "fee_reduction": "0",
             "client_id": client_id,
             "title_cn": f"Test case {case_no}",
         },

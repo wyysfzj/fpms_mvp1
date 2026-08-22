@@ -44,6 +44,7 @@ def _create_case(
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "Grant Fee Worklist Case",
             **({"client_id": client_id} if client_id else {}),
         },
@@ -105,6 +106,14 @@ def _assert_item_shape(item: dict) -> None:
         "billed",
         "linked_bill_id",
         "linked_bill_no",
+        "trigger_rule",
+        "deadline_rule",
+        "fee_basis",
+        "fee_node_explanation",
+        "lineage_status",
+        "source_document_id",
+        "deadline_source",
+        "deadline_confirmed_at",
     }
 
 

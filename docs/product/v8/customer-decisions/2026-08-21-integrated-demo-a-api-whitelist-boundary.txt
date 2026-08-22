@@ -1,0 +1,12 @@
+ASSISTANT API WHITELIST CORRECTION PROPOSAL
+证据上传和复核必须继续通过可见 UI 完成。当前没有可见 UI 的生命周期操作可以通过精确白名单中的现有正式公开 API 执行，但必须同时满足：
+
+1. 白名单绑定精确 HTTP method 和 path template，不允许 catch-all 网络权限或白名单外动态 endpoint。
+2. 附件上传与证据复核 endpoint 永远不进入白名单，不得用 request、fetch 或辅助函数绕过可见 UI。
+3. 生命周期消费者只断言当前正式 API 实际返回的字段；证据内容哈希等未返回事实必须从已复核不可变证据记录核对，不得伪造 `consumed_*` 响应字段。
+4. 最终证据 ledger 必须按精确顺序覆盖 12 个 role，逐项断言非空且应区分的 attachment/evidence IDs、hash、metadata、consumer 和实际 result ID。
+5. Task 1 同时补齐 IA-10、IA-11、IA-13 可见 provenance 和 IA-17 跨页面精确可观测断言，任务卡列出未完成的 02–10 精确 task IDs。
+6. 继续禁止直接数据库访问、seed/enrichment 生命周期写、route mock、request interception 和自定义伪 API。
+
+USER APPROVAL
+批准 API 白名单整改边界

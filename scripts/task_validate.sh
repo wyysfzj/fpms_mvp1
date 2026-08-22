@@ -7,14 +7,9 @@ if [ "$#" -ne 1 ]; then
 fi
 
 TASK_ID=$1
-ART_DIR="artifacts/$TASK_ID"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-[ -d "$ART_DIR" ] || { echo "Missing artifacts"; exit 1; }
-[ -f "$ART_DIR/summary.md" ] || { echo "Missing summary"; exit 1; }
-[ -f "$ART_DIR/results.jsonl" ] || { echo "Missing results"; exit 1; }
-[ -f "$ART_DIR/git/diff.patch" ] || { echo "Missing git diff"; exit 1; }
-
-grep -q '"step":"lint".*"rc":0' "$ART_DIR/results.jsonl" || exit 1
-grep -q '"step":"test".*"rc":0' "$ART_DIR/results.jsonl" || exit 1
-
-echo "Task Gate PASS"
+exec python3 "$SCRIPT_DIR/evidence_validate.py" "$TASK_ID" \
+  --acceptance-mode task \
+  --required-step lint \
+  --required-step test

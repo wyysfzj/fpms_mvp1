@@ -3,12 +3,15 @@
 
 import json
 import sys
+import zipfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import NamedTuple
 from uuid import uuid4
 
 from docx import Document as DocxDocument
+from docxtpl import DocxTemplate
 from sqlalchemy.orm import Session
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -21,7 +24,12 @@ from app.models.system_param import SystemParam  # noqa: E402
 from app.modules.auth.models import T_Role, T_User, T_UserRole  # noqa: E402
 from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # noqa: E402
 from app.modules.documents.models import DocTemplate  # noqa: E402
-from app.modules.documents.official_notice_catalog import seed_official_notice_catalog  # noqa: E402
+from app.modules.documents.official_notice_catalog import (  # noqa: E402
+    seed_fee_reduction_approval_official_notice_catalog,
+)
+from app.modules.documents.official_notice_catalog import (  # noqa: E402
+    seed_official_letter_out_form_022_catalog as seed_official_letter_out_catalog,
+)
 from app.modules.fees.models import FeeRate  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client  # noqa: E402
@@ -151,9 +159,9 @@ def _official_fee_rate_catalog() -> list[dict]:
             "enabled": True,
             "rate_group": "DOMESTIC",
             "patent_category": "INV",
-            "fee_category": "复审费",
-            "fee_subtype": "发明专利",
-            "reduction_scope": "复审费",
+            "fee_category": "公布印刷费",
+            "fee_subtype": "仅发明专利",
+            "reduction_scope": "不可费减",
             "calc_mode": "FIXED",
             "allow_reduction": False,
             "source_status": confirmed,
@@ -1142,6 +1150,13 @@ def seed_task_templates(db: Session) -> None:
             "description": "审查意见通知书答复期限自动任务",
         },
         {
+            "code": "OA_REPLY_SUBSEQUENT",
+            "name": "后续审查意见答复期限",
+            "add_days": None,
+            "inner_offset_days": None,
+            "description": "第二次及以后审查意见答复任务；截止日必须使用官文载明的明确期限",
+        },
+        {
             "code": "GRANT_FEE",
             "name": "授权登记费",
             "add_days": 60,
@@ -1246,14 +1261,24 @@ def seed_doc_templates(db: Session) -> None:
         if not existing:
             db.add(DocTemplate(id=str(uuid4()), **t))
             created += 1
-    official_notice_catalog_changed = seed_official_notice_catalog(db)
+    official_notice_catalog_changed = seed_fee_reduction_approval_official_notice_catalog(db)
+    official_letter_out_changed = seed_official_letter_out_catalog(db)
     grant_fee_notice_changed = seed_grant_fee_notice_template_source(db)
+    format_letter_mapping_changed = seed_format_letter_mappings(db)
     db.commit()
-    if created or official_notice_catalog_changed or grant_fee_notice_changed:
+    if (
+        created
+        or official_notice_catalog_changed
+        or official_letter_out_changed
+        or grant_fee_notice_changed
+        or format_letter_mapping_changed
+    ):
         print(
             "Created/updated "
             f"{created} doc templates, "
             f"{official_notice_catalog_changed} official notice catalog entries, "
+            f"{official_letter_out_changed} official letter-out catalog entries, "
+            f"{format_letter_mapping_changed} format letter mappings, "
             "and grant fee notice source"
         )
     else:
@@ -1342,6 +1367,267 @@ def _ensure_grant_fee_notice_docx_template() -> Path:
     document.add_paragraph("请根据授权通知要求确认缴费指示。")
     document.save(template_path)
     return template_path
+
+
+class FormatLetterCatalogEntry(NamedTuple):
+    code: str
+    customer_format_letter_name: str
+    official_doc_name_pattern: str
+    source_path: str
+    source_sha256: str
+    template_version_id: str
+    template_path: str
+    expected_variables: frozenset[str]
+
+
+FORMAT_LETTER_DATASET_ID = "FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1"
+FORMAT_LETTER_TEMPLATE_GROUP = "FORMAT_LETTER"
+# 客户命名规则（信函生成操作 P0004）：{案号}-给{申请人名称}的邮件.docx
+FORMAT_LETTER_OUTPUT_NAME_RULE = "{case_no}-给{applicant_name}的邮件.docx"
+_FORMAT_LETTER_COMMON_VARIABLES = frozenset(
+    {
+        "salutation_text",
+        "client_reference_no",
+        "case_no",
+        "invention_title",
+        "application_no",
+        "filing_date_text",
+        "applicant_names_text",
+        "source_notice_name",
+    }
+)
+
+
+def _format_letter_variables(*extra: str) -> frozenset[str]:
+    return _FORMAT_LETTER_COMMON_VARIABLES | frozenset(extra)
+
+
+# 客户"国内客户天下先格式函对应官文"8 行（信函生成操作 P0007 TABLE 001）。
+FORMAT_LETTER_MAPPING_CATALOG: tuple[FormatLetterCatalogEntry, ...] = (
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_001",
+        customer_format_letter_name="官文转发-国内客户-驳回通知",
+        official_doc_name_pattern="驳回决定",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/驳回通知.doc",
+        source_sha256=("4f8f24d83bb3ca84f4663a0c46a1a84fa060ceb5881d2b9d3001fd074e81b4f2"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-001",
+        template_path="templates/format_letters/format_letter_001.docx",
+        expected_variables=_format_letter_variables("deadline_text"),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_002",
+        customer_format_letter_name="官文转发-国内客户-初审合格",
+        official_doc_name_pattern="初步审查合格",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/初审合格.doc",
+        source_sha256=("979713345eb2d5d8f4ee02421ebf5de6936b9f4418648dcffbe7a71f4cd62724"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-002",
+        template_path="templates/format_letters/format_letter_002.docx",
+        expected_variables=_format_letter_variables(),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_003",
+        customer_format_letter_name="官文转发-国内客户-公布通知",
+        official_doc_name_pattern="公布通知书",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/公布通知.doc",
+        source_sha256=("01502d4d3329adff358b3dfa0f995c5bcebb831b02155524140fbdf4995a81da"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-003",
+        template_path="templates/format_letters/format_letter_003.docx",
+        expected_variables=_format_letter_variables("publication_date_text", "deadline_text"),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_004",
+        customer_format_letter_name="官文转发-国内客户-实审通知",
+        official_doc_name_pattern="进入实审通知",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/实审通知.doc",
+        source_sha256=("dec38f3f2999b35c39b6d9cfa9f204bd0c930132da750170b1cdf90bd4666c00"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-004",
+        template_path="templates/format_letters/format_letter_004.docx",
+        expected_variables=_format_letter_variables(),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_005",
+        customer_format_letter_name="官文转发-国内客户-受通",
+        official_doc_name_pattern="受理通知-电子",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/受通.doc",
+        source_sha256=("acc06a13d4b09349d2eb81fadd31509ca7e260047df21ab38d65621d4607fff0"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-005",
+        template_path="templates/format_letters/format_letter_005.docx",
+        expected_variables=_format_letter_variables("inventor_names_text"),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_006",
+        customer_format_letter_name="官文转发-国内客户-授权通知",
+        official_doc_name_pattern="授权通知书-电子",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/授权通知.doc",
+        source_sha256=("83c14cf4b6514bee2c3f084cb13d2fb66f067dbeb8260de659f9ffb18e542974"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-006",
+        template_path="templates/format_letters/format_letter_006.docx",
+        expected_variables=_format_letter_variables("deadline_text", "amount_lines_text"),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_007",
+        customer_format_letter_name="官文转发-国内客户-一通",
+        official_doc_name_pattern="第一次审查意见通知书",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/审查意见或复审通知.doc",
+        source_sha256=("59322585ca96505fd1f38536ffa02e7afd3825df74c750e5256708b3869484cc"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-007",
+        template_path="templates/format_letters/format_letter_007.docx",
+        expected_variables=_format_letter_variables("deadline_text", "notice_variant_code"),
+    ),
+    FormatLetterCatalogEntry(
+        code="FORMAT_LETTER_008",
+        customer_format_letter_name="官文转发-专利证书",
+        official_doc_name_pattern="专利证书",
+        source_path="docs/postdemo/文件样例及模版/常用邮件模板/专利证书.doc",
+        source_sha256=("5e9cf0638f02f98784c177e586f1127dc9fc0cc4e902596f61b368bb777c8be6"),
+        template_version_id="FPMS-FORMAT-LETTER-CUSTOMER-20260610-V1-008",
+        template_path="templates/format_letters/format_letter_008.docx",
+        expected_variables=_format_letter_variables("inventor_names_text"),
+    ),
+)
+
+
+def _validate_format_letter_templates() -> None:
+    for entry in FORMAT_LETTER_MAPPING_CATALOG:
+        template_path = BASE_DIR / "storage" / entry.template_path
+        if not template_path.is_file():
+            raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_MISSING:{entry.code}")
+        try:
+            with zipfile.ZipFile(template_path) as package:
+                package_xml = "\n".join(
+                    package.read(name).decode("utf-8", errors="ignore")
+                    for name in package.namelist()
+                    if name.endswith(".xml")
+                )
+            variables = frozenset(
+                DocxTemplate(str(template_path)).get_undeclared_template_variables()
+            )
+            document = DocxDocument(template_path)
+        except Exception as exc:
+            raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_INVALID:{entry.code}") from exc
+
+        visible_text = "\n".join(
+            [paragraph.text for paragraph in document.paragraphs]
+            + [
+                paragraph.text
+                for table in document.tables
+                for row in table.rows
+                for cell in row.cells
+                for paragraph in cell.paragraphs
+            ]
+        )
+        if (
+            "MERGEFIELD" in package_xml
+            or "请查收所附官方文件，并按期限完成后续事项" in visible_text
+        ):
+            raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_PLACEHOLDER_REMAINS:{entry.code}")
+        if variables != entry.expected_variables:
+            raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_VARIABLES_MISMATCH:{entry.code}")
+
+
+def seed_format_letter_mappings(db: Session) -> int:
+    """Seed the customer's 8-row official-notice -> format-letter mapping. Idempotent."""
+    from app.modules.templates.models import FormatLetterMapping  # noqa: PLC0415
+
+    _validate_format_letter_templates()
+    resolved_carriers = []
+    for entry in FORMAT_LETTER_MAPPING_CATALOG:
+        mappings = (
+            db.query(FormatLetterMapping)
+            .filter(FormatLetterMapping.format_letter_template_code == entry.code)
+            .order_by(FormatLetterMapping.created_at.asc(), FormatLetterMapping.id.asc())
+            .all()
+        )
+        if len(mappings) > 1:
+            raise RuntimeError(f"FORMAT_LETTER_MAPPING_AMBIGUOUS:{entry.code}")
+        mapping = mappings[0] if mappings else None
+
+        stable_templates = (
+            db.query(Template)
+            .filter(
+                Template.group == FORMAT_LETTER_TEMPLATE_GROUP,
+                Template.name == entry.code,
+            )
+            .order_by(Template.created_at.asc(), Template.id.asc())
+            .all()
+        )
+        if len(stable_templates) > 1:
+            raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_ROW_AMBIGUOUS:{entry.code}")
+
+        template = None
+        if mapping is not None and mapping.format_letter_template_id is not None:
+            linked_template = db.get(Template, mapping.format_letter_template_id)
+            if (
+                linked_template is None
+                or linked_template.name != entry.code
+                or linked_template.group != FORMAT_LETTER_TEMPLATE_GROUP
+                or (stable_templates and stable_templates[0].id != linked_template.id)
+            ):
+                raise RuntimeError(f"FORMAT_LETTER_TEMPLATE_ROW_AMBIGUOUS:{entry.code}")
+            template = linked_template
+        elif stable_templates:
+            template = stable_templates[0]
+        resolved_carriers.append((entry, mapping, template))
+
+    changed = 0
+    for entry, mapping, template in resolved_carriers:
+        template_values = {
+            "name": entry.code,
+            "group": FORMAT_LETTER_TEMPLATE_GROUP,
+            "language": "zh-CN",
+            "file_path": entry.template_path,
+            "enabled": True,
+        }
+        if template is None:
+            template = Template(id=str(uuid4()), **template_values)
+            db.add(template)
+            db.flush()
+            changed += 1
+        else:
+            template_changed = False
+            for field, value in template_values.items():
+                if getattr(template, field) != value:
+                    setattr(template, field, value)
+                    template_changed = True
+            if template_changed:
+                changed += 1
+
+        provenance = json.dumps(
+            {
+                "customer_format_letter_name": entry.customer_format_letter_name,
+                "dataset_id": FORMAT_LETTER_DATASET_ID,
+                "source_path": entry.source_path,
+                "source_sha256": f"sha256:{entry.source_sha256}",
+                "template_version_id": entry.template_version_id,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        mapping_values = {
+            "official_doc_template_id": None,
+            "official_doc_template_code": None,
+            "official_doc_name_pattern": entry.official_doc_name_pattern,
+            "format_letter_template_id": template.id,
+            "format_letter_template_code": entry.code,
+            "output_name_rule": FORMAT_LETTER_OUTPUT_NAME_RULE,
+            "salutation_rule_code": "PRIMARY_CONTACT_TITLE",
+            "contact_rule_code": "CLIENT_PRIMARY_CONTACT",
+            "enabled": True,
+            "remark": provenance,
+        }
+        if mapping is None:
+            db.add(FormatLetterMapping(id=str(uuid4()), **mapping_values))
+            changed += 1
+            continue
+        mapping_changed = False
+        for field, value in mapping_values.items():
+            if getattr(mapping, field) != value:
+                setattr(mapping, field, value)
+                mapping_changed = True
+        if mapping_changed:
+            changed += 1
+    return changed
 
 
 def seed_official_fee_rate_catalog(db: Session) -> None:

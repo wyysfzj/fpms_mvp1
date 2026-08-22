@@ -136,6 +136,7 @@
       </el-col>
       <el-col :span="6">
         <el-button @click="resetFilters">重置筛选</el-button>
+        <el-button :loading="exporting" @click="handleExport">导出清单</el-button>
       </el-col>
     </el-row>
 
@@ -231,7 +232,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
-import { getDocuments, getDocTemplates } from '../../../api/documents'
+import { getDocuments, getDocTemplates, exportDocuments } from '../../../api/documents'
 import { getClients } from '../../../api/clients'
 import type { Client } from '../../../api/clients.types'
 import type { DocTemplate, Document } from '../../../api/documents.types'
@@ -246,6 +247,7 @@ import { getDocumentDirectionText, getDocumentDocTypeText } from '../../../const
 const documents = ref<Document[]>([])
 const router = useRouter()
 const loading = ref(false)
+const exporting = ref(false)
 const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
@@ -314,6 +316,47 @@ async function fetchDocuments() {
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '-'
   return dayjs(dateStr).format('YYYY-MM-DD')
+}
+
+async function handleExport() {
+  exporting.value = true
+  error.value = null
+  try {
+    const [date_from, date_to] = filterDateRange.value
+    const need_reply =
+      filterReplyState.value === 'NONE' ? false : filterReplyState.value ? true : undefined
+    const replied =
+      filterReplyState.value === 'PENDING'
+        ? false
+        : filterReplyState.value === 'DONE'
+          ? true
+          : undefined
+    const blob = await exportDocuments({
+      doc_name: filterDocName.value.trim() || undefined,
+      doc_type: filterDocTypes.value.length ? [...filterDocTypes.value] : undefined,
+      case_no: filterCaseNo.value.trim() || undefined,
+      template_code: filterTemplateCode.value || undefined,
+      direction: filterDirection.value || undefined,
+      client_id: filterClientId.value || undefined,
+      has_attachment: filterHasAttachment.value === '' ? undefined : filterHasAttachment.value,
+      need_reply,
+      replied,
+      date_from: date_from || undefined,
+      date_to: date_to || undefined,
+    })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '文书清单.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    exporting.value = false
+  }
 }
 
 function formatDateTime(dateStr: string): string {

@@ -37,6 +37,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "B官方绝限测试案",
             "applicants": [
                 {
@@ -61,6 +62,16 @@ def _get_template(client: TestClient, auth_headers: dict[str, str], code: str) -
     return match[0]
 
 
+def _confirmed_due_extra_data(due_date: str) -> str:
+    return json.dumps(
+        {
+            "OfficialDueDate": due_date,
+            "OfficialDueDateSource": "MANUAL_OFFICIAL_NOTICE",
+            "OfficialDueDateStatus": "CONFIRMED",
+        }
+    )
+
+
 def test_official_due_date_overrides_preview_due_date(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
@@ -75,7 +86,7 @@ def test_official_due_date_overrides_preview_due_date(
                 "doc_template_id": template["id"],
                 "direction": "IN",
                 "doc_date": "2026-01-15",
-                "extra_data": json.dumps({"OfficialDueDate": "2026-03-20"}),
+                "extra_data": _confirmed_due_extra_data("2026-03-20"),
             },
             "rows": [{"case_id": case["id"], "title": "官方绝限 OA"}],
         },
@@ -104,7 +115,7 @@ def test_official_due_date_overrides_created_task_due_date(
                 "doc_template_id": template["id"],
                 "direction": "IN",
                 "doc_date": "2026-01-15",
-                "extra_data": json.dumps({"OfficialDueDate": "2026-03-20"}),
+                "extra_data": _confirmed_due_extra_data("2026-03-20"),
             },
             "rows": [{"case_id": case["id"], "title": "官方绝限 OA"}],
         },
@@ -141,11 +152,11 @@ def test_invalid_official_due_date_returns_stable_error(
                 "doc_template_id": template["id"],
                 "direction": "IN",
                 "doc_date": "2026-01-15",
-                "extra_data": json.dumps({"OfficialDueDate": "2026-99-99"}),
+                "extra_data": _confirmed_due_extra_data("2026-99-99"),
             },
             "rows": [{"case_id": case["id"], "title": "无效官方绝限 OA"}],
         },
     )
 
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error"]["code"] == "DOCUMENT_OFFICIAL_DUE_DATE_INVALID"
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "DOCUMENT_EXTRA_DATA_INVALID"

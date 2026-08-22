@@ -61,6 +61,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="费用项目" min-width="160">
+          <template #default="{ row }">
+            {{ row.fee_name || row.description || '—' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column label="数量" width="80" align="right">
           <template #default="{ row }">

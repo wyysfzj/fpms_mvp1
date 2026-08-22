@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FPMS V8 Lean Coverage Ledger",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "catalog_sha256",
+    "integration_sha",
+    "rows",
+    "stories"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "catalog_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "integration_sha": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional pinned integration SHA. Null means the current integration SHA is supplied explicitly to the stateless checker; a non-null value must match it."
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "catalog_id",
+          "phase",
+          "disposition",
+          "story_id",
+          "successor_story_id",
+          "blocker"
+        ],
+        "properties": {
+          "catalog_id": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "HISTORICAL_PASS_CANDIDATE",
+              "INHERITED_EVIDENCE",
+              "CURRENT_VERIFIED",
+              "WIP",
+              "PENDING",
+              "CUSTOMER_BLOCKED",
+              "AUTHORITY_BLOCKED",
+              "SUPERSEDED_BY_STORY",
+              "DEFERRED_FULL_ONLY"
+            ]
+          },
+          "story_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "successor_story_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blocker": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "story_id",
+          "status",
+          "commits",
+          "paths",
+          "tree_sha256",
+          "tests",
+          "review_class",
+          "review_ref",
+          "verification_ref"
+        ],
+        "properties": {
+          "story_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "CURRENT_VERIFIED",
+              "BLOCKED"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

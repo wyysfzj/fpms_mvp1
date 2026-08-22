@@ -62,6 +62,7 @@
                   :key="template.id"
                   :label="formatTemplateLabel(template)"
                   :value="template.id"
+                  :disabled="isReferenceOnlyTemplate(template)"
                 />
               </el-select>
               <div v-if="templatesError" class="defaults-error">{{ templatesError }}</div>
@@ -313,6 +314,58 @@
                     v-model="row.reply_to_id"
                     placeholder="可选"
                     @input="markStep2RowDirty(row)"
+                  />
+                </div>
+
+                <div class="step2-field">
+                  <div class="step2-field-label">官方截止日</div>
+                  <el-date-picker
+                    v-model="row.official_due_date"
+                    type="date"
+                    format="YYYY-MM-DD"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择官方截止日"
+                    clearable
+                    class="full-width"
+                    @change="markStep2RowDirty(row)"
+                  />
+                </div>
+
+                <div class="step2-field">
+                  <div class="step2-field-label">截止日来源</div>
+                  <el-select
+                    v-model="row.official_due_date_source"
+                    placeholder="请选择截止日来源"
+                    clearable
+                    class="full-width"
+                    @change="markStep2RowDirty(row)"
+                  >
+                    <el-option label="人工核对官方通知" value="MANUAL_OFFICIAL_NOTICE" />
+                    <el-option label="从官方通知导入" value="IMPORTED_OFFICIAL_NOTICE" />
+                  </el-select>
+                </div>
+
+                <div class="step2-field">
+                  <div class="step2-field-label">确认状态</div>
+                  <el-select
+                    v-model="row.official_due_date_status"
+                    placeholder="请选择确认状态"
+                    clearable
+                    class="full-width"
+                    @change="markStep2RowDirty(row)"
+                  >
+                    <el-option label="已确认" value="CONFIRMED" />
+                    <el-option label="待确认" value="NEEDS_CONFIRMATION" />
+                  </el-select>
+                </div>
+
+                <div class="step2-field step2-field--full">
+                  <el-alert
+                    type="info"
+                    :closable="false"
+                    title="官方截止日提示"
+                    description="可执行官方来文必须逐行填写截止日、来源并选择“已确认”，最终以后台校验结果为准。"
+                    show-icon
                   />
                 </div>
 
@@ -815,6 +868,9 @@ interface Step2CaseRowView {
   need_reply: boolean
   reply_to_id: string
   extra_data: string
+  official_due_date: string
+  official_due_date_source: '' | 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE'
+  official_due_date_status: '' | 'CONFIRMED' | 'NEEDS_CONFIRMATION'
   error_message?: string
 }
 
@@ -957,7 +1013,28 @@ function handleReturn() {
 }
 
 function formatTemplateLabel(template: DocTemplate): string {
-  return `${template.code} - ${template.name}`
+  const status = getOfficialNoticeCatalogStatus(template)
+  const statusLabel = status === 'EXECUTABLE' ? '可执行' : status === 'REFERENCE_ONLY' ? '仅供参考' : ''
+  return `${template.code} - ${template.name}${statusLabel ? `（${statusLabel}）` : ''}`
+}
+
+function getOfficialNoticeCatalogStatus(template: DocTemplate): 'EXECUTABLE' | 'REFERENCE_ONLY' | null {
+  try {
+    const metadata: unknown = JSON.parse(template.input_fields || 'null')
+    if (typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)) {
+      const fields = metadata as Record<string, unknown>
+      if (fields.catalog_kind === 'OFFICIAL_NOTICE') {
+        return fields.catalog_status === 'EXECUTABLE' ? 'EXECUTABLE' : 'REFERENCE_ONLY'
+      }
+    }
+  } catch {
+    // Official-notice metadata fails closed below.
+  }
+  return template.code.startsWith('OFFICIAL_NOTICE_') ? 'REFERENCE_ONLY' : null
+}
+
+function isReferenceOnlyTemplate(template: DocTemplate): boolean {
+  return getOfficialNoticeCatalogStatus(template) === 'REFERENCE_ONLY'
 }
 
 function createRow(input: string): DocumentWizardCaseRow {
@@ -1062,6 +1139,9 @@ function createStep2Row(parsedCase: ParsedCaseRowView): Step2CaseRowView {
     need_reply: false,
     reply_to_id: '',
     extra_data: '',
+    official_due_date: '',
+    official_due_date_source: '',
+    official_due_date_status: '',
   }
 }
 
@@ -1138,7 +1218,7 @@ async function loadDocTemplates(): Promise<void> {
   try {
     const result = await getDocTemplates({
       page: 1,
-      page_size: 200,
+      page_size: 100,
       enabled: true,
     })
     docTemplates.value = result.items
@@ -1242,6 +1322,9 @@ function buildStep2Payload(): DocumentWizardBatchCreatePayload {
       need_reply: row.need_reply,
       reply_to_id: row.reply_to_id.trim() || undefined,
       extra_data: row.extra_data.trim() || undefined,
+      official_due_date: row.official_due_date || undefined,
+      official_due_date_source: row.official_due_date_source || undefined,
+      official_due_date_status: row.official_due_date_status || undefined,
     })),
   }
 }
@@ -1414,6 +1497,13 @@ function getWizardSubmitError(apiError: ApiError): string {
       return '部分案件已失效，请返回上一步重新解析。'
     case 'REPLY_TO_DOC_NOT_FOUND':
       return '回复来源文件不存在，请检查后重试。'
+    case 'DOCUMENT_DEADLINE_INVALID':
+      return '官方截止日信息不完整，请逐行填写截止日、来源和确认状态。'
+    case 'OA_OFFICIAL_DUE_DATE_REQUIRED':
+    case 'GRANT_OFFICIAL_DUE_DATE_REQUIRED':
+      return '可执行官方来文必须逐行填写并确认官方截止日。'
+    case 'DOCUMENT_EXTRA_DATA_INVALID':
+      return '官方截止日格式无效，请检查日期和来源后重试。'
     default:
       return '批量提交失败，请稍后重试。'
   }

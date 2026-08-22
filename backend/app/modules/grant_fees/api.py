@@ -1,35 +1,102 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
+from app.modules.cases.lifecycle_contracts import LifecycleTransitionResult
+from app.modules.cases.models import Case
+from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.extra_data import parse_document_extra_data
+from app.modules.documents.models import DocTemplate, Document
+from app.modules.documents.schemas import DocumentCreateIn, DocumentOut
+from app.modules.fees.models import T_GrantFeeTask
 from app.modules.grant_fees.schemas import (
     GrantFeeDraftGenerateOut,
     GrantFeeTaskBatchInstructionIn,
     GrantFeeTaskBatchInstructionOut,
     GrantFeeTaskBatchNoticeGenerateIn,
     GrantFeeTaskBatchNoticeGenerateOut,
+    GrantFeeTaskListItemResponse,
     GrantFeeTaskListResponse,
     GrantFeeTaskModuleOut,
+    GrantFeeTaskReplacementNoticeIn,
+    GrantFeeTaskReplacementNoticeOut,
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
+    GrantNoticeLifecycleIn,
+    GrantOfficialFeeReviewIn,
+    GrantOfficialFeeReviewOut,
 )
 from app.modules.grant_fees.service import (
+    ConfirmGrantOfficialFeesCommand,
+    GrantOfficialFeeReviewLineInput,
     apply_grant_fee_batch_instruction,
     apply_grant_fee_task_action,
+    confirm_grant_official_fees,
+    dispatch_grant_registration_notice,
     generate_grant_fee_draft,
     generate_grant_fee_notice_documents,
     get_grant_fee_module_contract,
     get_grant_fee_task_state,
     list_grant_fee_tasks,
+    replace_grant_fee_task_with_notice,
 )
 
 router = APIRouter()
+
+GrantFeeTaskPathId = Annotated[
+    str,
+    Path(min_length=1, max_length=36, pattern=r"^[^\s\x00](?:[^\x00]*[^\s\x00])?$"),
+]
+
+
+def _project_replacement_document(db: Session, *, document: Document) -> DocumentOut:
+    case = db.get(Case, document.case_id)
+    template = db.get(DocTemplate, document.doc_template_id) if document.doc_template_id else None
+    extra_data = parse_document_extra_data(document.extra_data)
+    return DocumentOut(
+        id=document.id,
+        case_id=document.case_id,
+        case_no=case.case_no if case else None,
+        doc_template_id=document.doc_template_id,
+        template_code=template.code if template else None,
+        doc_type=document.doc_type,
+        direction=document.direction,
+        doc_date=document.doc_date,
+        title=document.title,
+        ref_no=document.ref_no,
+        extra_data=document.extra_data,
+        official_due_date=extra_data.official_due_date,
+        official_due_date_source=extra_data.official_due_date_source,
+        official_due_date_status=extra_data.official_due_date_status,
+        description=extra_data.description,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        attachments=[],
+    )
+
+
+def _project_replacement_task(
+    db: Session, *, task_id: str, case_id: str
+) -> GrantFeeTaskListItemResponse:
+    items = list_grant_fee_tasks(
+        db,
+        filters={"case_id": case_id},
+        page=1,
+        page_size=1_000_000,
+    )["items"]
+    item = next(item for item in items if item["task_id"] == task_id)
+    return GrantFeeTaskListItemResponse.model_validate(item)
 
 
 @router.get("/grant-fee-tasks", summary="Grant fee module contract")
@@ -102,6 +169,145 @@ def put_grant_fee_task_state_endpoint(
 ) -> GrantFeeTaskStateOut:
     return GrantFeeTaskStateOut.model_validate(
         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
+    )
+
+
+@router.post(
+    "/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice",
+    status_code=status.HTTP_200_OK,
+)
+def post_grant_notice_lifecycle_endpoint(
+    grant_fee_task_id: GrantFeeTaskPathId,
+    payload: GrantNoticeLifecycleIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> LifecycleTransitionResult:
+    try:
+        task = db.get(T_GrantFeeTask, grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_FEE_TASK_NOT_FOUND",
+                "未找到授权费用任务",
+                status_code=404,
+            )
+        source_document_id = task.source_document_id
+        if (
+            type(source_document_id) is not str
+            or not source_document_id
+            or source_document_id != source_document_id.strip()
+            or len(source_document_id) > 36
+        ):
+            raise_business_error(
+                "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
+                "办理登记手续通知书来源文书谱系无效",
+                status_code=409,
+            )
+        result = dispatch_grant_registration_notice(
+            grant_fee_task_id=grant_fee_task_id,
+            source_document_id=source_document_id,
+            reviewed_evidence_version_id=payload.reviewed_evidence_version_id,
+            expected_content_hash=payload.expected_content_hash,
+            actor_id=current_user.id,
+            recorded_at=payload.recorded_at,
+            idempotency_key=payload.idempotency_key,
+            transaction=db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/grant-fee-tasks/{task_id}/official-fee-review",
+    status_code=status.HTTP_200_OK,
+    response_model=GrantOfficialFeeReviewOut,
+)
+def post_grant_official_fee_review_endpoint(
+    task_id: GrantFeeTaskPathId,
+    payload: GrantOfficialFeeReviewIn,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantOfficialFeeReviewOut:
+    try:
+        result = confirm_grant_official_fees(
+            ConfirmGrantOfficialFeesCommand(
+                grant_fee_task_id=task_id,
+                source_activity_id=payload.source_activity_id,
+                obligation_id=payload.obligation_id,
+                reviewed_evidence_version_id=payload.reviewed_evidence_version_id,
+                expected_content_hash=payload.expected_content_hash,
+                confirmed_at=payload.confirmed_at,
+                actor_id=current_user.id,
+                idempotency_key=payload.idempotency_key,
+                lines=tuple(
+                    GrantOfficialFeeReviewLineInput(
+                        obligation_line_id=line.obligation_line_id,
+                        official_full_amount=line.official_full_amount,
+                        confirmed_payable_amount=line.confirmed_payable_amount,
+                    )
+                    for line in payload.lines
+                ),
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return GrantOfficialFeeReviewOut(
+        grant_fee_task_id=result.grant_fee_task_id,
+        fee_obligation_id=result.fee_obligation_id,
+        source_activity_id=result.source_activity_id,
+        review_activity_id=result.review_activity_id,
+        reviewed_line_ids=list(result.reviewed_line_ids),
+        confirmed_at=result.confirmed_at,
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
+
+
+@router.post(
+    "/grant-fee-tasks/{task_id}/replacement-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=GrantFeeTaskReplacementNoticeOut,
+    summary="Replace a grant fee task with a corrected notice",
+)
+def post_grant_fee_task_replacement_notice_endpoint(
+    task_id: str,
+    payload: GrantFeeTaskReplacementNoticeIn,
+    _grant_perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    _doc_perm: None = Depends(require_perm("Doc.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantFeeTaskReplacementNoticeOut:
+    old_state = get_grant_fee_task_state(db, task_id=task_id)
+    replacement_document = DocumentCreateIn(
+        case_id=old_state["case_id"],
+        direction=DocumentDirection.IN,
+        **payload.document.model_dump(exclude_unset=True),
+    )
+    result = replace_grant_fee_task_with_notice(
+        db,
+        task_id=task_id,
+        request_key=payload.idempotency_key,
+        reason=payload.reason,
+        replacement_document=replacement_document,
+        actor_id=current_user.id,
+    )
+    replacement_task = _project_replacement_task(
+        db,
+        task_id=result.replacement_task.id,
+        case_id=result.replacement_task.case_id,
+    )
+    return GrantFeeTaskReplacementNoticeOut(
+        document=_project_replacement_document(db, document=result.document),
+        replacement_task=replacement_task,
+        superseded_task_id=result.superseded_task_id,
+        reused=result.reused,
     )
 
 
