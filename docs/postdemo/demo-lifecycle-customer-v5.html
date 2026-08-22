@@ -539,7 +539,7 @@
           <tr><td>财务业务号</td><td>AR-CYZN-&lt;run suffix&gt; / RCPT-CYZN-&lt;run suffix&gt; / BTR-CYZN-&lt;run suffix&gt;</td></tr>
           <tr><td>递交与审查文书</td><td>发明专利请求书及申请文件；发明专利申请递交回执；发明专利申请受理通知书；发明专利申请初步审查合格通知书；发明专利申请公布通知书；发明专利申请进入实质审查阶段通知书</td></tr>
           <tr><td>两轮 OA</td><td>第一次审查意见通知书；第一次审查意见答复递交回执；第二次审查意见通知书；第二次审查意见答复递交回执</td></tr>
-          <tr><td>授权登记来源</td><td>办理登记手续通知书（原始版本）；办理登记手续通知书（更新版本）</td></tr>
+          <tr><td>授权登记来源</td><td>办理登记手续通知书；办理登记手续更正通知书</td></tr>
         </tbody>
       </table>
       <div class="synthetic-value">整组场景：合成测试输入<span class="synthetic-label">SYNTHETIC_TEST_ONLY · customer activation false · 非客户授权、非生产输入</span></div>
@@ -635,7 +635,7 @@
           <div class="stage-body">
             <div class="stage-field"><span class="field-label">主持人话术</span><p>更新来源显式替换原来源；旧任务失效后不能继续写入。</p></div>
             <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>复核原始与更新通知，执行来源替换，验证旧任务四类 409/no-write，并在当前任务记录 PAY。</p></div>
-            <div class="stage-field"><span class="field-label">输入</span><p>办理登记手续通知书（原始版本）；办理登记手续通知书（更新版本）；确认日期 2026-11-23 / 2026-11-24。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>办理登记手续通知书；办理登记手续更正通知书；确认日期 2026-11-23 / 2026-11-24。</p></div>
             <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>案件显示授权登记中；替换关系可追踪；只有更新后的任务可操作。</p></div>
             <div class="stage-field"><span class="field-label">预期结果</span><p>四类旧任务写入均被拒绝；当前 PAY 恰好一条；官费 carrier 仍为 0。</p></div>
             <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-10 至 IA-12 校验两份来源、supersession、旧任务门禁、PAY 和官费 no-write。</p></div>
@@ -650,7 +650,7 @@
           <div class="stage-body">
             <div class="stage-field"><span class="field-label">主持人话术</span><p>授权任务 PAY 与服务费义务分开；本阶段只使用有来源的 SERVICE 项目。</p></div>
             <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>主持人不共享控制页：仅创建唯一 SERVICE obligation；客户共享费用页与草单页：记录 PAY、创建并锁定草单。</p></div>
-            <div class="stage-field"><span class="field-label">输入</span><p>授权登记阶段代理服务费；业务费项代码 SVC_GRANT_REGISTRATION_CN；1,200.00 CNY；source ref、source version、source SHA-256。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>授权登记阶段代理服务费；业务费项代码 FWSQDJ001；1,200.00 CNY；source ref、source version、source SHA-256。</p></div>
             <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>客户共享费用页与草单页显示唯一义务、LOCKED 草单、服务费来源与“官方费用：未配置”。</p></div>
             <div class="stage-field"><span class="field-label">预期结果</span><p>草单金额严格等于 bundle amount，只含 SERVICE line，重试不增加第二条义务或草单。</p></div>
             <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-13 通过控制命令创建后，切到正常费用/草单读页核对权威状态和 provenance。</p></div>

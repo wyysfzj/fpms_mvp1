@@ -53,17 +53,64 @@ const customerScenarioValues = [
   '第一次审查意见答复递交回执',
   '第二次审查意见通知书',
   '第二次审查意见答复递交回执',
-  '办理登记手续通知书（原始版本）',
-  '办理登记手续通知书（更新版本）',
+  '办理登记手续通知书',
+  '办理登记手续更正通知书',
 ]
 for (const target of [normalizedHtml, runbook]) {
   for (const value of customerScenarioValues) assert.ok(target.includes(value), `customer scenario missing ${value}`)
-  assert.ok(target.includes('SVC_GRANT_REGISTRATION_CN'), 'customer material must show the realistic-shaped service item code')
+  assert.ok(target.includes('FWSQDJ001'), 'customer material must show the realistic-shaped service item code')
   assert.ok(!target.includes('DEMO_INTEGRATED_SERVICE_1'), 'customer material must not show the technical integrated service item code')
-  for (const rejected of ['IA-CASE', 'DEMO-AR', 'DEMO-PAY', 'DEMO-BANK', '虚构集成演示客户', '虚构主联系人', '集成演示服务费']) {
+  for (const rejected of ['IA-CASE', 'DEMO-AR', 'DEMO-PAY', 'DEMO-BANK', '虚构集成演示客户', '虚构主联系人', '集成演示服务费', 'SVC_GRANT_REGISTRATION_CN', 'FW-SQDJ-001', '办理登记手续通知书（原始版本）', '办理登记手续通知书（更新版本）']) {
     assert.ok(!target.includes(rejected), `customer material contains rejected value ${rejected}`)
   }
 }
+
+for (const requiredFixtureValue of [
+  '已核对通知书内容及官方截止日',
+  '审查意见通知书（补录）-${this.caseNo}',
+  '已于 2026-08-01 完成人工递交',
+  '陈思远',
+  '已核对电子申请回执及收到文件清单',
+  'CNIPA-20260802-001',
+  'CNIPA-20260808-001',
+  'CNIPA-20260810-001',
+  'CNIPA-20260810-002',
+  'CNIPA-20260810-003',
+  '${mainCaseNo}-02',
+  '一种工业机器人末端执行器的力控校准方法',
+  '发明专利申请递交回执-${auxiliary.case_no}',
+  '第一次审查意见答复递交回执（补充件）-${mainCaseNo}',
+  '第一次审查意见答复_意见陈述书',
+  '第一次审查意见答复_修改后权利要求书',
+  '第二次审查意见答复_意见陈述书',
+  '第二次审查意见答复_修改后权利要求书',
+  '办理登记手续通知书-${this.caseNo}',
+  '办理登记手续更正通知书-${this.caseNo}',
+  'BDJ-${this.caseNo}-02',
+  '依据更正通知更新办理登记手续期限',
+]) assert.ok(source.includes(requiredFixtureValue), `missing natural live fixture value ${requiredFixtureValue}`)
+
+for (const rejectedFixtureValue of [
+  'Integrated A 现场已复核',
+  '缺失期限校验',
+  '本地合成技术排练人工递交记录',
+  '技术排练操作员',
+  '本地合成技术排练递交回执',
+  'FILING-',
+  'OA1-',
+  'OA2-',
+  'CROSS-',
+  'WRONG-',
+  '${mainCaseNo}-X',
+  '回执归属校验辅助案件',
+  '递交回执（跨案归属校验）',
+  '递交回执（同案来源校验）',
+  '办理登记手续通知书（原始版本）',
+  '办理登记手续通知书（更新版本）',
+  'CYIP-GRANT-REPLACE-',
+  '仅用于本地合成技术排练的更新通知',
+  'SVC_GRANT_REGISTRATION_CN',
+]) assert.ok(!source.includes(rejectedFixtureValue), `live fixture contains rejected value ${rejectedFixtureValue}`)
 for (const truthfulBoundary of [
   '后台预检（不计入 01–09 客户阶段）',
   '本阶段验证模板来源、目录行为与递交准备工作包复用；不声称运行时模板预览。',

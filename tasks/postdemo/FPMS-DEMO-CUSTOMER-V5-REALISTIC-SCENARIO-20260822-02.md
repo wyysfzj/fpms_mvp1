@@ -78,7 +78,7 @@ The task owner later approved only `backend/tests/test_demo_abc_runtime_service_
 additional focused contract after provisional High review found the Integrated A customer screenshot
 still exposed the technical-looking fee code `DEMO_INTEGRATED_SERVICE_1`. The narrow remediation
 changes only that integrated synthetic fixture identity and its expected assertions to the
-realistic-shaped business code `SVC_GRANT_REGISTRATION_CN`. It preserves `DEMO_ONLY`,
+realistic-shaped business code `FWSQDJ001`. It preserves `DEMO_ONLY`,
 `SERVICE_DEMO_PRICE`, all synthetic authority boundaries, and legacy ABC v1 `DEMO_SERVICE_1`.
 
 The same provisional High review found customer attachment surfaces still exposed ordinal/role
@@ -87,6 +87,18 @@ renames the twelve Integrated A synthetic evidence files and six generated OA re
 natural Chinese business titles; roles, classifications, metadata, content hashes, endpoints, and
 domain behavior remain unchanged. Runbook section 10 is explicitly relabeled as a historical
 baseline record rather than evidence for this candidate.
+
+The final fixture-only audit approved natural business-shaped document notes, receipt numbers,
+submitter, auxiliary case identity, received-file names, grant source titles, replacement reference,
+replacement description, and service item code. These are presentation-data substitutions only;
+their existing dates, ownership/source mismatch checks, roles, classifications, and domain behavior
+remain unchanged. Pre-existing raw UUID aliases in product UI and localization of official-workflow
+labels or XML placeholder text are outside this fixture/runbook closure; this task does not invent a
+new carrier for them.
+
+The initially proposed hyphenated code `FW-SQDJ-001` produced the required RED against the existing
+bundle code contract, which permits only uppercase letters, digits, and underscores. The task owner
+therefore selected `FWSQDJ001`; the product validator and its allowlist remain unchanged.
 
 ## Required Scenario
 

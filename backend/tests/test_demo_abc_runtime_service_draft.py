@@ -125,7 +125,7 @@ def test_runtime_service_item_to_pay_locked_draft(
 ):
     _configure_bundle(tmp_path, monkeypatch, integrated=integrated)
     client_id, case_id = _seed_case(session_factory)
-    expected_item = "SVC_GRANT_REGISTRATION_CN" if integrated else "DEMO_SERVICE_1"
+    expected_item = "FWSQDJ001" if integrated else "DEMO_SERVICE_1"
     expected_template = (
         "DEMO_INTEGRATED_LETTER_1" if integrated else "DEMO_INTERNAL_LETTER_1"
     )
@@ -317,7 +317,7 @@ def test_demo_preflight_requires_validated_input_and_zero_business_counts(
     }
     assert payload["template_code"] == "DEMO_INTEGRATED_LETTER_1"
     assert len(payload["template_sha256"]) == 64
-    assert payload["item_code"] == "SVC_GRANT_REGISTRATION_CN"
+    assert payload["item_code"] == "FWSQDJ001"
     assert not payload["item_code"].startswith(("DEMO_", "IA-"))
     assert len(payload["source_sha256"]) == 64
 

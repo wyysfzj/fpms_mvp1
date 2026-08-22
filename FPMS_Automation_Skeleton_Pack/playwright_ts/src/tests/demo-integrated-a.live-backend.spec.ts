@@ -721,7 +721,7 @@ class IntegratedJourneyDriver {
   }
 
   private async verifyMissingDeadlineNoWrite(caseId: string, templateCode = 'OFFICIAL_NOTICE_003', label = '第一次'): Promise<Json> {
-    const title = `${label}审查意见通知书（缺失期限校验）-${this.caseNo}`
+    const title = `${label}审查意见通知书（补录）-${this.caseNo}`
     const before = await this.visibleCaseSnapshot(caseId)
     await this.operatorPage.goto(`${baseUrl}/documents/new?case_id=${caseId}`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '登记往来文件' })).toBeVisible()
@@ -762,7 +762,7 @@ class IntegratedJourneyDriver {
     await rereadResponse
     await this.operatorPage.getByRole('button', { name: '编辑往来文件' }).first().click()
     await expect(this.operatorPage.getByRole('heading', { name: '编辑文档' })).toBeVisible()
-    await this.operatorPage.getByPlaceholder('请输入文档内容或说明').fill('Integrated A 现场已复核')
+    await this.operatorPage.getByPlaceholder('请输入文档内容或说明').fill('已核对通知书内容及官方截止日')
     const updateResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/documents/${documentId}`))
     await this.operatorPage.getByRole('button', { name: '保存修改' }).click()
     const edited = await (await updateResponse).json() as Json
@@ -827,7 +827,7 @@ class IntegratedJourneyDriver {
     const refreshResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/official-work-packages/${this.filingPackageId}/filing-preparation/refresh`))
     await this.operatorPage.getByRole('button', { name: '刷新工作包' }).click()
     await refreshResponse
-    const externalPayload = { operation_code: 'EXTERNAL_SUBMISSION_RECORDED', occurred_at: filingDescriptor.metadata.effective_at, note: '本地合成技术排练人工递交记录' }
+    const externalPayload = { operation_code: 'EXTERNAL_SUBMISSION_RECORDED', occurred_at: filingDescriptor.metadata.effective_at, note: '已于 2026-08-01 完成人工递交' }
     const filingCommand = await this.publicLifecycleApi('RECORD_FILING_EXTERNAL', { package_id: this.filingPackageId }, externalPayload)
     expect(filingCommand.status).toBe(200)
     const filingPackage = await this.publicLifecycleApi('GET_FILING_PACKAGE', { package_id: this.filingPackageId })
@@ -841,12 +841,12 @@ class IntegratedJourneyDriver {
     const filingReceiptPayload = {
       receipt_kind: filingReceiptDescriptor.metadata.receipt_kind,
       receipt_attachment_id: filingReceiptBinding.attachmentId,
-      receiving_case_no: `FILING-${this.caseNo}`,
-      submitter: '技术排练操作员',
+      receiving_case_no: 'CNIPA-20260802-001',
+      submitter: '陈思远',
       received_at: filingReceiptDescriptor.metadata.received_at,
       received_file_list: '发明专利请求书及申请文件',
       archive_status: 'ARCHIVED',
-      note: '本地合成技术排练递交回执',
+      note: '已核对电子申请回执及收到文件清单',
     }
     const filingReceipt = await this.publicLifecycleApi('RECORD_PACKAGE_RECEIPT', { package_id: this.filingPackageId }, filingReceiptPayload)
     expect(filingReceipt.status, JSON.stringify(filingReceipt.body)).toBe(201)
@@ -968,11 +968,11 @@ class IntegratedJourneyDriver {
     const mainCaseNo = this.caseNo
 
     this.caseId = ''
-    this.caseNo = `${mainCaseNo}-X`
+    this.caseNo = `${mainCaseNo}-02`
     await this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '新建案件' })).toBeVisible()
     await this.operatorPage.getByPlaceholder('请输入案号（例如：P2024-001）').fill(this.caseNo)
-    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('回执归属校验辅助案件')
+    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('一种工业机器人末端执行器的力控校准方法')
     const clientField = this.operatorPage.locator('.el-form-item').filter({ hasText: '客户' }).first()
     await clientField.getByRole('combobox').click()
     await this.operatorPage.getByRole('option', { name: this.clientName }).click()
@@ -992,12 +992,12 @@ class IntegratedJourneyDriver {
     expect(auxiliary.client_id).toBe(this.clientId)
     expect(auxiliary.status).toBe('NOT_FILED')
     this.caseId = auxiliary.id
-    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.id, `递交回执（跨案归属校验）-${mainCaseNo}`, '2026-08-10')
+    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.id, `发明专利申请递交回执-${auxiliary.case_no}`, '2026-08-10')
     const crossAttachment = await this.uploadRole(crossDocument.document.id, invalidReceipt)
     this.caseId = mainCaseId
     this.caseNo = mainCaseNo
 
-    const wrongSourceDocument = await this.createDocumentViaVisibleUi(caseId, `递交回执（同案来源校验）-${mainCaseNo}`, '2026-08-10')
+    const wrongSourceDocument = await this.createDocumentViaVisibleUi(caseId, `第一次审查意见答复递交回执（补充件）-${mainCaseNo}`, '2026-08-10')
     const wrongSourceAttachment = await this.uploadRole(wrongSourceDocument.document.id, invalidReceipt)
     const crossPackageBefore = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
     expect(crossPackageBefore.status).toBe(200)
@@ -1009,10 +1009,10 @@ class IntegratedJourneyDriver {
 
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(crossAttachment.id)
-    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`CROSS-${mainCaseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
+    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill('CNIPA-20260810-001')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('陈思远')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill('2026-08-10T10:00:00')
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('递交回执（跨案归属校验）')
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('发明专利请求书及申请文件')
     const crossResponse = this.operatorPage.waitForResponse((item) => item.status() >= 400 && item.url().includes(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const crossRejected = await crossResponse
@@ -1035,10 +1035,10 @@ class IntegratedJourneyDriver {
     }
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(wrongSourceAttachment.id)
-    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`WRONG-${mainCaseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
+    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill('CNIPA-20260810-002')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('陈思远')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill('2026-08-10T10:00:00')
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('递交回执（同案来源校验）')
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('第一次审查意见答复_意见陈述书\n第一次审查意见答复_修改后权利要求书')
     const wrongSourceResponse = this.operatorPage.waitForResponse((item) => item.status() >= 400 && item.url().includes(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const wrongSourceRejected = await wrongSourceResponse
@@ -1101,10 +1101,12 @@ class IntegratedJourneyDriver {
     const receiptBinding = await this.uploadRole(replyId, receiptDescriptor)
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(receiptBinding.attachmentId)
-    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`OA${sequence}-${this.caseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
+    await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(sequence === 1 ? 'CNIPA-20260808-001' : 'CNIPA-20260810-003')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('陈思远')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill(receiptDescriptor.metadata.received_at.slice(0, 19))
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill(`第${sequence === 1 ? '一' : '二'}次审查意见答复文件`)
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill(sequence === 1
+      ? '第一次审查意见答复_意见陈述书\n第一次审查意见答复_修改后权利要求书'
+      : '第二次审查意见答复_意见陈述书\n第二次审查意见答复_修改后权利要求书')
     const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && item.url().endsWith(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const receipt = await (await receiptResponse).json() as Json
@@ -1236,7 +1238,7 @@ class IntegratedJourneyDriver {
     expect(deadline.official_due_date_status).toBe('CONFIRMED')
     const created = await this.createDocumentViaVisibleUi(
       caseId,
-      `办理登记手续通知书（原始版本）-${this.caseNo}`,
+      `办理登记手续通知书-${this.caseNo}`,
       sourceDocumentDate,
       'OFFICIAL_NOTICE_009',
       deadline,
@@ -1297,12 +1299,12 @@ class IntegratedJourneyDriver {
       document: {
         doc_template_id: this.grantTemplateId,
         doc_date: sourceDocumentDate,
-        title: `办理登记手续通知书（更新版本）-${this.caseNo}`,
-        ref_no: `CYIP-GRANT-REPLACE-${taskId.slice(0, 8)}`,
+        title: `办理登记手续更正通知书-${this.caseNo}`,
+        ref_no: `BDJ-${this.caseNo}-02`,
         official_due_date: descriptor.metadata.official_due_date,
         official_due_date_source: descriptor.metadata.official_due_date_source,
         official_due_date_status: descriptor.metadata.official_due_date_status,
-        description: '仅用于本地合成技术排练的更新通知',
+        description: '依据更正通知更新办理登记手续期限',
       },
     }
     const replaced = await this.publicLifecycleApi('GRANT_REPLACEMENT', { task_id: taskId }, replacementPayload)

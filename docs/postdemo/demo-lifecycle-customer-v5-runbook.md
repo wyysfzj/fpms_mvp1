@@ -43,7 +43,7 @@
 | 财务业务号 | `AR-CYZN-<run suffix>` / `RCPT-CYZN-<run suffix>` / `BTR-CYZN-<run suffix>` |
 | 递交与审查文书 | 发明专利请求书及申请文件；发明专利申请递交回执；发明专利申请受理通知书；发明专利申请初步审查合格通知书；发明专利申请公布通知书；发明专利申请进入实质审查阶段通知书 |
 | 两轮 OA | 第一次审查意见通知书；第一次审查意见答复递交回执；第二次审查意见通知书；第二次审查意见答复递交回执 |
-| 授权登记来源 | 办理登记手续通知书（原始版本）；办理登记手续通知书（更新版本） |
+| 授权登记来源 | 办理登记手续通知书；办理登记手续更正通知书 |
 
 整组场景边界：`SYNTHETIC_TEST_ONLY`、customer activation false、非客户授权、非生产输入。
 
@@ -533,8 +533,8 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 
 **输入**
 
-- 原始角色 `GRANT_NOTICE_ORIGINAL`：办理登记手续通知书（原始版本），synthetic deadline `2026-11-23`；
-- 替换角色 `GRANT_NOTICE_REPLACEMENT`：办理登记手续通知书（更新版本），synthetic deadline `2026-11-24`；
+- 原始角色 `GRANT_NOTICE_ORIGINAL`：办理登记手续通知书，synthetic deadline `2026-11-23`；
+- 替换角色 `GRANT_NOTICE_REPLACEMENT`：办理登记手续更正通知书，synthetic deadline `2026-11-24`；
 - source：`IMPORTED_OFFICIAL_NOTICE`；
 - status：`CONFIRMED`；
 - replacement metadata：`supersedes_role=GRANT_NOTICE_ORIGINAL`。
@@ -609,7 +609,7 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 **输入**
 
 - 服务项目：授权登记阶段代理服务费；
-- 业务费项代码：`SVC_GRANT_REGISTRATION_CN`；
+- 业务费项代码：`FWSQDJ001`；
 - 金额：`1,200.00 CNY`，保持 active synthetic bundle 的精确值；
 - rate item code、source ref、source version、source SHA-256。
 

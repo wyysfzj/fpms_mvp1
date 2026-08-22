@@ -76,8 +76,8 @@ INTEGRATED_EVIDENCE_TITLES = [
     "第一次审查意见答复递交回执",
     "第二次审查意见通知书",
     "第二次审查意见答复递交回执",
-    "办理登记手续通知书（原始版本）",
-    "办理登记手续通知书（更新版本）",
+    "办理登记手续通知书",
+    "办理登记手续更正通知书",
 ]
 
 
@@ -510,7 +510,7 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
         "rates": [
             {
                 "domain": "SERVICE_DEMO_PRICE",
-                "item_code": "SVC_GRANT_REGISTRATION_CN",
+                "item_code": "FWSQDJ001",
                 "name_zh_cn": "授权登记阶段代理服务费",
                 "currency": "CNY",
                 "calc_mode": "FIXED",
@@ -877,8 +877,8 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
         "第一次审查意见答复递交回执",
         "第二次审查意见通知书",
         "第二次审查意见答复递交回执",
-        "办理登记手续通知书（原始版本）",
-        "办理登记手续通知书（更新版本）",
+        "办理登记手续通知书",
+        "办理登记手续更正通知书",
     ]
     evidence_basenames = [Path(row["path"]).name for row in manifest["evidence"]]
     assert evidence_basenames == [
@@ -890,7 +890,9 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
         for role, name in zip(INTEGRATED_EVIDENCE_ROLES, evidence_basenames, strict=True)
     )
     assert manifest["rates"][0]["name_zh_cn"] == "授权登记阶段代理服务费"
-    assert snapshot.service_rate.item_code == "SVC_GRANT_REGISTRATION_CN"
+    assert snapshot.service_rate.item_code == "FWSQDJ001"
+    assert "SVC_GRANT_REGISTRATION_CN" not in json.dumps(manifest, ensure_ascii=False)
+    assert "FW-SQDJ-001" not in json.dumps(manifest, ensure_ascii=False)
     assert not snapshot.service_rate.item_code.startswith(("DEMO_", "IA-"))
     assert "虚构" not in manifest["provenance"]["label_zh_cn"]
     assert "虚构" not in manifest["rates"][0]["disclaimer_zh_cn"]
