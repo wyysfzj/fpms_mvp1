@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import ts from 'typescript'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const api = readFileSync(join(root, 'src/modules/demo/demo.api.ts'), 'utf8')
@@ -11,6 +12,35 @@ const inputsPage = readFileSync(join(root, 'src/modules/demo/pages/DemoInputs.vu
 const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
 const menu = readFileSync(join(root, 'src/constants/menu.ts'), 'utf8')
 const runbook = readFileSync(join(root, '../docs/postdemo/demo-lifecycle-customer-v5-runbook.md'), 'utf8')
+
+function importFunctions(source, names) {
+  const sourceFile = ts.createSourceFile(
+    'fees.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+  const declarations = sourceFile.statements.filter(
+    (statement) => ts.isFunctionDeclaration(statement)
+      && statement.name
+      && names.includes(statement.name.text),
+  )
+  assert.equal(declarations.length, names.length, 'all executable lock helpers must exist')
+  const compiled = ts.transpileModule(
+    declarations.map((declaration) => declaration.getText(sourceFile)).join('\n'),
+    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
+  ).outputText
+  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+}
+
+const {
+  executeFeeDraftLockCommand,
+  shouldReconcileFeeDraftLock,
+} = await importFunctions(feesApi, [
+  'shouldReconcileFeeDraftLock',
+  'executeFeeDraftLockCommand',
+])
 
 for (const endpoint of [
   '/fees/demo-preflight',
@@ -140,9 +170,92 @@ const lockFeeDraftStart = feesApi.indexOf('export async function lockFeeDraft(')
 const unlockFeeDraftStart = feesApi.indexOf('export async function unlockFeeDraft(')
 assert.ok(lockFeeDraftStart >= 0 && unlockFeeDraftStart > lockFeeDraftStart, 'missing bounded lockFeeDraft adapter')
 const lockFeeDraftSource = feesApi.slice(lockFeeDraftStart, unlockFeeDraftStart)
+assert.match(lockFeeDraftSource, /return executeFeeDraftLockCommand\(/)
 assert.match(lockFeeDraftSource, /await http\.post\(`\/fees\/drafts\/\$\{draftId\}\/lock`\)/)
-assert.ok(lockFeeDraftSource.includes('return getFeeDraft(draftId)'), 'normal fee page must project the authoritative draft after the lock acknowledgement')
+assert.ok(lockFeeDraftSource.includes('() => getFeeDraft(draftId)'), 'normal fee page must project the authoritative draft after the lock acknowledgement')
 assert.ok(!lockFeeDraftSource.includes('return response.data'), 'lock acknowledgement is not a fee draft detail')
+
+assert.equal(shouldReconcileFeeDraftLock({ status: 0, code: 'UNKNOWN_ERROR' }), true)
+for (const error of [
+  { status: 400, code: 'BAD_REQUEST' },
+  { status: 409, code: 'CONFLICT' },
+  { status: 500, code: 'UNKNOWN_ERROR' },
+  { status: 0, code: 'OTHER' },
+  null,
+]) {
+  assert.equal(shouldReconcileFeeDraftLock(error), false)
+}
+
+const draftId = 'draft-locked-1'
+const lockedDraft = { id: draftId, status: 'LOCKED' }
+const successCalls = { post: 0, read: 0 }
+assert.equal(
+  await executeFeeDraftLockCommand(
+    draftId,
+    async () => { successCalls.post += 1 },
+    async () => { successCalls.read += 1; return lockedDraft },
+  ),
+  lockedDraft,
+)
+assert.deepEqual(successCalls, { post: 1, read: 1 })
+
+for (const deterministicError of [
+  { status: 400, code: 'BAD_REQUEST' },
+  { status: 409, code: 'CONFLICT' },
+  { status: 500, code: 'UNKNOWN_ERROR' },
+  { status: 0, code: 'OTHER' },
+]) {
+  const calls = { post: 0, read: 0 }
+  await assert.rejects(
+    executeFeeDraftLockCommand(
+      draftId,
+      async () => { calls.post += 1; throw deterministicError },
+      async () => { calls.read += 1; return lockedDraft },
+    ),
+    (error) => error === deterministicError,
+  )
+  assert.deepEqual(calls, { post: 1, read: 0 })
+}
+
+const unknownTransportError = { status: 0, code: 'UNKNOWN_ERROR' }
+const reconciliationCalls = { post: 0, read: 0 }
+assert.equal(
+  await executeFeeDraftLockCommand(
+    draftId,
+    async () => { reconciliationCalls.post += 1; throw unknownTransportError },
+    async () => { reconciliationCalls.read += 1; return lockedDraft },
+  ),
+  lockedDraft,
+)
+assert.deepEqual(reconciliationCalls, { post: 1, read: 1 })
+
+for (const readResult of [
+  { id: 'another-draft', status: 'LOCKED' },
+  { id: draftId, status: 'OPEN' },
+]) {
+  const calls = { post: 0, read: 0 }
+  await assert.rejects(
+    executeFeeDraftLockCommand(
+      draftId,
+      async () => { calls.post += 1; throw unknownTransportError },
+      async () => { calls.read += 1; return readResult },
+    ),
+    (error) => error === unknownTransportError,
+  )
+  assert.deepEqual(calls, { post: 1, read: 1 })
+}
+
+const readFailure = new Error('read failed')
+const readFailureCalls = { post: 0, read: 0 }
+await assert.rejects(
+  executeFeeDraftLockCommand(
+    draftId,
+    async () => { readFailureCalls.post += 1; throw unknownTransportError },
+    async () => { readFailureCalls.read += 1; throw readFailure },
+  ),
+  (error) => error === unknownTransportError,
+)
+assert.deepEqual(readFailureCalls, { post: 1, read: 1 })
 
 for (const requiredCustomerValue of [
   'CYIP-CN-INV-<运行后缀>',

@@ -539,12 +539,43 @@ export async function deleteFeeItem(itemId: string): Promise<void> {
 
 // Fee Draft Lock/Unlock
 
+export function shouldReconcileFeeDraftLock(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const candidate = error as { status?: unknown; code?: unknown }
+    return candidate.status === 0 && candidate.code === 'UNKNOWN_ERROR'
+}
+
+export async function executeFeeDraftLockCommand(
+    draftId: string,
+    postLock: () => Promise<void>,
+    readDraft: () => Promise<FeeDraftDetail>,
+): Promise<FeeDraftDetail> {
+    try {
+        await postLock()
+    } catch (error) {
+        if (!shouldReconcileFeeDraftLock(error)) throw error
+        try {
+            const draft = await readDraft()
+            if (draft.id === draftId && draft.status === 'LOCKED') return draft
+        } catch {
+            // Re-throw the original unknown transport error below.
+        }
+        throw error
+    }
+    return readDraft()
+}
+
 /**
  * Lock a fee draft (prevents editing)
  */
 export async function lockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
-    await http.post(`/fees/drafts/${draftId}/lock`)
-    return getFeeDraft(draftId)
+    return executeFeeDraftLockCommand(
+        draftId,
+        async () => {
+            await http.post(`/fees/drafts/${draftId}/lock`)
+        },
+        () => getFeeDraft(draftId),
+    )
 }
 
 /**

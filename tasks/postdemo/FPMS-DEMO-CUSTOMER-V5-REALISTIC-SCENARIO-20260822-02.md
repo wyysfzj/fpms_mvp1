@@ -66,6 +66,14 @@ minimum amendment makes that existing adapter read the authoritative draft throu
 after the successful POST. It does not change this task's closure, non-closure, endpoint, route,
 schema, permission, transaction, or domain semantics, and it does not absorb the unlock adapter.
 
+Final provisional High review identified the remaining accepted-design §6 failure path: an unknown
+lock-POST transport outcome must reconcile durable state before reporting failure. The task owner
+approved the minimum failure-only amendment in the same normal-page adapter. Only an error with
+`status=0` and `code=UNKNOWN_ERROR` triggers one existing authoritative draft GET; that read is
+accepted only for the exact requested draft already in `LOCKED` state. Deterministic failures,
+failed or mismatched reads, and every other state rethrow the original POST error. This amendment
+does not change backend, unlock, runner, documentation, endpoint, or domain behavior.
+
 The task owner later approved only `backend/tests/test_demo_abc_runtime_service_draft.py` as an
 additional focused contract after provisional High review found the Integrated A customer screenshot
 still exposed the technical-looking fee code `DEMO_INTEGRATED_SERVICE_1`. The narrow remediation
