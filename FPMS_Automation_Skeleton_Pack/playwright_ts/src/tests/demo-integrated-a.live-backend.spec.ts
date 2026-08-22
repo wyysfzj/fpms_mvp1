@@ -1646,7 +1646,7 @@ class IntegratedJourneyDriver {
     const offset = (offsetPage.items as Json[]).find((item) => item.id === this.offsetId)
     expect(offset).toBeDefined()
 
-    const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/fee-overview/case-receipts'))
+    const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/case-receipts'))
     await this.operatorPage.goto(`${baseUrl}/billing/case-receipts`, { waitUntil: 'domcontentloaded' })
     const receiptPage = await (await receiptResponse).json() as Json
     const receipt = (receiptPage.items as Json[]).find((item) => item.case_id === caseId && item.fee_type === 'SERVICE')
