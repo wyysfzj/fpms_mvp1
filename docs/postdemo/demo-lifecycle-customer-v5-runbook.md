@@ -741,18 +741,23 @@ lsof -nP -iTCP:5173 -sTCP:LISTEN
 
 | 字段 | 本轮结果 |
 | --- | --- |
-| 验证日期 | 待执行 |
-| Candidate commit/tree | 待执行 |
-| Artifact | 待执行 |
-| RUN_ID | 待执行 |
-| Playwright | 待执行 |
-| Checkpoints | 待执行 |
-| Evidence bindings | 待执行 |
-| Final lifecycle | 待执行 |
-| Final bill/payment | 待执行 |
-| Cleanup | 待执行 |
-| Checksums | 待执行 |
-| Verdict | 待执行 |
+| 验证日期 | 2026-08-22（Asia/Shanghai） |
+| Candidate commit/tree | `06b5813dab1d4a027ec989b5f3c1edff2c997998` / `bd257fca30ec2eab0595040b62f205be37d83305` |
+| Artifact | `/tmp/fpms-customer-v5-runbook-06b5813-01` |
+| RUN_ID | `integrated-r1-7f37c5c5aaca` |
+| Playwright | headed Chromium，`1 passed (2.1m)` |
+| Checkpoints | IA-00…IA-18，19/19，各一次 |
+| Evidence bindings | 12/12 |
+| Final lifecycle | `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED` |
+| Final bill/payment | `SETTLED / FULLY_ALLOCATED / 0.00 CNY / 0.00 CNY` |
+| Cleanup | `run_root_removed=true`；8000/5173 已释放 |
+| Checksums | 20/20 `OK` |
+| Verdict | `LOCAL SYNTHETIC INTEGRATED TECHNICAL DEMO PASS` |
+
+验证前的命令灵敏度检查曾用 `backend/.venv/bin/python` 启动 runner，并在 bundle 构建前因
+缺少 test-only `pytest` 明确失败；当时没有启动服务或写入业务数据。Runbook 已将入口修正为
+既有 `INTEGRATED_DEPS`，随后使用全新 artifact/RUN_ID 完成上述 PASS。该失败证明依赖预检能够
+阻止“环境不完整但继续演示”的假成功。
 
 ---
 
