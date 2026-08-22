@@ -221,10 +221,7 @@ const lockError = ref<ApiError | null>(null)
 
 const draftId = computed(() => String(route.params.id || ''))
 const feePackageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
-const displayDraftId = computed(() => {
-  if (!draft.value) return '—'
-  return getFeeDraftTypeText(draft.value.draft_type) || '费用草稿'
-})
+const displayDraftId = computed(() => draft.value?.id || '—')
 
 const isLocked = computed(() => draft.value?.status === 'LOCKED')
 
