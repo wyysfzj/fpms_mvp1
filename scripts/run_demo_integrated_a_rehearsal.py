@@ -285,6 +285,88 @@ def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _checkpoint_map(run_artifact: Path) -> dict[str, dict[str, Any]]:
+    ledger = json.loads((run_artifact / "task9-checkpoints.json").read_text(encoding="utf-8"))
+    checkpoints = ledger.get("checkpoints")
+    expected = [f"IA-{index:02d}" for index in range(19)]
+    if not isinstance(checkpoints, list) or [row.get("checkpoint") for row in checkpoints] != expected:
+        raise RuntimeError("integrated checkpoint ledger must contain IA-00 through IA-18 exactly once")
+    bindings = ledger.get("evidence_bindings")
+    if not isinstance(bindings, list) or len(bindings) != 12:
+        raise RuntimeError("integrated checkpoint ledger must contain twelve evidence bindings")
+    return {row["checkpoint"]: row["result"] for row in checkpoints}
+
+
+def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
+    summaries: list[dict[str, Any]] = []
+    identity_sets: list[set[str]] = []
+    run_ids: list[str] = []
+    for ordinal in range(1, runs + 1):
+        run_artifact = artifact / f"run{ordinal}"
+        checkpoints = _checkpoint_map(run_artifact)
+        final = checkpoints["IA-18"]
+        expected_final = {
+            "lifecycle_status": "GRANT_REGISTRATION_IN_PROGRESS",
+            "lifecycle_stage": "GRANT_REGISTRATION",
+            "application_status": "APPLICATION_PENDING",
+            "source_state": "CONFIRMED",
+            "legacy_display": "GRANT_PENDING",
+            "bill_status": "SETTLED",
+            "payment_status": "FULLY_ALLOCATED",
+            "bill_balance": "0.00",
+            "payment_unapplied": "0.00",
+            "currency": "CNY",
+            "checkpoints_passed": 19,
+        }
+        if any(final.get(key) != value for key, value in expected_final.items()):
+            raise RuntimeError(f"run {ordinal} final state does not match the frozen contract")
+        cleanup = json.loads((run_artifact / "cleanup.json").read_text(encoding="utf-8"))
+        if cleanup.get("run_root_removed") is not True:
+            raise RuntimeError(f"run {ordinal} cleanup is incomplete")
+        run_ids.append(str(cleanup.get("run_id", "")))
+        command = json.loads((run_artifact / "command.json").read_text(encoding="utf-8"))
+        if command.get("redacted") is not True or "environment_keys" not in command:
+            raise RuntimeError(f"run {ordinal} command metadata is not redacted")
+        if (run_artifact / "integrated-final.png").stat().st_size == 0:
+            raise RuntimeError(f"run {ordinal} final screenshot is empty")
+        role_map = json.loads((run_artifact / "evidence-role-map.json").read_text(encoding="utf-8"))
+        if not isinstance(role_map, list) or len(role_map) != 12:
+            raise RuntimeError(f"run {ordinal} evidence role map is incomplete")
+        identities = {
+            checkpoints["IA-01"]["client_id"],
+            checkpoints["IA-01"]["contact_id"],
+            checkpoints["IA-02"]["case_id"],
+            checkpoints["IA-04"]["package_id"],
+            checkpoints["IA-13"]["draft_id"],
+            checkpoints["IA-14"]["bill_id"],
+            checkpoints["IA-15"]["payment_id"],
+            checkpoints["IA-15"]["payment_line_id"],
+            checkpoints["IA-16"]["offset_id"],
+        }
+        if len(identities) != 9 or any(not value for value in identities):
+            raise RuntimeError(f"run {ordinal} business identity set is incomplete")
+        identity_sets.append(identities)
+        summaries.append(expected_final)
+    if len(set(run_ids)) != runs or any(identity_sets[left] & identity_sets[right] for left in range(runs) for right in range(left + 1, runs)):
+        raise RuntimeError("integrated runs must use distinct run and business identities")
+    return {
+        "status": "DIAGNOSTIC_PASS",
+        "runs": runs,
+        "checkpoint_counts": [19] * runs,
+        "evidence_binding_counts": [12] * runs,
+        "run_ids": run_ids,
+        "business_identity_sets_disjoint": True,
+        "final_states": summaries,
+    }
+
+
+def write_checksums(artifact: Path) -> None:
+    rows = []
+    for path in sorted(item for item in artifact.rglob("*") if item.is_file() and item.name != "checksums.sha256"):
+        rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(artifact)}")
+    (artifact / "checksums.sha256").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
 def _run_one(
     ordinal: int,
     artifact: Path,
@@ -366,6 +448,14 @@ def _run_one(
         ]
         if not headless:
             command.append("--headed")
+        _write_json(
+            run_artifact / "command.json",
+            {
+                "redacted": True,
+                "command": command,
+                "environment_keys": sorted(key for key in browser_env if key.startswith("FPMS_")),
+            },
+        )
         with (run_artifact / "playwright.log").open("wb") as output:
             completed = subprocess.run(
                 command,
@@ -410,7 +500,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if bundle_parent.exists():
             shutil.rmtree(bundle_parent)
-    _write_json(artifact / "summary.json", {"status": "DIAGNOSTIC_PASS", "runs": args.runs})
+    _write_json(artifact / "summary.json", build_diagnostic_summary(artifact, args.runs))
+    write_checksums(artifact)
     return 0
 
 

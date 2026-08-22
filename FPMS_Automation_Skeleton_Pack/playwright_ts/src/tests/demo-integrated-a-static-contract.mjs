@@ -233,7 +233,7 @@ const allowedMemberCalls = new Set([
   'getAttribute', 'getByTestId', 'getByText', 'goto', 'includes', 'inspectCatalog', 'join', 'json',
   'inputValue', 'isDisabled', 'isEnabled', 'keys', 'last', 'loadLifecycleOverlay', 'locator', 'map', 'newContext', 'newPage', 'now', 'objectContaining', 'parse', 'press',
   'preflight', 'push', 'red', 'rejectInvalidReceipts', 'reloadSummary', 'replace',
-  'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'set', 'setDefaultTimeout', 'setInputFiles', 'setTimeout', 'slice', 'sort', 'status', 'then',
+  'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'screenshot', 'set', 'setDefaultTimeout', 'setInputFiles', 'setTimeout', 'slice', 'sort', 'status', 'then',
   'step', 'stringify', 'textContent', 'toBe', 'toBeDefined', 'toBeGreaterThan',
   'toBeDisabled', 'toBeEnabled', 'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toContainText', 'toEqual', 'toLowerCase',
   'toHaveCount', 'toHaveLength', 'toHaveText', 'toHaveURL', 'toHaveValue', 'toMatch', 'trim', 'uploadRole', 'url', 'values',
@@ -374,7 +374,19 @@ function visit(node) {
       && ts.isIdentifier(write.expression)
       && write.expression.text === 'writeFile'
       && write.arguments[0] === call
-    if (!isImport && !isPropertyName && !isExactWriteTarget) {
+    const screenshotPath = call?.parent
+    const screenshotOptions = screenshotPath?.parent
+    const screenshotCall = screenshotOptions?.parent
+    const isExactScreenshotTarget = screenshotPath
+      && ts.isPropertyAssignment(screenshotPath)
+      && ts.isIdentifier(screenshotPath.name)
+      && screenshotPath.name.text === 'path'
+      && ts.isObjectLiteralExpression(screenshotOptions)
+      && ts.isCallExpression(screenshotCall)
+      && ts.isPropertyAccessExpression(screenshotCall.expression)
+      && screenshotCall.expression.name.text === 'screenshot'
+      && screenshotCall.arguments[0] === screenshotOptions
+    if (!isImport && !isPropertyName && !isExactWriteTarget && !isExactScreenshotTarget) {
       assert.fail('evidence writes must not alias or mutate the path namespace')
     }
   }
@@ -459,7 +471,16 @@ function visit(node) {
           && payload.arguments[1].kind === ts.SyntaxKind.NullKeyword
           && ts.isNumericLiteral(payload.arguments[2])
           && payload.arguments[2].text === '2',
-        'evidence writes must use the exact pretty-JSON checkpoint or final-ledger path',
+        'evidence writes must use visible UI; file output is limited to the exact pretty-JSON checkpoint or final-ledger path',
+      )
+    }
+    if (name === 'screenshot') {
+      const options = node.arguments[0]
+      const normalized = options?.getText(syntax).replace(/\s+/g, ' ')
+      assert.equal(
+        normalized,
+        "{ path: path.join(evidenceDir!, 'integrated-final.png'), fullPage: true }",
+        'final screenshot must use the exact run-local evidence path',
       )
     }
     const receiver = ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)

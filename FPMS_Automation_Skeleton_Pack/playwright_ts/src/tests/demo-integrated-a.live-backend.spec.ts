@@ -404,7 +404,6 @@ class IntegratedJourneyDriver {
   private paymentLineId = ''
   private offsetId = ''
   private bundleAmount = ''
-  private summaryReads = 0
 
   constructor(
     readonly operatorPage: Page,
@@ -1615,8 +1614,6 @@ class IntegratedJourneyDriver {
   }
 
   async reloadSummary(caseId: string): Promise<Json> {
-    this.summaryReads += 1
-    if (this.summaryReads > 1) return this.red('IA-18')
     expect(caseId).toBe(this.caseId)
     const caseResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}`))
     const overlayResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
@@ -1711,6 +1708,7 @@ class IntegratedJourneyDriver {
       payment_unapplied: payment.unapplied_amt,
       bundle_amount: this.bundleAmount,
       currency: bill.currency,
+      checkpoints_passed: checkpointContract.length,
       visible_surfaces: {
         case: { case_no: caseDetail.case_no, lifecycle_tuple: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status] },
         draft: { id: draft.id, status: '已锁定', amount: amountLabel, currency: draft.currency },
@@ -1812,6 +1810,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   const task6Checkpoints: Json[] = []
   const task7Checkpoints: Json[] = []
   const task8Checkpoints: Json[] = []
+  const task9Checkpoints: Json[] = []
   const suffix = `${Date.now()}`
   const clientCode = `IA-${suffix}`
   const caseNo = `IA-CASE-${suffix}`
@@ -1978,6 +1977,9 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   await test.step(checkpointContract[18], async () => {
     const x = await journey.reloadSummary(caseId)
     expect(x.lifecycle_status).toBe('GRANT_REGISTRATION_IN_PROGRESS'); expect(x.lifecycle_stage).toBe('GRANT_REGISTRATION'); expect(x.application_status).toBe('APPLICATION_PENDING'); expect(x.source_state).toBe('CONFIRMED'); expect(x.legacy_display).toBe('GRANT_PENDING'); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.checkpoints_passed).toBe(19); expect(evidenceRoleMap.size).toBe(12)
+    task9Checkpoints.push({ checkpoint: 'IA-18', result: x })
+    await page.screenshot({ path: path.join(evidenceDir!, 'integrated-final.png'), fullPage: true })
+    await writeFile(path.join(evidenceDir!, 'task9-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints, ...task8Checkpoints, ...task9Checkpoints], evidence_bindings: [...evidenceRoleMap.values()], final_summary: x }, null, 2))
   })
 
   const orderedEvidenceLedger = assertCompleteEvidenceLedger(evidenceRoleMap)

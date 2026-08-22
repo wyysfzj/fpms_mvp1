@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -245,3 +246,86 @@ def test_runner_rejects_lifecycle_wrapper_calls_on_an_alternate_receiver():
     )
     with pytest.raises(RuntimeError, match="visible UI"):
         module.validate_spec_source(source)
+
+
+def test_integrated_spec_closes_ia18_with_authoritative_summary_artifacts():
+    source = SPEC.read_text(encoding="utf-8")
+
+    assert "if (this.summaryReads > 1) return this.red('IA-18')" not in source
+    assert "checkpoints_passed: checkpointContract.length" in source
+    assert "'task9-checkpoints.json'" in source
+    assert "'integrated-final.png'" in source
+
+
+def _write_fake_run(root: Path, ordinal: int) -> None:
+    run = root / f"run{ordinal}"
+    run.mkdir(parents=True)
+    checkpoints = [
+        {"checkpoint": f"IA-{index:02d}", "result": {}}
+        for index in range(19)
+    ]
+    identities = {
+        "client_id": f"client-{ordinal}",
+        "contact_id": f"contact-{ordinal}",
+        "case_id": f"case-{ordinal}",
+        "package_id": f"package-{ordinal}",
+        "draft_id": f"draft-{ordinal}",
+        "bill_id": f"bill-{ordinal}",
+        "payment_id": f"payment-{ordinal}",
+        "payment_line_id": f"line-{ordinal}",
+        "offset_id": f"offset-{ordinal}",
+    }
+    checkpoints[1]["result"] = {
+        "client_id": identities["client_id"],
+        "contact_id": identities["contact_id"],
+    }
+    checkpoints[2]["result"] = {"case_id": identities["case_id"]}
+    checkpoints[4]["result"] = {"package_id": identities["package_id"]}
+    checkpoints[13]["result"] = {"draft_id": identities["draft_id"]}
+    checkpoints[14]["result"] = {"bill_id": identities["bill_id"]}
+    checkpoints[15]["result"] = {
+        "payment_id": identities["payment_id"],
+        "payment_line_id": identities["payment_line_id"],
+    }
+    checkpoints[16]["result"] = {"offset_id": identities["offset_id"]}
+    checkpoints[18]["result"] = {
+        "lifecycle_status": "GRANT_REGISTRATION_IN_PROGRESS",
+        "lifecycle_stage": "GRANT_REGISTRATION",
+        "application_status": "APPLICATION_PENDING",
+        "source_state": "CONFIRMED",
+        "legacy_display": "GRANT_PENDING",
+        "bill_status": "SETTLED",
+        "payment_status": "FULLY_ALLOCATED",
+        "bill_balance": "0.00",
+        "payment_unapplied": "0.00",
+        "currency": "CNY",
+        "checkpoints_passed": 19,
+    }
+    (run / "task9-checkpoints.json").write_text(
+        json.dumps({"checkpoints": checkpoints, "evidence_bindings": [{}] * 12}),
+        encoding="utf-8",
+    )
+    (run / "evidence-role-map.json").write_text(json.dumps([{}] * 12), encoding="utf-8")
+    (run / "integrated-final.png").write_bytes(b"png")
+    (run / "cleanup.json").write_text(
+        json.dumps({"run_id": f"integrated-r{ordinal}-unique", "run_root_removed": True}),
+        encoding="utf-8",
+    )
+    (run / "command.json").write_text(
+        json.dumps({"redacted": True, "environment_keys": ["FPMS_DEMO_RUN_ID"]}),
+        encoding="utf-8",
+    )
+
+
+def test_runner_accepts_only_two_clean_runs_with_disjoint_business_identities(tmp_path: Path):
+    module = _module()
+    _write_fake_run(tmp_path, 1)
+    _write_fake_run(tmp_path, 2)
+
+    summary = module.build_diagnostic_summary(tmp_path, 2)
+
+    assert summary["status"] == "DIAGNOSTIC_PASS"
+    assert summary["runs"] == 2
+    assert summary["checkpoint_counts"] == [19, 19]
+    assert summary["evidence_binding_counts"] == [12, 12]
+    assert summary["business_identity_sets_disjoint"] is True
