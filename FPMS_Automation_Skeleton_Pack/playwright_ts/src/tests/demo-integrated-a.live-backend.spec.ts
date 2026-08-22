@@ -1492,8 +1492,11 @@ class IntegratedJourneyDriver {
     const lockDialog = this.operatorPage.getByRole('dialog', { name: '锁定草稿' })
     await expect(lockDialog).toBeVisible()
     const lockResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/drafts/${openDraft.id}/lock`))
+    const lockedDraftResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/drafts/${openDraft.id}`))
     await lockDialog.getByRole('button', { name: '锁定', exact: true }).click()
-    const lockedDraft = await (await lockResponse).json() as Json
+    const lockedAck = await (await lockResponse).json() as Json
+    expect(lockedAck.status).toBe('ok')
+    const lockedDraft = await (await lockedDraftResponse).json() as Json
     expect(lockedDraft.id).toBe(openDraft.id)
     expect(lockedDraft.status).toBe('LOCKED')
     await expect(this.operatorPage.getByText('🔒 已锁定', { exact: true })).toBeVisible()

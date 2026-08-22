@@ -51,8 +51,19 @@ UUIDs, and idempotency keys. No broad, product, release, deploy, or production g
 - `backend/tests/test_demo_integrated_first_oa.py`
 - `frontend/src/modules/demo/pages/DemoAbc.vue`
 - `frontend/src/modules/demo/demo.api.ts`
+- `frontend/src/api/fees.ts`
 - `frontend/tests/demo-abc-contract.mjs`
 - `artifacts/FPMS-DEMO-CUSTOMER-V5-REALISTIC-SCENARIO-20260822-02/**`
+
+## Approved Task Amendment — 2026-08-23
+
+The task owner approved adding only `frontend/src/api/fees.ts` to the exact allowlist after the
+headed rehearsal exposed an existing projection mismatch on the normal fee-draft page. The lock
+endpoint truthfully returns `OkOut` (`{"status":"ok"}`), while `lockFeeDraft` treated that
+acknowledgement as `FeeDraftDetail`, corrupting the page projection after a successful lock. The
+minimum amendment makes that existing adapter read the authoritative draft through the existing GET
+after the successful POST. It does not change this task's closure, non-closure, endpoint, route,
+schema, permission, transaction, or domain semantics, and it does not absorb the unlock adapter.
 
 ## Required Scenario
 

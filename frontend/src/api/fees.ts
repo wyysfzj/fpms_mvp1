@@ -543,8 +543,8 @@ export async function deleteFeeItem(itemId: string): Promise<void> {
  * Lock a fee draft (prevents editing)
  */
 export async function lockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
-    const response = await http.post<FeeDraftDetail>(`/fees/drafts/${draftId}/lock`)
-    return response.data
+    await http.post(`/fees/drafts/${draftId}/lock`)
+    return getFeeDraft(draftId)
 }
 
 /**

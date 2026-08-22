@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const api = readFileSync(join(root, 'src/modules/demo/demo.api.ts'), 'utf8')
+const feesApi = readFileSync(join(root, 'src/api/fees.ts'), 'utf8')
 const page = readFileSync(join(root, 'src/modules/demo/pages/DemoAbc.vue'), 'utf8')
 const inputsPage = readFileSync(join(root, 'src/modules/demo/pages/DemoInputs.vue'), 'utf8')
 const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
@@ -135,6 +136,13 @@ assert.match(
   /http\.post\(`\/fees\/drafts\/\$\{draftId\}\/lock`\)[\s\S]*http\.get<DemoDraft>\(`\/fees\/drafts\/\$\{draftId\}`\)/,
   'draft lock acknowledgement must be reconciled with the authoritative draft detail',
 )
+const lockFeeDraftStart = feesApi.indexOf('export async function lockFeeDraft(')
+const unlockFeeDraftStart = feesApi.indexOf('export async function unlockFeeDraft(')
+assert.ok(lockFeeDraftStart >= 0 && unlockFeeDraftStart > lockFeeDraftStart, 'missing bounded lockFeeDraft adapter')
+const lockFeeDraftSource = feesApi.slice(lockFeeDraftStart, unlockFeeDraftStart)
+assert.match(lockFeeDraftSource, /await http\.post\(`\/fees\/drafts\/\$\{draftId\}\/lock`\)/)
+assert.ok(lockFeeDraftSource.includes('return getFeeDraft(draftId)'), 'normal fee page must project the authoritative draft after the lock acknowledgement')
+assert.ok(!lockFeeDraftSource.includes('return response.data'), 'lock acknowledgement is not a fee draft detail')
 
 for (const requiredCustomerValue of [
   'CYIP-CN-INV-<运行后缀>',

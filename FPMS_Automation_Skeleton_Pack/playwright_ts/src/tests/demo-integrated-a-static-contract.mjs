@@ -83,6 +83,14 @@ for (const stage7VisibleAction of [
 assert.ok(!source.includes("getByTestId('create-draft').click()"), 'stage 07 must not create or lock the draft on the hidden control page')
 assert.ok(source.includes('case_title: created.title_cn'), 'case checkpoint must read the raw create-case title_cn field')
 assert.ok(!source.includes('case_title: created.title,'), 'case checkpoint must not read the frontend-adapted title field from a raw API response')
+for (const lockReadback of [
+  "expect(lockedAck.status).toBe('ok')",
+  'const lockedDraftResponse = this.operatorPage.waitForResponse((item) => item.status() === 200',
+  'const lockedDraft = await (await lockedDraftResponse).json() as Json',
+  'expect(lockedDraft.id).toBe(openDraft.id)',
+  "expect(lockedDraft.status).toBe('LOCKED')",
+  "getByText('🔒 已锁定', { exact: true })",
+]) assert.ok(source.includes(lockReadback), `missing authoritative lock readback ${lockReadback}`)
 
 for (let ordinal = 0; ordinal <= 18; ordinal += 1) {
   assert.ok(source.includes(`IA-${String(ordinal).padStart(2, '0')}`), `missing IA-${ordinal}`)
