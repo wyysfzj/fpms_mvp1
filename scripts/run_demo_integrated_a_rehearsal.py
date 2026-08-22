@@ -107,6 +107,20 @@ ALLOWED_SPEC_IMPORT_LINES = [
     "import { mkdir, writeFile } from 'node:fs/promises'",
     "import path from 'node:path'",
 ]
+REHEARSAL_SCENARIO = {
+    "customer_name": "澄岳智造技术（苏州）有限公司",
+    "customer_code_prefix": "CYZN",
+    "contact_name": "周岚",
+    "contact_title": "知识产权经理",
+    "contact_email": "zhou.lan@chengyue-ip.example",
+    "case_no_prefix": "CYIP-CN-INV",
+    "case_title": "一种柔性制造产线中视觉检测工位的自适应标定方法",
+    "service_item_name": "授权登记阶段代理服务费",
+    "bill_no_prefix": "AR-CYZN",
+    "payment_no_prefix": "RCPT-CYZN",
+    "bank_ref_prefix": "BTR-CYZN",
+}
+CUSTOMER_STAGE_ORDER = tuple(f"{index:02d}" for index in range(1, 10))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -170,14 +184,15 @@ def materialize_oa_reply_outputs(output_root: Path) -> list[dict[str, Any]]:
         raise RuntimeError("synthetic output writers are unavailable")
 
     definitions = (
-        ("OA_STATEMENT_WORD", "意见陈述 Word", ".docx"),
-        ("OA_STATEMENT_PDF", "意见陈述 PDF 保真附件", ".pdf"),
-        ("OA_MODIFIED_CLAIMS", "修改后的权利要求书", ".docx"),
+        ("OA_STATEMENT_WORD", "审查意见答复意见陈述书（Word）", ".docx"),
+        ("OA_STATEMENT_PDF", "审查意见答复意见陈述书（PDF）", ".pdf"),
+        ("OA_MODIFIED_CLAIMS", "审查意见答复修改后权利要求书", ".docx"),
     )
     descriptors: list[dict[str, Any]] = []
     for oa_sequence in (1, 2):
         for role, label, suffix in definitions:
-            title = f"虚构第{oa_sequence}次OA答复-{label}"
+            sequence_label = "第一" if oa_sequence == 1 else "第二"
+            title = f"{sequence_label}次{label}"
             output_path = output_root / f"oa{oa_sequence}-{role.lower()}{suffix}"
             if suffix == ".docx":
                 write_docx(output_path)
@@ -383,6 +398,8 @@ def _run_one(
     manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
     template = manifest["templates"][0]
     rate = manifest["rates"][0]
+    if rate.get("name_zh_cn") != REHEARSAL_SCENARIO["service_item_name"]:
+        raise RuntimeError("integrated service item does not match the approved scenario")
     admin_password = secrets.token_urlsafe(24)
     reviewer_password = secrets.token_urlsafe(24)
     oa_reply_outputs = materialize_oa_reply_outputs(run_artifact / "oa-reply-outputs")
@@ -436,6 +453,18 @@ def _run_one(
             FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN=rate["disclaimer_zh_cn"],
             FPMS_DEMO_INTEGRATED_EVIDENCE_JSON=integrated_evidence_json(bundle),
             FPMS_DEMO_INTEGRATED_OA_REPLY_OUTPUT_JSON=oa_reply_outputs_json(oa_reply_outputs),
+            FPMS_DEMO_CUSTOMER_NAME=REHEARSAL_SCENARIO["customer_name"],
+            FPMS_DEMO_CUSTOMER_CODE_PREFIX=REHEARSAL_SCENARIO["customer_code_prefix"],
+            FPMS_DEMO_CONTACT_NAME=REHEARSAL_SCENARIO["contact_name"],
+            FPMS_DEMO_CONTACT_TITLE=REHEARSAL_SCENARIO["contact_title"],
+            FPMS_DEMO_CONTACT_EMAIL=REHEARSAL_SCENARIO["contact_email"],
+            FPMS_DEMO_CASE_NO_PREFIX=REHEARSAL_SCENARIO["case_no_prefix"],
+            FPMS_DEMO_CASE_TITLE=REHEARSAL_SCENARIO["case_title"],
+            FPMS_DEMO_SERVICE_ITEM_NAME=REHEARSAL_SCENARIO["service_item_name"],
+            FPMS_DEMO_BILL_NO_PREFIX=REHEARSAL_SCENARIO["bill_no_prefix"],
+            FPMS_DEMO_PAYMENT_NO_PREFIX=REHEARSAL_SCENARIO["payment_no_prefix"],
+            FPMS_DEMO_BANK_REF_PREFIX=REHEARSAL_SCENARIO["bank_ref_prefix"],
+            FPMS_DEMO_CUSTOMER_STAGE_ORDER=",".join(CUSTOMER_STAGE_ORDER),
         )
         command = [
             "node",

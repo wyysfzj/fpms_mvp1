@@ -136,4 +136,43 @@ assert.match(
   'draft lock acknowledgement must be reconciled with the authoritative draft detail',
 )
 
+for (const requiredCustomerValue of [
+  'CYIP-CN-INV-<运行后缀>',
+  '授权登记阶段代理服务费',
+  '`AR-CYZN-${suffix}`',
+  '`RCPT-CYZN-${suffix}`',
+  '`BTR-CYZN-${suffix}`',
+]) assert.ok(page.includes(requiredCustomerValue), `missing realistic customer value ${requiredCustomerValue}`)
+assert.ok(api.includes("remark: '澄岳智造技术（苏州）有限公司客户回款'"))
+for (const rejectedCustomerValue of [
+  'DEMO-AR-',
+  'DEMO-PAY-',
+  'DEMO-BANK-',
+  '虚构集成演示客户',
+  '虚构主联系人',
+  '集成演示服务费',
+]) assert.ok(!page.includes(rejectedCustomerValue) && !api.includes(rejectedCustomerValue), `rejected customer value ${rejectedCustomerValue}`)
+
+for (const recoveryContract of [
+  'recoverDemoLockedDraft',
+  'overlay.caseId !== caseId',
+  'overlay.hasMore',
+  'obligationMatches.length !== 1',
+  'sourceActivityId !== obligation.source_activity_id',
+  'draftFacts.length !== 1',
+  'feeCode !== obligation.item_code',
+  'payableAmount !== obligation.amount',
+  'draft.case_id !== caseId',
+  'draft.client_id !== clientId',
+  "draft.currency !== 'CNY'",
+  "draft.status !== 'LOCKED'",
+  "draft.total_gov !== '0.00'",
+  'draft.total_service !== obligation.amount',
+  "draft.total_misc !== '0.00'",
+  'draft.amount !== obligation.amount',
+]) assert.ok(api.includes(recoveryContract), `missing fail-closed cross-page recovery contract ${recoveryContract}`)
+assert.ok(page.includes('draft.value = await recoverDemoLockedDraft('))
+assert.ok(!page.includes('data-testid="create-draft"'))
+assert.ok(!page.includes('confirmPayAndLock'))
+
 console.log('demo ABC frontend source contract OK')

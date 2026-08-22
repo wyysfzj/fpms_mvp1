@@ -6,8 +6,81 @@ import ts from 'typescript'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const specPath = path.join(here, 'demo-integrated-a.live-backend.spec.ts')
+const repoRoot = path.resolve(here, '../../../..')
+const htmlPath = path.join(repoRoot, 'docs/postdemo/demo-lifecycle-customer-v5.html')
+const runbookPath = path.join(repoRoot, 'docs/postdemo/demo-lifecycle-customer-v5-runbook.md')
 assert.ok(fs.existsSync(specPath), `missing canonical integrated spec: ${specPath}`)
 const source = process.argv.includes('--stdin') ? fs.readFileSync(0, 'utf8') : fs.readFileSync(specPath, 'utf8')
+const html = fs.readFileSync(htmlPath, 'utf8')
+const runbook = fs.readFileSync(runbookPath, 'utf8')
+const normalizedHtml = html.replaceAll('&lt;', '<').replaceAll('&gt;', '>')
+
+const expectedCustomerStages = Array.from({ length: 9 }, (_, index) => String(index + 1).padStart(2, '0'))
+const htmlStages = [...html.matchAll(/<article class="stage-card[^>]*data-stage="(\d{2})"[\s\S]*?<\/article>/g)]
+assert.deepEqual(htmlStages.map((match) => match[1]), expectedCustomerStages, 'HTML must contain exact customer stages 01 through 09')
+const runbookStages = [...runbook.matchAll(/^## 5\.[1-9] 阶段 (\d{2})：/gm)]
+assert.deepEqual(runbookStages.map((match) => match[1]), expectedCustomerStages, 'runbook must contain exact customer stages 01 through 09')
+const requiredStageFields = ['主持人话术', '界面/动作', '输入', '屏幕输出', '预期结果', '验证', '事实边界', '本阶段停止条件', '最近新增']
+for (const [index, match] of htmlStages.entries()) {
+  for (const field of requiredStageFields) assert.ok(match[0].includes(`>${field}<`), `HTML stage ${expectedCustomerStages[index]} missing ${field}`)
+}
+for (let index = 0; index < runbookStages.length; index += 1) {
+  const start = runbookStages[index].index
+  const end = index + 1 < runbookStages.length ? runbookStages[index + 1].index : runbook.indexOf('\n## 6.', start)
+  const stage = runbook.slice(start, end)
+  for (const field of requiredStageFields) assert.ok(stage.includes(`**${field}**`), `runbook stage ${expectedCustomerStages[index]} missing ${field}`)
+}
+
+const customerScenarioValues = [
+  '澄岳智造技术（苏州）有限公司',
+  'CYZN-<run suffix>',
+  '周岚',
+  '知识产权经理',
+  'zhou.lan@chengyue-ip.example',
+  'CYIP-CN-INV-<run suffix>',
+  '一种柔性制造产线中视觉检测工位的自适应标定方法',
+  '授权登记阶段代理服务费',
+  'AR-CYZN-<run suffix>',
+  'RCPT-CYZN-<run suffix>',
+  'BTR-CYZN-<run suffix>',
+  '发明专利请求书及申请文件',
+  '发明专利申请递交回执',
+  '发明专利申请受理通知书',
+  '发明专利申请初步审查合格通知书',
+  '发明专利申请公布通知书',
+  '发明专利申请进入实质审查阶段通知书',
+  '第一次审查意见通知书',
+  '第一次审查意见答复递交回执',
+  '第二次审查意见通知书',
+  '第二次审查意见答复递交回执',
+  '办理登记手续通知书（原始版本）',
+  '办理登记手续通知书（更新版本）',
+]
+for (const target of [normalizedHtml, runbook]) {
+  for (const value of customerScenarioValues) assert.ok(target.includes(value), `customer scenario missing ${value}`)
+  for (const rejected of ['IA-CASE', 'DEMO-AR', 'DEMO-PAY', 'DEMO-BANK', '虚构集成演示客户', '虚构主联系人', '集成演示服务费']) {
+    assert.ok(!target.includes(rejected), `customer material contains rejected value ${rejected}`)
+  }
+}
+for (const truthfulBoundary of [
+  '后台预检（不计入 01–09 客户阶段）',
+  '本阶段验证模板来源、目录行为与递交准备工作包复用；不声称运行时模板预览。',
+  '主持人不共享控制页',
+  '客户共享费用页与草单页',
+  '客户共享账单、回款、核销与案件权威读页',
+  '口头说明与配置边界',
+  '本阶段不操作产品页面',
+]) assert.ok(html.includes(truthfulBoundary) && runbook.includes(truthfulBoundary), `missing truthful customer boundary ${truthfulBoundary}`)
+
+for (const stage7VisibleAction of [
+  "getByTestId('create-obligation').click()",
+  "getByRole('tab', { name: '费用', exact: true }).click()",
+  "getByRole('button', { name: '记录支付指示', exact: true }).click()",
+  "getByRole('link', { name: '创建关联费用草稿', exact: true }).click()",
+  "getByRole('button', { name: '创建草稿', exact: true }).click()",
+  "getByRole('button', { name: '锁定', exact: true }).click()",
+]) assert.ok(source.includes(stage7VisibleAction), `missing truthful stage 07 action ${stage7VisibleAction}`)
+assert.ok(!source.includes("getByTestId('create-draft').click()"), 'stage 07 must not create or lock the draft on the hidden control page')
 
 for (let ordinal = 0; ordinal <= 18; ordinal += 1) {
   assert.ok(source.includes(`IA-${String(ordinal).padStart(2, '0')}`), `missing IA-${ordinal}`)
@@ -122,7 +195,7 @@ for (const task5Evidence of [
   'item.package_kind, item.status',
   "typeof x.task_id).toBe('string')",
   'item.client_code === code && item.name_cn === this.clientName',
-  "item.contact_name === '虚构主联系人'",
+  'item.contact_name === expectedScenario.contactName',
 ]) assert.ok(source.includes(task5Evidence), `missing Task5 observed contract ${task5Evidence}`)
 for (const wrongShape of [
   'tasks.map((item) => item.task_id)',

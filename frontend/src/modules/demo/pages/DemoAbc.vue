@@ -4,7 +4,7 @@
       <div>
         <p class="eyebrow">LOCAL ABC E2E · DEMO_ONLY</p>
         <h1>客户账单、回款与核销演示</h1>
-        <p>所有金额与模板均来自当前只读 runtime bundle；本页不代表生产费率或正式模板。</p>
+        <p>所有金额与模板均来自当前只读 runtime bundle；授权登记阶段代理服务费不代表客户报价或官方费用。</p>
       </div>
       <el-tag :type="demoReady ? 'success' : bundle ? 'info' : 'warning'" size="large">
         {{ demoReady
@@ -30,6 +30,7 @@
         <div><dt>费率来源</dt><dd data-testid="rate-source-ref">{{ bundle.source_ref }}</dd></div>
         <div><dt>费率来源版本</dt><dd data-testid="rate-source-version">{{ bundle.source_version }}</dd></div>
         <div><dt>费率来源 SHA-256</dt><dd data-testid="rate-source-sha256" class="hash">{{ bundle.source_sha256 }}</dd></div>
+        <div><dt>服务项目</dt><dd>{{ bundle.name_zh_cn }}</dd></div>
         <div><dt>服务费</dt><dd>{{ money(bundle.amount) }} {{ bundle.currency }}</dd></div>
         <div><dt>官方费用</dt><dd>官方费用：未配置（不计入总额）</dd></div>
       </dl>
@@ -40,11 +41,11 @@
       <template #header><strong>2. 选择已创建案件</strong></template>
       <p class="hint">
         先通过 <router-link to="/clients/new">客户管理</router-link> 和
-        <router-link to="/cases/new">案件管理</router-link> 创建虚构演示数据，再输入页面可见的案号。
+        <router-link to="/cases/new">案件管理</router-link> 创建本地合成技术排练数据，再输入页面可见的案号。
       </p>
       <el-form inline @submit.prevent="loadCase">
         <el-form-item label="案号">
-          <el-input v-model.trim="caseNoInput" data-testid="demo-case-no" placeholder="例如：DEMO-CASE-001" style="width: 360px" />
+          <el-input v-model.trim="caseNoInput" data-testid="demo-case-no" placeholder="CYIP-CN-INV-<运行后缀>" style="width: 360px" />
         </el-form-item>
         <el-button type="primary" :loading="loading === 'case'" @click="loadCase">加载案件</el-button>
       </el-form>
@@ -54,13 +55,13 @@
     </el-card>
 
     <el-card class="step-card">
-      <template #header><strong>3. 服务费义务 → PAY → 锁定草单</strong></template>
+      <template #header><strong>3. 创建服务费义务</strong></template>
       <div class="actions">
         <el-button data-testid="create-obligation" :disabled="!selectedCase || !demoReady" :loading="loading === 'obligation'" @click="createObligation">生成服务费义务</el-button>
-        <el-button data-testid="create-draft" :disabled="!obligation" :loading="loading === 'draft'" @click="confirmPayAndLock">确认 PAY 并锁定草单</el-button>
       </div>
       <p v-if="obligation" class="success-line">义务 {{ obligation.obligation.id }} · {{ money(obligation.amount) }} CNY</p>
-      <p v-if="draft" class="success-line">草单 {{ draft.id }} · {{ draft.status }} · {{ money(draft.amount) }} CNY</p>
+      <p v-if="obligation && !draft" class="hint">请在案件费用页记录 PAY，并从关联入口创建、锁定草单。</p>
+      <p v-if="draft" class="success-line">已从权威费用事实恢复锁定草单 {{ draft.id }} · {{ money(draft.amount) }} CNY</p>
     </el-card>
 
     <el-card class="step-card">
@@ -102,18 +103,15 @@ import type { Case } from '../../../api/cases.types'
 import {
   createDemoBankReceipt,
   createDemoBill,
-  createDemoDraft,
   createDemoFullOffset,
   createDemoServiceObligation,
-  lockDemoDraft,
   readDemoBillCommand,
-  readDemoDraft,
   readDemoOffsetCommand,
   readDemoPaymentCommand,
   readDemoServiceObligation,
   readDemoServiceItem,
   readDemoPreflight,
-  recordDemoPayInstruction,
+  recoverDemoLockedDraft,
 } from '../demo.api'
 import type {
   DemoBankReceiptResponse,
@@ -261,26 +259,12 @@ async function createObligation() {
   })
 }
 
-async function confirmPayAndLock() {
-  if (!selectedCase.value?.client_id || !obligation.value) return
-  await run('draft', async () => {
-    await recordDemoPayInstruction(obligation.value!.obligation.id, idempotencyKeys.instruction)
-    const created = await createDemoDraft(
-      selectedCase.value!.id,
-      String(selectedCase.value!.client_id),
-      obligation.value!.obligation.id,
-    )
-    draft.value = await lockDemoDraft(created.id)
-    persistSession()
-  })
-}
-
 async function createBill() {
   if (!draft.value) return
   await run('bill', async () => {
     const result = await createDemoBill(
       draft.value!.id,
-      `DEMO-AR-${suffix}`,
+      `AR-CYZN-${suffix}`,
       today,
       due,
       idempotencyKeys.bill,
@@ -295,8 +279,8 @@ async function createPayment() {
   await run('payment', async () => {
     payment.value = await createDemoBankReceipt(
       bill.value!,
-      `DEMO-PAY-${suffix}`,
-      `DEMO-BANK-${suffix}`,
+      `RCPT-CYZN-${suffix}`,
+      `BTR-CYZN-${suffix}`,
       today,
       idempotencyKeys.payment,
     )
@@ -340,10 +324,16 @@ async function restoreSession() {
         idempotencyKeys.obligation,
       )
     }
-    if (saved.draft_id) {
-      const restoredDraft = await readDemoDraft(saved.draft_id)
-      if (restoredDraft.case_id !== selectedCase.value?.id) throw new Error('演示草单与当前案件不一致')
-      draft.value = restoredDraft
+    if (obligation.value && selectedCase.value?.client_id) {
+      draft.value = await recoverDemoLockedDraft(
+        selectedCase.value.id,
+        String(selectedCase.value.client_id),
+        obligation.value,
+      )
+      if (saved.draft_id && saved.draft_id !== draft.value.id) {
+        throw new Error('演示草单与已保存的权威身份不一致')
+      }
+      persistSession()
     }
     const billResult = await readDemoBillCommand(idempotencyKeys.bill)
     if (billResult) bill.value = billResult.bill

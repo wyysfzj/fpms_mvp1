@@ -1,4 +1,5 @@
 import { http } from '../../api/http'
+import { getLifecycleOverlay } from '../../api/lifecycleOverlay'
 import {
   parseDemoBankReceiptResponse,
   parseDemoBillCommandResponse,
@@ -265,6 +266,67 @@ export async function readDemoDraft(draftId: string): Promise<DemoDraft> {
   return parseDemoDraft((await http.get(`/fees/drafts/${draftId}`)).data)
 }
 
+export async function recoverDemoLockedDraft(
+  caseId: string,
+  clientId: string,
+  obligation: DemoFeeObligationResponse,
+): Promise<DemoDraft> {
+  const overlay = await getLifecycleOverlay(caseId, {
+    afterSequence: 0,
+    limit: 200,
+    asOfRevision: null,
+  })
+  if (overlay.caseId !== caseId || overlay.hasMore) {
+    throw new Error('案件费用事实未完整加载，无法恢复演示草单')
+  }
+  const obligationMatches = overlay.milestones
+    .flatMap((milestone) => milestone.feeObligations)
+    .filter((row) => row.obligationId === obligation.obligation.id
+      && row.relatedFacts.some((fact) => fact.kind === 'DRAFT'))
+  if (obligationMatches.length !== 1) {
+    throw new Error('当前案件没有唯一的服务费义务事实')
+  }
+  const [match] = obligationMatches
+  const [line] = match.lines
+  const { feeCode, payableAmount } = line || {}
+  const { sourceActivityId } = match
+  if (
+    sourceActivityId !== obligation.source_activity_id
+    || match.sourceStatus !== 'VERIFIED'
+    || match.feeDomain !== 'SERVICE'
+    || match.currency !== obligation.currency
+    || match.statuses.obligationStatus !== 'RECOGNIZED'
+    || match.statuses.clientInstructionStatus !== 'PAY'
+    || match.statuses.draftStatus !== 'CREATED'
+    || match.statuses.payListStatus !== 'NOT_CREATED'
+    || match.statuses.paymentStatus !== 'UNPAID'
+    || match.statuses.officialEvidenceStatus !== 'NOT_APPLICABLE'
+    || match.lines.length !== 1
+    || feeCode !== obligation.item_code
+    || payableAmount !== obligation.amount
+  ) {
+    throw new Error('服务费义务来源或状态与当前演示输入不一致')
+  }
+  const draftFacts = match.relatedFacts.filter((fact) => fact.kind === 'DRAFT')
+  if (draftFacts.length !== 1 || draftFacts[0].status !== 'LOCKED') {
+    throw new Error('当前服务费义务没有唯一的已锁定草单')
+  }
+  const draft = await readDemoDraft(draftFacts[0].objectId)
+  if (
+    draft.case_id !== caseId
+    || draft.client_id !== clientId
+    || draft.currency !== 'CNY'
+    || draft.status !== 'LOCKED'
+    || draft.total_gov !== '0.00'
+    || draft.total_service !== obligation.amount
+    || draft.total_misc !== '0.00'
+    || draft.amount !== obligation.amount
+  ) {
+    throw new Error('已锁定草单与当前案件、义务或金额不一致')
+  }
+  return draft
+}
+
 async function readCommand(endpoint: string) {
   return http.get(endpoint, {
     validateStatus: (status) => status === 200 || status === 202 || status === 404,
@@ -367,7 +429,7 @@ export async function createDemoBankReceipt(
       currency: 'CNY',
       pay_method: 'BANK_TRANSFER',
       bank_ref_no: bankRefNo,
-      remark: 'ABC 本地演示客户回款',
+      remark: '澄岳智造技术（苏州）有限公司客户回款',
       idempotency_key: idempotencyKey,
     })
   } catch (error) {

@@ -65,6 +65,20 @@ INTEGRATED_EVIDENCE_ROLES = [
     "GRANT_NOTICE_ORIGINAL",
     "GRANT_NOTICE_REPLACEMENT",
 ]
+INTEGRATED_EVIDENCE_TITLES = [
+    "发明专利请求书及申请文件",
+    "发明专利申请递交回执",
+    "发明专利申请受理通知书",
+    "发明专利申请初步审查合格通知书",
+    "发明专利申请公布通知书",
+    "发明专利申请进入实质审查阶段通知书",
+    "第一次审查意见通知书",
+    "第一次审查意见答复递交回执",
+    "第二次审查意见通知书",
+    "第二次审查意见答复递交回执",
+    "办理登记手续通知书（原始版本）",
+    "办理登记手续通知书（更新版本）",
+]
 
 
 def _sha256(data: bytes) -> str:
@@ -430,13 +444,15 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
     template_path = templates / "integrated-demo-letter.docx"
     _write_docx(template_path)
     evidence_rows: list[dict[str, object]] = []
-    for ordinal, role in enumerate(INTEGRATED_EVIDENCE_ROLES):
+    for ordinal, (role, title) in enumerate(
+        zip(INTEGRATED_EVIDENCE_ROLES, INTEGRATED_EVIDENCE_TITLES, strict=True)
+    ):
         evidence_path = evidence / f"{ordinal + 1:02d}-{role.lower()}.pdf"
         _write_pdf(evidence_path, unique_text=f"integrated-a-{ordinal + 1:02d}-{role}")
         evidence_rows.append(
             {
                 "role": role,
-                "title_zh_cn": f"虚构集成演示证据-{ordinal + 1:02d}",
+                "title_zh_cn": title,
                 "classification": "FICTIONAL_DEMO_EVIDENCE",
                 "path": f"evidence/{evidence_path.name}",
                 "media_type": "application/pdf",
@@ -461,7 +477,7 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
             "decision_version": "DEC-INTEGRATED-DEMO-A-20260821",
         },
         "provenance": {
-            "label_zh_cn": "本地虚构集成演示输入",
+            "label_zh_cn": "本地合成技术排练输入",
             "source_ref": "synthetic-integrated-a-input",
             "source_version": "2026.08.21",
             "source_sha256": "c" * 64,
@@ -495,14 +511,14 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
             {
                 "domain": "SERVICE_DEMO_PRICE",
                 "item_code": "DEMO_INTEGRATED_SERVICE_1",
-                "name_zh_cn": "集成演示服务费",
+                "name_zh_cn": "授权登记阶段代理服务费",
                 "currency": "CNY",
                 "calc_mode": "FIXED",
                 "amount": "1200.00",
                 "source_ref": "synthetic-integrated-a-rate",
                 "source_version": "2026.08.21",
                 "source_sha256": "d" * 64,
-                "disclaimer_zh_cn": "仅用于本地虚构集成演示，不是正式报价或官方费用。",
+                "disclaimer_zh_cn": "仅用于本地合成技术排练，不是正式报价或官方费用。",
             }
         ],
     }
@@ -850,6 +866,23 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
     assert [row.sha256 for row in snapshot.evidence] == [
         row["sha256"] for row in manifest["evidence"]
     ]
+    assert [row["title_zh_cn"] for row in manifest["evidence"]] == [
+        "发明专利请求书及申请文件",
+        "发明专利申请递交回执",
+        "发明专利申请受理通知书",
+        "发明专利申请初步审查合格通知书",
+        "发明专利申请公布通知书",
+        "发明专利申请进入实质审查阶段通知书",
+        "第一次审查意见通知书",
+        "第一次审查意见答复递交回执",
+        "第二次审查意见通知书",
+        "第二次审查意见答复递交回执",
+        "办理登记手续通知书（原始版本）",
+        "办理登记手续通知书（更新版本）",
+    ]
+    assert manifest["rates"][0]["name_zh_cn"] == "授权登记阶段代理服务费"
+    assert "虚构" not in manifest["provenance"]["label_zh_cn"]
+    assert "虚构" not in manifest["rates"][0]["disclaimer_zh_cn"]
     assert snapshot.evidence[8].metadata.oa_sequence == 2
     assert snapshot.evidence[8].metadata.source_template_code == "DEMO_OA_NOTICE_2"
     assert (

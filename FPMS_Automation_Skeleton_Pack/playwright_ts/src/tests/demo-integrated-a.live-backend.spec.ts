@@ -85,6 +85,20 @@ const reviewerPassword = process.env.FPMS_REVIEWER_PASSWORD
 const expectedDisclaimer = process.env.FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN
 const integratedEvidenceJson = process.env.FPMS_DEMO_INTEGRATED_EVIDENCE_JSON
 const oaReplyOutputJson = process.env.FPMS_DEMO_INTEGRATED_OA_REPLY_OUTPUT_JSON
+const expectedScenario = {
+  customerName: process.env.FPMS_DEMO_CUSTOMER_NAME,
+  customerCodePrefix: process.env.FPMS_DEMO_CUSTOMER_CODE_PREFIX,
+  contactName: process.env.FPMS_DEMO_CONTACT_NAME,
+  contactTitle: process.env.FPMS_DEMO_CONTACT_TITLE,
+  contactEmail: process.env.FPMS_DEMO_CONTACT_EMAIL,
+  caseNoPrefix: process.env.FPMS_DEMO_CASE_NO_PREFIX,
+  caseTitle: process.env.FPMS_DEMO_CASE_TITLE,
+  serviceItemName: process.env.FPMS_DEMO_SERVICE_ITEM_NAME,
+  billNoPrefix: process.env.FPMS_DEMO_BILL_NO_PREFIX,
+  paymentNoPrefix: process.env.FPMS_DEMO_PAYMENT_NO_PREFIX,
+  bankRefPrefix: process.env.FPMS_DEMO_BANK_REF_PREFIX,
+  stageOrder: process.env.FPMS_DEMO_CUSTOMER_STAGE_ORDER,
+}
 const expectedProvenance = {
   bundle_id: process.env.FPMS_DEMO_EXPECTED_BUNDLE_ID,
   bundle_version: process.env.FPMS_DEMO_EXPECTED_BUNDLE_VERSION,
@@ -420,12 +434,12 @@ class IntegratedJourneyDriver {
   }
 
   async createClientAndContact(code: string): Promise<Json> {
-    this.clientName = `虚构集成演示客户-${code}`
+    this.clientName = expectedScenario.customerName!
     await this.operatorPage.goto(`${baseUrl}/clients/new`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '新建客户' })).toBeVisible()
     await this.operatorPage.getByPlaceholder('请输入客户名称').fill(this.clientName)
     await this.operatorPage.getByPlaceholder('请输入客户代码（可选）').fill(code)
-    await this.operatorPage.getByPlaceholder('请输入邮箱地址').fill(`${code.toLowerCase()}@example.test`)
+    await this.operatorPage.getByPlaceholder('请输入邮箱地址').fill('service@chengyue-ip.example')
     const clientResponse = this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith('/api/v1/clients'))
     await this.operatorPage.getByRole('button', { name: '创建客户' }).click()
     const client = await (await clientResponse).json() as Json
@@ -436,9 +450,9 @@ class IntegratedJourneyDriver {
     await this.operatorPage.getByRole('tab', { name: '联系人' }).click()
     await this.operatorPage.getByRole('button', { name: '新增联系人' }).click()
     const dialog = this.operatorPage.getByRole('dialog', { name: '新增联系人' })
-    await dialog.locator('.el-form-item').filter({ hasText: '姓名' }).getByRole('textbox').fill('虚构主联系人')
-    await dialog.locator('.el-form-item').filter({ hasText: '职务' }).getByRole('textbox').fill('知识产权负责人')
-    await dialog.locator('.el-form-item').filter({ hasText: '邮箱' }).getByRole('textbox').fill(`${code.toLowerCase()}-contact@example.test`)
+    await dialog.locator('.el-form-item').filter({ hasText: '姓名' }).getByRole('textbox').fill(expectedScenario.contactName!)
+    await dialog.locator('.el-form-item').filter({ hasText: '职务' }).getByRole('textbox').fill(expectedScenario.contactTitle!)
+    await dialog.locator('.el-form-item').filter({ hasText: '邮箱' }).getByRole('textbox').fill(expectedScenario.contactEmail!)
     await dialog.locator('.el-form-item').filter({ hasText: '主联系人' }).locator('.el-switch').click()
     const contactResponse = this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))
     const contactListResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))
@@ -447,7 +461,7 @@ class IntegratedJourneyDriver {
     const contactList = await (await contactListResponse).json() as Json[]
     expect(contact.client_id).toBe(client.id)
     expect(contact.is_primary).toBe(true)
-    await expect(this.operatorPage.getByText('虚构主联系人', { exact: true })).toBeVisible()
+    await expect(this.operatorPage.getByText(expectedScenario.contactName!, { exact: true })).toBeVisible()
     const clientListResponse = this.operatorPage.waitForResponse((response) => {
       const url = new URL(response.url())
       return response.status() === 200 && url.pathname.endsWith('/api/v1/clients') && url.searchParams.get('page_size') === '20'
@@ -455,8 +469,8 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/clients`, { waitUntil: 'domcontentloaded' })
     const clientList = await (await clientListResponse).json() as Json
     const clientMatches = (clientList.items as Json[]).filter((item) => item.client_code === code && item.name_cn === this.clientName)
-    const contactMatches = contactList.filter((item) => item.client_id === client.id && item.contact_name === '虚构主联系人' && item.is_primary === true)
-    return { client_id: client.id, contact_id: contact.id, client_count: clientMatches.length, contact_count: contactMatches.length, primary_contact_client_id: contact.client_id }
+    const contactMatches = contactList.filter((item) => item.client_id === client.id && item.contact_name === expectedScenario.contactName && item.is_primary === true)
+    return { client_id: client.id, contact_id: contact.id, client_code: code, client_name: this.clientName, contact_name: contact.contact_name, contact_title: contact.title, contact_email: contact.email, client_count: clientMatches.length, contact_count: contactMatches.length, primary_contact_client_id: contact.client_id }
   }
 
   async createCase(clientId: string, caseNo: string): Promise<Json> {
@@ -465,7 +479,7 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '新建案件' })).toBeVisible()
     await this.operatorPage.getByPlaceholder('请输入案号（例如：P2024-001）').fill(caseNo)
-    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('虚构集成演示发明案件')
+    await this.operatorPage.getByPlaceholder('请输入案件标题').fill(expectedScenario.caseTitle!)
     const clientField = this.operatorPage.locator('.el-form-item').filter({ hasText: '客户' }).first()
     await clientField.getByRole('combobox').click()
     await this.operatorPage.getByRole('option', { name: this.clientName }).click()
@@ -521,6 +535,7 @@ class IntegratedJourneyDriver {
     return {
       case_id: created.id,
       case_no: created.case_no,
+      case_title: created.title,
       projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
       legacy_display: created.status,
       business_counts: {
@@ -706,7 +721,7 @@ class IntegratedJourneyDriver {
   }
 
   private async verifyMissingDeadlineNoWrite(caseId: string, templateCode = 'OFFICIAL_NOTICE_003', label = '第一次'): Promise<Json> {
-    const title = `虚构缺失期限${label}审查意见-${this.caseNo}`
+    const title = `${label}审查意见通知书（缺失期限校验）-${this.caseNo}`
     const before = await this.visibleCaseSnapshot(caseId)
     await this.operatorPage.goto(`${baseUrl}/documents/new?case_id=${caseId}`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '登记往来文件' })).toBeVisible()
@@ -806,13 +821,13 @@ class IntegratedJourneyDriver {
 
   async completeFilingAndOa1(caseId: string): Promise<Json> {
     const filingDescriptor = this.evidenceDescriptorsByRole.get('FILING_FINAL_SUBMISSION')!
-    const filingCreated = await this.createDocumentViaVisibleUi(caseId, '虚构最终递交文件', '2026-08-02')
+    const filingCreated = await this.createDocumentViaVisibleUi(caseId, '发明专利请求书及申请文件', '2026-08-02')
     const filingBinding = await this.uploadRole(filingCreated.document.id, filingDescriptor)
     await this.operatorPage.goto(`${baseUrl}/official-workflows/filing-preparation?package_id=${this.filingPackageId}`, { waitUntil: 'domcontentloaded' })
     const refreshResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/official-work-packages/${this.filingPackageId}/filing-preparation/refresh`))
     await this.operatorPage.getByRole('button', { name: '刷新工作包' }).click()
     await refreshResponse
-    const externalPayload = { operation_code: 'EXTERNAL_SUBMISSION_RECORDED', occurred_at: filingDescriptor.metadata.effective_at, note: '本地虚构演示人工递交记录' }
+    const externalPayload = { operation_code: 'EXTERNAL_SUBMISSION_RECORDED', occurred_at: filingDescriptor.metadata.effective_at, note: '本地合成技术排练人工递交记录' }
     const filingCommand = await this.publicLifecycleApi('RECORD_FILING_EXTERNAL', { package_id: this.filingPackageId }, externalPayload)
     expect(filingCommand.status).toBe(200)
     const filingPackage = await this.publicLifecycleApi('GET_FILING_PACKAGE', { package_id: this.filingPackageId })
@@ -827,11 +842,11 @@ class IntegratedJourneyDriver {
       receipt_kind: filingReceiptDescriptor.metadata.receipt_kind,
       receipt_attachment_id: filingReceiptBinding.attachmentId,
       receiving_case_no: `FILING-${this.caseNo}`,
-      submitter: '虚构演示操作员',
+      submitter: '技术排练操作员',
       received_at: filingReceiptDescriptor.metadata.received_at,
-      received_file_list: '虚构最终递交文件',
+      received_file_list: '发明专利请求书及申请文件',
       archive_status: 'ARCHIVED',
-      note: '本地虚构演示递交回执',
+      note: '本地合成技术排练递交回执',
     }
     const filingReceipt = await this.publicLifecycleApi('RECORD_PACKAGE_RECEIPT', { package_id: this.filingPackageId }, filingReceiptPayload)
     expect(filingReceipt.status, JSON.stringify(filingReceipt.body)).toBe(201)
@@ -847,10 +862,10 @@ class IntegratedJourneyDriver {
 
     const lifecycleConsumptions: Array<{ kind: 'document-lifecycle'; role: EvidenceRole; consumer: string; payload: Json; result: Json }> = []
     const lifecycleSteps: Array<{ role: EvidenceRole; title: string; template?: string; consumer: string }> = [
-      { role: 'ACCEPTANCE_NOTICE', title: '虚构受理通知书', template: 'OFFICIAL_NOTICE_001', consumer: 'acceptance-notice' },
-      { role: 'PRELIMINARY_EXAMINATION_SOURCE', title: '虚构初步审查来源', consumer: 'preliminary-examination' },
-      { role: 'PUBLICATION_NOTICE', title: '虚构公布通知书', consumer: 'publication-notice' },
-      { role: 'SUBSTANTIVE_EXAMINATION_SOURCE', title: '虚构进入实审通知', consumer: 'substantive-examination' },
+      { role: 'ACCEPTANCE_NOTICE', title: '发明专利申请受理通知书', template: 'OFFICIAL_NOTICE_001', consumer: 'acceptance-notice' },
+      { role: 'PRELIMINARY_EXAMINATION_SOURCE', title: '发明专利申请初步审查合格通知书', consumer: 'preliminary-examination' },
+      { role: 'PUBLICATION_NOTICE', title: '发明专利申请公布通知书', consumer: 'publication-notice' },
+      { role: 'SUBSTANTIVE_EXAMINATION_SOURCE', title: '发明专利申请进入实质审查阶段通知书', consumer: 'substantive-examination' },
     ]
     for (const step of lifecycleSteps) {
       const descriptor = this.evidenceDescriptorsByRole.get(step.role)!
@@ -880,7 +895,7 @@ class IntegratedJourneyDriver {
       official_due_date_source: oaDescriptor.metadata.official_due_date_source,
       official_due_date_status: oaDescriptor.metadata.official_due_date_status,
     }
-    this.oa1SourceTitle = `虚构第一次审查意见通知书-${this.caseNo}`
+    this.oa1SourceTitle = `第一次审查意见通知书-${this.caseNo}`
     const oaCreated = await this.createDocumentViaVisibleUi(caseId, this.oa1SourceTitle, oaDescriptor.metadata.effective_at.slice(0, 10), 'OFFICIAL_NOTICE_003', deadline)
     const createDeadline = { official_due_date: oaCreated.document.official_due_date, official_due_date_source: oaCreated.document.official_due_date_source, official_due_date_status: oaCreated.document.official_due_date_status }
     const impactDeadline = { official_due_date: oaCreated.impact!.official_due_date, official_due_date_source: oaCreated.impact!.official_due_date_source, official_due_date_status: oaCreated.impact!.official_due_date_status }
@@ -924,7 +939,7 @@ class IntegratedJourneyDriver {
   }
 
   async createOaOut(sourceId: string, packageId: string, sequence: 1 | 2 = 1, sourceTitle = this.oa1SourceTitle): Promise<Json> {
-    const created = await this.createDocumentViaVisibleUi(this.caseId, `虚构第${sequence === 1 ? '一' : '二'}次审查意见答复-${this.caseNo}`, sequence === 1 ? '2026-08-09' : '2026-10-09', 'OA_OUT', undefined, sourceTitle, 'OUT')
+    const created = await this.createDocumentViaVisibleUi(this.caseId, `第${sequence === 1 ? '一' : '二'}次审查意见答复文件-${this.caseNo}`, sequence === 1 ? '2026-08-09' : '2026-10-09', 'OA_OUT', undefined, sourceTitle, 'OUT')
     const linked = await this.publicLifecycleApi('LINK_OA_REPLY', { package_id: packageId }, { reply_document_id: created.document.id })
     expect(linked.status).toBe(200)
     const replayed = await this.publicLifecycleApi('LINK_OA_REPLY', { package_id: packageId }, { reply_document_id: created.document.id })
@@ -957,7 +972,7 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })
     await expect(this.operatorPage.getByRole('heading', { name: '新建案件' })).toBeVisible()
     await this.operatorPage.getByPlaceholder('请输入案号（例如：P2024-001）').fill(this.caseNo)
-    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('虚构跨案回执辅助案件')
+    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('回执归属校验辅助案件')
     const clientField = this.operatorPage.locator('.el-form-item').filter({ hasText: '客户' }).first()
     await clientField.getByRole('combobox').click()
     await this.operatorPage.getByRole('option', { name: this.clientName }).click()
@@ -977,12 +992,12 @@ class IntegratedJourneyDriver {
     expect(auxiliary.client_id).toBe(this.clientId)
     expect(auxiliary.status).toBe('NOT_FILED')
     this.caseId = auxiliary.id
-    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.id, `虚构跨案错误回执-${mainCaseNo}`, '2026-08-10')
+    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.id, `递交回执（跨案归属校验）-${mainCaseNo}`, '2026-08-10')
     const crossAttachment = await this.uploadRole(crossDocument.document.id, invalidReceipt)
     this.caseId = mainCaseId
     this.caseNo = mainCaseNo
 
-    const wrongSourceDocument = await this.createDocumentViaVisibleUi(caseId, `虚构同案错误来源回执-${mainCaseNo}`, '2026-08-10')
+    const wrongSourceDocument = await this.createDocumentViaVisibleUi(caseId, `递交回执（同案来源校验）-${mainCaseNo}`, '2026-08-10')
     const wrongSourceAttachment = await this.uploadRole(wrongSourceDocument.document.id, invalidReceipt)
     const crossPackageBefore = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
     expect(crossPackageBefore.status).toBe(200)
@@ -995,9 +1010,9 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(crossAttachment.id)
     await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`CROSS-${mainCaseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('虚构演示操作员')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill('2026-08-10T10:00:00')
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('虚构跨案错误回执')
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('递交回执（跨案归属校验）')
     const crossResponse = this.operatorPage.waitForResponse((item) => item.status() >= 400 && item.url().includes(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const crossRejected = await crossResponse
@@ -1021,9 +1036,9 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(wrongSourceAttachment.id)
     await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`WRONG-${mainCaseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('虚构演示操作员')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill('2026-08-10T10:00:00')
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('虚构同案错误来源回执')
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('递交回执（同案来源校验）')
     const wrongSourceResponse = this.operatorPage.waitForResponse((item) => item.status() >= 400 && item.url().includes(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const wrongSourceRejected = await wrongSourceResponse
@@ -1087,9 +1102,9 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(receiptBinding.attachmentId)
     await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`OA${sequence}-${this.caseNo}`)
-    await this.operatorPage.getByPlaceholder('请输入提交人').fill('虚构演示操作员')
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('技术排练操作员')
     await this.operatorPage.getByPlaceholder('请选择接收时间').fill(receiptDescriptor.metadata.received_at.slice(0, 19))
-    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill(`虚构第${sequence}次OA答复文件`)
+    await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill(`第${sequence === 1 ? '一' : '二'}次审查意见答复文件`)
     const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && item.url().endsWith(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()
     const receipt = await (await receiptResponse).json() as Json
@@ -1134,7 +1149,7 @@ class IntegratedJourneyDriver {
       official_due_date_source: noticeDescriptor.metadata.official_due_date_source,
       official_due_date_status: noticeDescriptor.metadata.official_due_date_status,
     }
-    const sourceTitle = `虚构第二次审查意见通知书-${this.caseNo}`
+    const sourceTitle = `第二次审查意见通知书-${this.caseNo}`
     const created = await this.createDocumentViaVisibleUi(caseId, sourceTitle, noticeDescriptor.metadata.effective_at.slice(0, 10), 'OFFICIAL_NOTICE_005', deadline)
     const createDeadline = { official_due_date: created.document.official_due_date, official_due_date_source: created.document.official_due_date_source, official_due_date_status: created.document.official_due_date_status }
     const impactDeadline = { official_due_date: created.impact!.official_due_date, official_due_date_source: created.impact!.official_due_date_source, official_due_date_status: created.impact!.official_due_date_status }
@@ -1221,7 +1236,7 @@ class IntegratedJourneyDriver {
     expect(deadline.official_due_date_status).toBe('CONFIRMED')
     const created = await this.createDocumentViaVisibleUi(
       caseId,
-      `虚构原始办理登记手续通知书-${this.caseNo}`,
+      `办理登记手续通知书（原始版本）-${this.caseNo}`,
       sourceDocumentDate,
       'OFFICIAL_NOTICE_009',
       deadline,
@@ -1278,16 +1293,16 @@ class IntegratedJourneyDriver {
     const sourceDocumentDate = (descriptor.metadata.effective_at as string).slice(0, 10)
     const replacementPayload = {
       idempotency_key: `integrated-grant-replace-${taskId.slice(0, 8)}`,
-      reason: '虚构官方更正文书替换原授权通知',
+      reason: '更新来源替换原授权登记通知',
       document: {
         doc_template_id: this.grantTemplateId,
         doc_date: sourceDocumentDate,
-        title: `虚构更正办理登记手续通知书-${this.caseNo}`,
-        ref_no: `IA-GRANT-REPLACE-${taskId.slice(0, 8)}`,
+        title: `办理登记手续通知书（更新版本）-${this.caseNo}`,
+        ref_no: `CYIP-GRANT-REPLACE-${taskId.slice(0, 8)}`,
         official_due_date: descriptor.metadata.official_due_date,
         official_due_date_source: descriptor.metadata.official_due_date_source,
         official_due_date_status: descriptor.metadata.official_due_date_status,
-        description: '仅用于本地虚构集成演示的更正通知',
+        description: '仅用于本地合成技术排练的更新通知',
       },
     }
     const replaced = await this.publicLifecycleApi('GRANT_REPLACEMENT', { task_id: taskId }, replacementPayload)
@@ -1452,21 +1467,36 @@ class IntegratedJourneyDriver {
     expect(replayed.obligation.id).toBe(created.obligation.id)
     expect(replayed.reused).toBe(true)
 
+    await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+    await this.operatorPage.getByRole('tab', { name: '费用', exact: true }).click()
+    const obligationCard = this.operatorPage.getByTestId('real-fee-obligations').locator('.obligation-card').filter({ hasText: created.obligation.id })
+    await expect(obligationCard).toHaveCount(1)
+    const instructionResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/obligations/${created.obligation.id}/instruction`))
+    await obligationCard.getByRole('button', { name: '记录支付指示', exact: true }).click()
+    const instruction = await (await instructionResponse).json() as Json
+    expect(instruction.obligation_id).toBe(created.obligation.id)
+    expect(instruction.client_instruction_status).toBe('PAY')
+    const draftLink = obligationCard.getByRole('link', { name: '创建关联费用草稿', exact: true })
+    expect(await draftLink.getAttribute('href')).toBe(`/fees/drafts/new?obligation_id=${created.obligation.id}`)
+    await obligationCard.getByRole('link', { name: '创建关联费用草稿', exact: true }).click()
+    const linkedObligation = this.operatorPage.getByTestId('linked-fee-obligation')
+    await expect(linkedObligation.getByText(`义务编号：${created.obligation.id}`, { exact: true })).toBeVisible()
+    await expect(linkedObligation.getByText('客户指示：PAY', { exact: true })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入案件编号').fill(caseId)
+    await this.operatorPage.getByPlaceholder('可选客户编号').fill(this.clientId)
     const draftCreated = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/fees/drafts'))
-    const draftRead = this.operatorPage.waitForResponse(async (item) => {
-      if (item.status() !== 200 || !new URL(item.url()).pathname.includes('/api/v1/fees/drafts/')) return false
-      try {
-        const body = await item.json() as Json
-        return typeof body.id === 'string' && body.status === 'LOCKED'
-      } catch {
-        return false
-      }
-    })
-    await this.operatorPage.getByTestId('create-draft').click()
+    await this.operatorPage.getByRole('button', { name: '创建草稿', exact: true }).click()
     const openDraft = await (await draftCreated).json() as Json
-    const lockedDraft = await (await draftRead).json() as Json
+    await expect(this.operatorPage).toHaveURL(`${baseUrl}/fees/drafts/${openDraft.id}`)
+    await this.operatorPage.getByRole('button', { name: /锁定$/ }).click()
+    const lockDialog = this.operatorPage.getByRole('dialog', { name: '锁定草稿' })
+    await expect(lockDialog).toBeVisible()
+    const lockResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/drafts/${openDraft.id}/lock`))
+    await lockDialog.getByRole('button', { name: '锁定', exact: true }).click()
+    const lockedDraft = await (await lockResponse).json() as Json
     expect(lockedDraft.id).toBe(openDraft.id)
     expect(lockedDraft.status).toBe('LOCKED')
+    await expect(this.operatorPage.getByText('🔒 已锁定', { exact: true })).toBeVisible()
     this.draftId = lockedDraft.id
     this.bundleAmount = created.amount
 
@@ -1485,6 +1515,8 @@ class IntegratedJourneyDriver {
     expect([...serviceObligationIds]).toEqual([created.obligation.id])
     const serviceDrafts = (draftPage.items as Json[]).filter((item) => item.id === lockedDraft.id && item.status === 'LOCKED')
     const visible = await this.visibleCaseSnapshot(caseId)
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByText(lockedDraft.id, { exact: false })).toBeVisible()
     return {
       case_id: caseId,
       draft_id: lockedDraft.id,
@@ -1532,9 +1564,12 @@ class IntegratedJourneyDriver {
     const detailResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/bills/${created.bill.id}`))
     await this.operatorPage.goto(`${baseUrl}/billing/bills/${created.bill.id}`, { waitUntil: 'domcontentloaded' })
     const detail = await (await detailResponse).json() as Json
+    expect(expectedScenario.billNoPrefix).toBe('AR-CYZN')
+    expect(detail.bill_no).toMatch(/^AR-CYZN-/)
     await expect(this.operatorPage.getByRole('heading', { name: `账单号 ${detail.bill_no}`, exact: true })).toBeVisible()
     return {
       bill_id: detail.id,
+      bill_no: detail.bill_no,
       replayed_bill_id: replayed.bill.id,
       bill_count: billMatches.length,
       source_draft_ids: detail.source_draft_ids,
@@ -1562,6 +1597,10 @@ class IntegratedJourneyDriver {
     expect(replayed.reused).toBe(true)
     expect(replayed.payment.id).toBe(created.payment.id)
     expect(replayed.line.id).toBe(created.line.id)
+    expect(expectedScenario.paymentNoPrefix).toBe('RCPT-CYZN')
+    expect(expectedScenario.bankRefPrefix).toBe('BTR-CYZN')
+    expect(created.payment.pay_no).toMatch(/^RCPT-CYZN-/)
+    expect(created.payment.bank_ref_no).toMatch(/^BTR-CYZN-/)
     this.paymentId = created.payment.id
     this.paymentLineId = created.line.id
 
@@ -1575,6 +1614,8 @@ class IntegratedJourneyDriver {
     const applied = (offsetPage.items as Json[]).filter((item) => item.bill_id === billId && item.is_reversed === false)
     return {
       payment_id: created.payment.id,
+      payment_no: created.payment.pay_no,
+      bank_ref_no: created.payment.bank_ref_no,
       replayed_payment_id: replayed.payment.id,
       payment_line_id: created.line.id,
       payment_count: paymentMatches.length,
@@ -1821,12 +1862,16 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   const task8Checkpoints: Json[] = []
   const task9Checkpoints: Json[] = []
   const suffix = `${Date.now()}`
-  const clientCode = `IA-${suffix}`
-  const caseNo = `IA-CASE-${suffix}`
+  const clientCode = `${expectedScenario.customerCodePrefix}-${suffix}`
+  const caseNo = `${expectedScenario.caseNoPrefix}-${suffix}`
   let clientId = ''; let caseId = ''; let filingPackageId = ''; let oa1SourceId = ''; let oa1PackageId = ''; let oa1TaskId = ''; let grantOriginalTaskId = ''; let grantReplacementTaskId = ''; let draftId = ''; let billId = ''; let paymentId = ''; let paymentLineId = ''; let offsetId = ''
   const manifestSha256 = process.env.FPMS_DEMO_EXPECTED_MANIFEST_SHA256 || ''
 
   await test.step(checkpointContract[0], async () => {
+    for (const [key, value] of Object.entries(expectedScenario)) {
+      if (key !== 'stageOrder') expect(typeof value).toBe('string')
+    }
+    expect(expectedScenario.stageOrder).toBe('01,02,03,04,05,06,07,08,09')
     expect(orderedRoles).toHaveLength(12)
     expect(manifestSha256).toMatch(/^[0-9a-f]{64}$/)
     for (const value of Object.values(expectedProvenance)) expect(typeof value).toBe('string')
@@ -1844,6 +1889,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await expect(page.getByText('费率来源', { exact: true })).toBeVisible()
     await expect(page.getByText('费率来源 SHA-256', { exact: true })).toBeVisible()
     await expect(page.getByText('官方费用：未配置（不计入总额）', { exact: true })).toBeVisible()
+    await expect(page.getByText(expectedScenario.serviceItemName!, { exact: true })).toBeVisible()
     await expect(page.getByTestId('bundle-id')).toHaveText(expectedProvenance.bundle_id!)
     await expect(page.getByTestId('bundle-version')).toHaveText(expectedProvenance.bundle_version!)
     await expect(page.getByTestId('manifest-sha256')).toHaveText(expectedProvenance.manifest_sha256!)
@@ -1859,12 +1905,12 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
 
   await test.step(checkpointContract[1], async () => {
     const x = await journey.createClientAndContact(clientCode); clientId = x.client_id
-    expect(x.client_count).toBe(1); expect(x.contact_count).toBe(1); expect(x.primary_contact_client_id).toBe(clientId)
+    expect(x.client_code).toBe(clientCode); expect(x.client_name).toBe(expectedScenario.customerName); expect(x.contact_name).toBe(expectedScenario.contactName); expect(x.contact_title).toBe(expectedScenario.contactTitle); expect(x.contact_email).toBe(expectedScenario.contactEmail); expect(x.client_count).toBe(1); expect(x.contact_count).toBe(1); expect(x.primary_contact_client_id).toBe(clientId)
     task5Checkpoints.push({ checkpoint: 'IA-01', result: x })
   })
   await test.step(checkpointContract[2], async () => {
     const x = await journey.createCase(clientId, caseNo); caseId = x.case_id
-    expect(x.case_no).toBe(caseNo); expect(x.projection).toEqual(['NEW_CASE', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED']); expect(x.legacy_display).toBe('NOT_FILED')
+    expect(x.case_no).toBe(caseNo); expect(x.case_title).toBe(expectedScenario.caseTitle); expect(x.projection).toEqual(['NEW_CASE', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED']); expect(x.legacy_display).toBe('NOT_FILED')
     expect(x.business_counts).toEqual({ package: 0, task: 0, draft: 0, bill: 0, payment: 0, offset: 0 })
     task5Checkpoints.push({ checkpoint: 'IA-02', result: x })
   })
@@ -1966,12 +2012,12 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[14], async () => {
     const x = await journey.createBill(draftId); billId = x.bill_id
-    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.source_draft_ids).toEqual([draftId]); expect(x.consumed_draft_ids).toEqual([draftId]); expect(x.bill_item_ids).toHaveLength(1); expect(x.bill_item_draft_ids).toEqual([draftId]); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
+    expect(x.bill_no).toMatch(/^AR-CYZN-/); expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.source_draft_ids).toEqual([draftId]); expect(x.consumed_draft_ids).toEqual([draftId]); expect(x.bill_item_ids).toHaveLength(1); expect(x.bill_item_draft_ids).toEqual([draftId]); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
     task8Checkpoints.push({ checkpoint: 'IA-14', result: x })
   })
   await test.step(checkpointContract[15], async () => {
     const x = await journey.createPayment(clientId, billId); paymentId = x.payment_id; paymentLineId = x.payment_line_id
-    expect(x.replayed_payment_id).toBe(x.payment_id); expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.amount).toBe(x.bundle_amount); expect(x.currency).toBe('CNY'); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
+    expect(x.payment_no).toMatch(/^RCPT-CYZN-/); expect(x.bank_ref_no).toMatch(/^BTR-CYZN-/); expect(x.replayed_payment_id).toBe(x.payment_id); expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.amount).toBe(x.bundle_amount); expect(x.currency).toBe('CNY'); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
     task8Checkpoints.push({ checkpoint: 'IA-15', result: x })
   })
   await test.step(checkpointContract[16], async () => {

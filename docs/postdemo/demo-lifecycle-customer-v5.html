@@ -484,7 +484,7 @@
         <p>以同一客户、同一案件贯穿全部操作，展示文件如何推动案件、任务如何随证据关闭，以及服务费如何进入账单、回款和核销。</p>
         <div class="badge-row">
           <span class="badge">本地技术演示</span>
-          <span class="badge">虚构演示数据</span>
+          <span class="badge">合成测试数据</span>
           <span class="badge badge-boundary">官费未配置不写入</span>
         </div>
       </div>
@@ -518,6 +518,31 @@
         <div class="overview-step"><strong>08</strong>账单与回款</div>
         <div class="overview-step"><strong>09</strong>后续边界</div>
       </div>
+      <p style="margin-top: 18px"><strong>后台预检（不计入 01–09 客户阶段）</strong>：主持人在不共享标签页校验 synthetic runtime bundle 与空业务库；客户阶段仍从 01 开始。</p>
+    </section>
+
+    <section class="section" data-section="scenario">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">Synthetic Scenario</div>
+          <h2>本轮统一业务场景</h2>
+        </div>
+        <p>以下普通业务字段使用真实业务形态；整组数据的合成测试属性由本区统一标注，不写进客户名、联系人名或文书标题。</p>
+      </div>
+      <table class="delta-table">
+        <thead><tr><th>业务字段</th><th>本轮值</th></tr></thead>
+        <tbody>
+          <tr><td>客户 / 客户代码</td><td>澄岳智造技术（苏州）有限公司 / CYZN-&lt;run suffix&gt;</td></tr>
+          <tr><td>主联系人</td><td>周岚 / 知识产权经理 / zhou.lan@chengyue-ip.example</td></tr>
+          <tr><td>案号 / 案名</td><td>CYIP-CN-INV-&lt;run suffix&gt; / 一种柔性制造产线中视觉检测工位的自适应标定方法</td></tr>
+          <tr><td>服务项目</td><td>授权登记阶段代理服务费 / 1,200.00 CNY</td></tr>
+          <tr><td>财务业务号</td><td>AR-CYZN-&lt;run suffix&gt; / RCPT-CYZN-&lt;run suffix&gt; / BTR-CYZN-&lt;run suffix&gt;</td></tr>
+          <tr><td>递交与审查文书</td><td>发明专利请求书及申请文件；发明专利申请递交回执；发明专利申请受理通知书；发明专利申请初步审查合格通知书；发明专利申请公布通知书；发明专利申请进入实质审查阶段通知书</td></tr>
+          <tr><td>两轮 OA</td><td>第一次审查意见通知书；第一次审查意见答复递交回执；第二次审查意见通知书；第二次审查意见答复递交回执</td></tr>
+          <tr><td>授权登记来源</td><td>办理登记手续通知书（原始版本）；办理登记手续通知书（更新版本）</td></tr>
+        </tbody>
+      </table>
+      <div class="synthetic-value">整组场景：合成测试输入<span class="synthetic-label">SYNTHETIC_TEST_ONLY · customer activation false · 非客户授权、非生产输入</span></div>
     </section>
 
     <section class="section" data-section="stages">
@@ -533,96 +558,135 @@
         <article class="stage-card" data-stage="01">
           <div class="stage-head"><span class="stage-number">01</span><h3>客户与案件</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>从零建立客户、主联系人和专利案件。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>同一客户、同一案件身份贯穿文件、任务和财务页面。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>每次演示使用全新运行，不预置客户业务对象。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>零预置业务对象；现场产生的动态 ID 成为后续唯一关联。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>从澄岳智造技术（苏州）有限公司、主联系人周岚和同一件发明申请开始。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>在客户、联系人和案件的新建页依次创建，再打开案件详情。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>CYZN-&lt;run suffix&gt;；周岚 / 知识产权经理 / zhou.lan@chengyue-ip.example；CYIP-CN-INV-&lt;run suffix&gt;；一种柔性制造产线中视觉检测工位的自适应标定方法。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>客户、主联系人、案号、案名和“新建案件 / 尚未递交 / 权利尚未成立 / 已确认”。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>客户、联系人、案件各一条，后续对象都关联同一客户和案件。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-01/IA-02 校验计数、业务代码、联系人字段、案名和关联；UUID 只作内部技术身份。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>每次使用全新运行；合成属性由场景边界统一说明，不写进普通业务字段。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>业务库不为空、出现重复业务对象、联系人或案件关联不一致。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>真实业务形态的动态代码贯穿案件、证据和财务链路。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-evidence" data-stage="02">
           <div class="stage-head"><span class="stage-number">02</span><h3>文件与递交准备</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>选择演示模板，预览文件并生成递交准备工作包。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>重复解析返回同一个工作包；Bundle classification/ID/version/manifest hash 与 template code/file hash 分组展示。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>递交准备不等于官方递交。</p></div>
-            <div class="stage-field stage-highlight">
-              <span class="field-label">最近新增</span><p>模板版本、来源和哈希可见，文件输入不再只靠名称识别。</p>
-              <div class="synthetic-value">演示模板：现场读取模板代码与文件 SHA-256<span class="synthetic-label">合成测试输入（SYNTHETIC_TEST_ONLY，非客户授权）</span></div>
-            </div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>本阶段验证模板来源、目录行为与递交准备工作包复用；不声称运行时模板预览。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>引用后台已校验的模板 provenance，打开文书向导查看 60 条目录，并对当前案件 resolve 两次。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>模板代码与文件 SHA-256、OFFICIAL_NOTICE_001…060、当前案件 CYIP-CN-INV-&lt;run suffix&gt;。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>可执行/仅参考目录状态清楚；两次 resolve 指向同一递交准备工作包。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>目录请求不是 422，工作包类型为递交准备且不重复创建。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-00、IA-03、IA-04 分别校验 provenance、60 行目录和工作包复用。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>递交准备不等于官方递交；当前 canonical runner 没有运行时模板预览步骤。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>模板哈希不匹配、目录数量或行为不符、重复 resolve 产生第二个工作包。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>模板 provenance、精确目录行为和幂等工作包复用可分别证明。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-evidence" data-stage="03">
           <div class="stage-head"><span class="stage-number">03</span><h3>受理与审查</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>依次复核递交回执、受理、初审、公开和实审来源文件。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>案件由已复核证据推动进入对应审查阶段，文件版本和来源保持可追踪。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>没有已复核证据，就不口头补充案件状态。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>60 类官文目录明确区分“可执行”和“仅参考”的文件类型。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>案件状态只由已复核文件推动，不由口头叙述补写。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>通过可见附件与复核 UI，依次上传、复核并消费六份文件。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>发明专利请求书及申请文件；发明专利申请递交回执；发明专利申请受理通知书；发明专利申请初步审查合格通知书；发明专利申请公布通知书；发明专利申请进入实质审查阶段通知书。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>附件、证据版本、内容哈希、复核状态、消费结果和对应审查投影。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>六份证据身份独立，递交回执后进入等待受理，后续进入实质审查。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-05 绑定六个角色的文件哈希、复核版本、生命周期消费和页面状态。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>内部记录外部操作不等于本系统直接向官方提交。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>任何证据未复核、身份复用、哈希或消费结果缺失、页面与权威投影不一致。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>文件版本、复核结果与生命周期活动形成完整可追踪链。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-evidence" data-stage="04">
           <div class="stage-head"><span class="stage-number">04</span><h3>第一轮 OA</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>登记确认期限，创建 OA 答复包，随后归档正确回执。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>OA 答复包形成后任务保持开放；正确回执归档后只关闭目标任务。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>期限必须包含确认日期、来源和确认状态，缺一不可。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>错案/错来源回执零写入；错误输入不会改变任务或工作包。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>第一轮通知、期限、答复包、任务和回执拥有一套独立证据身份。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>登记通知和期限，resolve 答复包，创建 OA_OUT，验证错误回执 no-write，再归档正确回执。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>第一次审查意见通知书；第一次审查意见答复递交回执；确认日期 2026-09-22、来源 MANUAL_OFFICIAL_NOTICE、状态 CONFIRMED。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>答复文件形成后任务仍开放；正确回执后工作包归档且只关闭目标任务。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>期限五个表面一致；错案与错来源回执均为 4xx 且前后快照相同。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-05 至 IA-08 校验期限、幂等 resolve、唯一关联、错误回执 no-write 与正确归档。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>确认日期是本轮合成测试输入，不是通用法定期限。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>期限三元组缺失或漂移、错误回执写入、OA_OUT 提前关闭任务、关闭非目标任务。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>错误回执由口头风险变成可证明的 4xx + no-write。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-evidence" data-stage="05">
           <div class="stage-head"><span class="stage-number">05</span><h3>第二轮 OA</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>处理第二份 OA 通知、独立期限、答复文件和回执。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>独立通知、独立期限、独立答复包、独立任务和独立回执完整闭环。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>第二轮不得复用第一轮的文件、任务或回执身份。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>两轮 OA 完整隔离；回到继续审查时仍保留各自证据链。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>第二轮不是修改第一轮对象，而是一套独立通知、期限、答复包、任务和回执。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>处理第二轮通知、答复与回执，再回看第一轮历史。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>第二次审查意见通知书；第二次审查意见答复递交回执；确认日期 2026-10-23、来源 MANUAL_OFFICIAL_NOTICE、状态 CONFIRMED。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>第二轮各项身份与第一轮不同，第二轮任务关闭，第一轮历史保持不变。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>两轮完整隔离，案件回到实质审查投影。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-09 对比两轮 source/package/task/OA_OUT/receipt，并复核第一轮历史快照。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>第二轮不得复用第一轮证据或期限；日期仍是合成测试输入。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>任一身份重复、第一轮历史变化、不完整期限被接受或错误任务被关闭。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>两轮 OA 可重复、可追踪且互不污染。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-evidence" data-stage="06">
           <div class="stage-head"><span class="stage-number">06</span><h3>授权登记准备</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>复核授权登记通知；需要时用更新的已复核来源替换，并在当前授权任务记录 PAY。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>案件进入授权登记处理中；旧任务不可修改，当前来源和替换关系可追踪。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>授权登记处理中，不表示专利已生效。当前授权任务 PAY 不生成官费金额或草单。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>来源替换形成明确关系，过期任务的四类修改请求均被拒绝。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>更新来源显式替换原来源；旧任务失效后不能继续写入。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>复核原始与更新通知，执行来源替换，验证旧任务四类 409/no-write，并在当前任务记录 PAY。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>办理登记手续通知书（原始版本）；办理登记手续通知书（更新版本）；确认日期 2026-11-23 / 2026-11-24。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>案件显示授权登记中；替换关系可追踪；只有更新后的任务可操作。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>四类旧任务写入均被拒绝；当前 PAY 恰好一条；官费 carrier 仍为 0。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-10 至 IA-12 校验两份来源、supersession、旧任务门禁、PAY 和官费 no-write。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>授权登记处理中不表示专利已生效；PAY 不生成官费金额或草单。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>替换边缺失、旧任务可写、PAY 重复、任何官费对象或金额出现。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>来源替换具备 durable lineage，过期任务四类写入全部 fail closed。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-finance" data-stage="07">
           <div class="stage-head"><span class="stage-number">07</span><h3>服务费草单</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>单独选择 SERVICE 项目，在 SERVICE 义务记录 PAY，生成关联草单并锁定。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>草单只包含已配置服务费；rate item code、source ref、source version、source SHA-256 分组展示。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>官费未配置；未知金额保持“未配置”，不会被写成零。</p></div>
-            <div class="stage-field stage-highlight">
-              <span class="field-label">最近新增</span><p>服务费来源可见，官费保持待配置；缺少输入时不产生草单。</p>
-              <div class="synthetic-value">示例服务费：¥1,200.00 CNY<span class="synthetic-label">合成测试输入（SYNTHETIC_TEST_ONLY，非客户授权）</span></div>
-            </div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>授权任务 PAY 与服务费义务分开；本阶段只使用有来源的 SERVICE 项目。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>主持人不共享控制页：仅创建唯一 SERVICE obligation；客户共享费用页与草单页：记录 PAY、创建并锁定草单。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>授权登记阶段代理服务费；1,200.00 CNY；rate item code、source ref、source version、source SHA-256。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>客户共享费用页与草单页显示唯一义务、LOCKED 草单、服务费来源与“官方费用：未配置”。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>草单金额严格等于 bundle amount，只含 SERVICE line，重试不增加第二条义务或草单。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-13 通过控制命令创建后，切到正常费用/草单读页核对权威状态和 provenance。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>1,200.00 CNY 是 SYNTHETIC_TEST_ONLY 输入，不是官方费用或客户报价；未知官费不写为 0。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>控制页进入共享屏幕、服务费来源不匹配、草单未锁定/重复、出现官费金额。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>义务控制动作与正常费用/草单 UI 明确分离，来源与 no-write 边界可见。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-finance" data-stage="08">
           <div class="stage-head"><span class="stage-number">08</span><h3>客户账单与回款</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>从锁定草单创建唯一 AR 账单，登记银行回款并执行一次核销。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>账单变为“已结清、余额 0”；回款变为“已全额核销、未核销 0”。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>回款登记不等于已经核销；只有有效核销记录才建立账单关联。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>幂等创建、防重复账单、权威余额和唯一有效核销保持一致。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>账单是应收、回款是收到钱、核销才建立两者关系，三个事实不能合并。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>主持人不共享控制页：依次触发本地演示专用账单、回款、核销命令；客户共享账单、回款、核销与案件权威读页：每次命令后刷新复核。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>AR-CYZN-&lt;run suffix&gt;、RCPT-CYZN-&lt;run suffix&gt;、BTR-CYZN-&lt;run suffix&gt;；金额 1,200.00 CNY。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>先显示 UNSETTLED 与 UNALLOCATED，再显示 SETTLED / FULLY_ALLOCATED / 0.00 CNY。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>唯一账单、唯一回款、唯一有效核销；重放返回同一业务对象。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-14 至 IA-18 从正常权威读页核对业务号、金额、余额、币种、状态和最终截图。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>回款登记不等于已经核销；只有有效 offset 才使账单结清。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>控制页进入共享屏幕、业务号前缀错误、计数大于 1、回款创建即结清或权威读页不一致。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>主持人命令与客户可见权威读取分离，财务业务号使用真实形态。</p></div>
           </div>
         </article>
 
         <article class="stage-card stage-finance" data-stage="09">
           <div class="stage-head"><span class="stage-number">09</span><h3>后续运维边界</h3></div>
           <div class="stage-body">
-            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>后续提供正式客户模板、官费和年费运行时输入包。</p></div>
-            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>输入经过版本、来源和哈希校验后，才进入对应功能。</p></div>
-            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>官费与年费未配置，不写入任何金额或完成状态；未在本次演示中执行。</p></div>
-            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>以显式 runtime input 边界替代硬编码模板、法定费率和年费假设。</p></div>
+            <div class="stage-field"><span class="field-label">主持人话术</span><p>这是口头说明与配置边界：正式模板、官费和年费要有后续明确输入与激活。</p></div>
+            <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>本阶段不操作产品页面；主持人回到本说明页口头收口。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>无本轮运行时输入；正式客户模板、官费与年费包均未提供或激活。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>无新增产品 UI 观察；仅展示本页的配置边界文本。</p></div>
+            <div class="stage-field"><span class="field-label">预期结果</span><p>主持人明确列出未执行事项，不把未来能力讲成当前页面。</p></div>
+            <div class="stage-field"><span class="field-label">验证</span><p>本阶段验证的是话术/配置边界；canonical 仅以官费 no-write 和本轮最终状态支持边界，不证明模板或年费 UI。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>不声称已观察正式模板激活、年费计算、缴费清单或官方支付页面。</p></div>
+            <div class="stage-field"><span class="field-label">本阶段停止条件</span><p>任何人把待配置事项描述为已实现、已观察、已激活或已完成。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>后续范围改为显式 spoken/configuration boundary，不再暗示未观察的 UI。</p></div>
           </div>
         </article>
       </div>

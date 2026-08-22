@@ -69,7 +69,7 @@ def test_canonical_driver_replaces_only_ia01_through_ia06_red_methods() -> None:
 
     for checkpoint in range(1, 7):
         assert f"this.red('IA-{checkpoint:02d}')" not in source
-    assert "this.red('IA-07')" in source
+    assert "this.red('IA-07')" not in source
     assert "FPMS_DEMO_INTEGRATED_EVIDENCE_JSON" in source
     assert "uploadRole(" in source
     assert "publicLifecycleApi(" in source
@@ -89,8 +89,8 @@ def test_canonical_driver_replaces_only_ia01_through_ia06_red_methods() -> None:
     assert "item.package_kind, item.status" in source
     assert "typeof x.task_id).toBe('string')" in source
     assert "item.client_code === code && item.name_cn === this.clientName" in source
-    assert "item.contact_name === '虚构主联系人'" in source
-    assert source.count(".then((response) => response.json() as Promise<Json>)") == 3
+    assert "item.contact_name === expectedScenario.contactName" in source
+    assert source.count(".then((response) => response.json() as Promise<Json>)") == 0
     assert "tasks.map((item) => item.task_id)" not in source
     assert ".map((item) => item.package_id).filter" not in source
 

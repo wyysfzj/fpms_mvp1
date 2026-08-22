@@ -83,6 +83,64 @@ def test_runner_binds_ia00_expectations_to_the_integrated_manifest():
     assert '(bundle / "manifest.json").read_text' in source
 
 
+def test_runner_binds_the_approved_realistic_customer_scenario():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8")
+
+    assert module.REHEARSAL_SCENARIO == {
+        "customer_name": "澄岳智造技术（苏州）有限公司",
+        "customer_code_prefix": "CYZN",
+        "contact_name": "周岚",
+        "contact_title": "知识产权经理",
+        "contact_email": "zhou.lan@chengyue-ip.example",
+        "case_no_prefix": "CYIP-CN-INV",
+        "case_title": "一种柔性制造产线中视觉检测工位的自适应标定方法",
+        "service_item_name": "授权登记阶段代理服务费",
+        "bill_no_prefix": "AR-CYZN",
+        "payment_no_prefix": "RCPT-CYZN",
+        "bank_ref_prefix": "BTR-CYZN",
+    }
+    for key in (
+        "FPMS_DEMO_CUSTOMER_NAME",
+        "FPMS_DEMO_CUSTOMER_CODE_PREFIX",
+        "FPMS_DEMO_CONTACT_NAME",
+        "FPMS_DEMO_CONTACT_TITLE",
+        "FPMS_DEMO_CONTACT_EMAIL",
+        "FPMS_DEMO_CASE_NO_PREFIX",
+        "FPMS_DEMO_CASE_TITLE",
+        "FPMS_DEMO_SERVICE_ITEM_NAME",
+        "FPMS_DEMO_BILL_NO_PREFIX",
+        "FPMS_DEMO_PAYMENT_NO_PREFIX",
+        "FPMS_DEMO_BANK_REF_PREFIX",
+    ):
+        assert key in RUNNER.read_text(encoding="utf-8")
+        assert key in source
+
+
+def test_runner_binds_the_customer_stage_order():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8")
+
+    assert module.CUSTOMER_STAGE_ORDER == tuple(f"{index:02d}" for index in range(1, 10))
+    assert "FPMS_DEMO_CUSTOMER_STAGE_ORDER" in RUNNER.read_text(encoding="utf-8")
+    assert "FPMS_DEMO_CUSTOMER_STAGE_ORDER" in source
+
+
+def test_runner_materializes_natural_oa_reply_output_titles(tmp_path: Path):
+    module = _module()
+
+    rows = module.materialize_oa_reply_outputs(tmp_path / "oa-outputs")
+
+    assert [row["title_zh_cn"] for row in rows] == [
+        "第一次审查意见答复意见陈述书（Word）",
+        "第一次审查意见答复意见陈述书（PDF）",
+        "第一次审查意见答复修改后权利要求书",
+        "第二次审查意见答复意见陈述书（Word）",
+        "第二次审查意见答复意见陈述书（PDF）",
+        "第二次审查意见答复修改后权利要求书",
+    ]
+
+
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")
