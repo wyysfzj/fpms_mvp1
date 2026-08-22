@@ -114,7 +114,9 @@ Runtime bundle 是带哈希的演示输入，不是客户、案件或财务业�
 git status --porcelain=v1 -uall
 lsof -nP -iTCP:8000 -sTCP:LISTEN
 lsof -nP -iTCP:5173 -sTCP:LISTEN
-test -x backend/.venv/bin/python
+INTEGRATED_DEPS=/private/tmp/fpms-integrated-deps.HRGhrj
+test -d "$INTEGRATED_DEPS"
+PYTHONPATH="$INTEGRATED_DEPS:backend" python3 -c 'import pytest, openpyxl, pypdf'
 test -x frontend/node_modules/.bin/vite
 ```
 
@@ -122,7 +124,11 @@ test -x frontend/node_modules/.bin/vite
 
 - Git 输出为空；
 - 8000 和 5173 没有 listener；
-- Python 与 Vite 检查 rc=0。
+- Integrated A 测试依赖根与 Vite 检查 rc=0。
+
+不要只使用 `backend/.venv/bin/python` 启动本 runner：该环境是产品运行依赖，未必包含 runner
+构造 synthetic bundle 时使用的 test-only `pytest`。演示机必须使用已经验证的
+`INTEGRATED_DEPS`；如果该目录不存在，停止并恢复已接受的演示依赖环境，不要现场安装未知版本。
 
 为本次演示选择一个尚不存在的证据目录，例如：
 
@@ -134,7 +140,7 @@ test ! -e "$DEMO_ARTIFACT"
 然后启动一次 headed fresh rehearsal：
 
 ```bash
-PYTHONPATH=backend backend/.venv/bin/python \
+PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
   scripts/run_demo_integrated_a_rehearsal.py \
   --artifact "$DEMO_ARTIFACT" \
   --runs 1
