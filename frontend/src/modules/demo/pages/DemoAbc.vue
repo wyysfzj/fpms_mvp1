@@ -110,6 +110,7 @@ import {
   readDemoDraft,
   readDemoOffsetCommand,
   readDemoPaymentCommand,
+  readDemoServiceObligation,
   readDemoServiceItem,
   readDemoPreflight,
   recordDemoPayInstruction,
@@ -123,7 +124,7 @@ import type {
   DemoPreflight,
   DemoServiceItem,
 } from '../demo.api'
-import { parseDemoFeeObligationResponse, parseDemoPreflight } from '../demo.contract'
+import { parseDemoPreflight } from '../demo.contract'
 
 const bundle = ref<DemoServiceItem>()
 const preflight = ref<DemoPreflight>()
@@ -154,7 +155,7 @@ const DEMO_SESSION_KEY = 'fpms_demo_abc_session_v1'
 interface StoredDemoSession {
   preflight: DemoPreflight
   case_no?: string
-  obligation?: DemoFeeObligationResponse
+  obligation_id?: string
   draft_id?: string
   idempotency_keys: typeof idempotencyKeys
 }
@@ -176,7 +177,7 @@ function persistSession() {
   const state: StoredDemoSession = {
     preflight: preflight.value,
     case_no: selectedCase.value?.case_no,
-    obligation: obligation.value,
+    obligation_id: obligation.value?.obligation.id,
     draft_id: draft.value?.id,
     idempotency_keys: { ...idempotencyKeys },
   }
@@ -188,13 +189,7 @@ function readStoredSession(currentBundle: DemoServiceItem): StoredDemoSession | 
   if (!raw) return undefined
   try {
     const value = JSON.parse(raw) as Partial<StoredDemoSession>
-    const saved = {
-      ...value,
-      preflight: parseDemoPreflight(value.preflight),
-      obligation: value.obligation
-        ? parseDemoFeeObligationResponse(value.obligation)
-        : undefined,
-    }
+    const saved = { ...value, preflight: parseDemoPreflight(value.preflight) }
     if (saved.preflight.manifest_sha256 !== currentBundle.manifest_sha256
       || !sameProvenance(saved.preflight, currentBundle)
       || !saved.idempotency_keys) {
@@ -333,10 +328,17 @@ async function restoreSession() {
 
     preflight.value = saved.preflight
     Object.assign(idempotencyKeys, saved.idempotency_keys)
-    obligation.value = saved.obligation
     if (saved.case_no) {
       selectedCase.value = await getCaseByCaseNo(saved.case_no)
       caseNoInput.value = saved.case_no
+    }
+    if (saved.obligation_id && selectedCase.value) {
+      obligation.value = await readDemoServiceObligation(
+        saved.obligation_id,
+        selectedCase.value.id,
+        currentBundle,
+        idempotencyKeys.obligation,
+      )
     }
     if (saved.draft_id) {
       const restoredDraft = await readDemoDraft(saved.draft_id)

@@ -158,6 +158,67 @@ export async function createDemoServiceObligation(
   )
 }
 
+export async function readDemoServiceObligation(
+  obligationId: string,
+  caseId: string,
+  expectedItem: DemoServiceItem,
+  intentKey: string,
+): Promise<DemoFeeObligationResponse> {
+  const value: unknown = (await http.get(`/fees/obligations/${obligationId}`)).data
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('演示服务费义务响应无效')
+  }
+  const detail = value as Record<string, unknown>
+  const source = detail.source
+  const statuses = detail.statuses
+  const lines = detail.lines
+  if (
+    detail.id !== obligationId
+    || detail.case_id !== caseId
+    || detail.fee_domain !== 'SERVICE'
+    || detail.currency !== expectedItem.currency
+    || typeof source !== 'object'
+    || source === null
+    || Array.isArray(source)
+    || typeof statuses !== 'object'
+    || statuses === null
+    || Array.isArray(statuses)
+    || !Array.isArray(lines)
+    || lines.length !== 1
+  ) {
+    throw new Error('演示服务费义务与当前案件不一致')
+  }
+  const sourceRow = source as Record<string, unknown>
+  const statusRow = statuses as Record<string, unknown>
+  const line = lines[0]
+  if (
+    typeof line !== 'object'
+    || line === null
+    || Array.isArray(line)
+    || (line as Record<string, unknown>).obligation_id !== obligationId
+    || (line as Record<string, unknown>).case_id !== caseId
+    || (line as Record<string, unknown>).fee_code !== expectedItem.item_code
+    || (line as Record<string, unknown>).payable_amount !== expectedItem.amount
+    || statusRow.obligation_status !== 'RECOGNIZED'
+    || !['PENDING', 'PAY'].includes(String(statusRow.client_instruction_status))
+    || !['NOT_CREATED', 'CREATED'].includes(String(statusRow.draft_status))
+    || statusRow.pay_list_status !== 'NOT_CREATED'
+    || statusRow.payment_status !== 'UNPAID'
+    || statusRow.official_evidence_status !== 'NOT_APPLICABLE'
+    || typeof sourceRow.source_activity_id !== 'string'
+    || sourceRow.source_activity_id.length === 0
+  ) {
+    throw new Error('演示服务费义务权威状态无效')
+  }
+  return {
+    ...expectedItem,
+    obligation: { id: obligationId },
+    source_activity_id: sourceRow.source_activity_id,
+    idempotency_key: intentKey,
+    reused: true,
+  }
+}
+
 export async function recordDemoPayInstruction(
   obligationId: string,
   idempotencyKey: string,

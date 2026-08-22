@@ -63,6 +63,13 @@ assert.ok(page.includes('idempotencyKeys'))
 assert.ok(page.includes("const DEMO_SESSION_KEY = 'fpms_demo_abc_session_v1'"))
 assert.ok(page.includes('sessionStorage.setItem(DEMO_SESSION_KEY'))
 assert.ok(page.includes('sessionStorage.getItem(DEMO_SESSION_KEY)'))
+assert.ok(page.includes('obligation_id?: string'))
+assert.ok(page.includes('obligation_id: obligation.value?.obligation.id'))
+assert.ok(!page.includes('obligation?: DemoFeeObligationResponse'))
+assert.ok(!page.includes('obligation: obligation.value,'))
+assert.ok(page.includes('readDemoServiceObligation('))
+assert.ok(api.includes('export async function readDemoServiceObligation('))
+assert.ok(api.includes("`/fees/obligations/${obligationId}`"))
 assert.ok(page.includes('saved.preflight.manifest_sha256 !== currentBundle.manifest_sha256'))
 for (const authoritativeRead of [
   '`/fees/drafts/${draftId}`',

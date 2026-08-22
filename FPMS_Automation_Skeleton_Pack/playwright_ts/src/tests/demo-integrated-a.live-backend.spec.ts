@@ -1623,36 +1623,72 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
     const caseDetail = await (await caseResponse).json() as Json
     const overlay = await (await overlayResponse).json() as Json
+    const center = overlay.center_snapshot
+    await expect(this.operatorPage.getByText(caseDetail.case_no, { exact: true }).first()).toBeVisible()
+    const lifecycleState = this.operatorPage.locator('[aria-label="当前案件生命周期状态"]')
+    await expect(lifecycleState).toContainText(`业务阶段：${center.business_stage}`)
+    await expect(lifecycleState).toContainText(`官方程序阶段：${center.official_procedure_stage}`)
+    await expect(lifecycleState).toContainText(`法律状态：${center.legal_status}`)
+    await expect(lifecycleState).toContainText(`核验状态：${center.verification_status}`)
+
+    const groupedAmount = this.bundleAmount.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    const amountLabel = `¥${groupedAmount}`
+    const zeroLabel = '¥0.00'
 
     const draftResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/drafts/${this.draftId}`))
     await this.operatorPage.goto(`${baseUrl}/fees/drafts/${this.draftId}`, { waitUntil: 'domcontentloaded' })
     const draft = await (await draftResponse).json() as Json
     await expect(this.operatorPage).toHaveURL(`${baseUrl}/fees/drafts/${this.draftId}`)
+    const draftHeader = this.operatorPage.locator('.case-header')
+    await expect(draftHeader).toContainText(draft.id)
+    await expect(draftHeader).toContainText('已锁定')
+    await expect(draftHeader).toContainText(`币种: ${draft.currency}`)
+    await this.operatorPage.getByRole('tab', { name: '概览', exact: true }).click()
+    await expect(this.operatorPage.locator('.info-item').filter({ hasText: '服务费合计' })).toContainText(amountLabel)
 
     const billResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/bills/${this.billId}`))
     await this.operatorPage.goto(`${baseUrl}/billing/bills/${this.billId}`, { waitUntil: 'domcontentloaded' })
     const bill = await (await billResponse).json() as Json
     await expect(this.operatorPage).toHaveURL(`${baseUrl}/billing/bills/${this.billId}`)
+    await expect(this.operatorPage.getByRole('heading', { name: `账单号 ${bill.bill_no}`, exact: true })).toBeVisible()
+    const billHeader = this.operatorPage.locator('.case-header')
+    await expect(billHeader).toContainText('已结清')
+    await expect(billHeader).toContainText(bill.currency)
+    await this.operatorPage.getByRole('tab', { name: '概览', exact: true }).click()
+    await expect(this.operatorPage.locator('.amount-row').filter({ hasText: '余额' })).toContainText(zeroLabel)
 
     const paymentResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/payments'))
     await this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })
     const paymentPage = await (await paymentResponse).json() as Json
     const payment = (paymentPage.items as Json[]).find((item) => item.id === this.paymentId)
     expect(payment).toBeDefined()
+    const paymentRow = this.operatorPage.locator('.el-table__row').filter({ hasText: payment.pay_no })
+    await expect(paymentRow).toHaveCount(1)
+    await expect(paymentRow).toContainText(amountLabel)
+    await expect(paymentRow).toContainText(zeroLabel)
+    await expect(paymentRow).toContainText('已核销')
 
     const offsetResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/offsets'))
     await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
     const offsetPage = await (await offsetResponse).json() as Json
     const offset = (offsetPage.items as Json[]).find((item) => item.id === this.offsetId)
     expect(offset).toBeDefined()
+    const offsetRow = this.operatorPage.locator('.el-table__row').filter({ hasText: bill.bill_no })
+    await expect(offsetRow).toHaveCount(1)
+    await expect(offsetRow).toContainText(groupedAmount)
+    await expect(offsetRow).toContainText('正常')
 
     const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/case-receipts'))
     await this.operatorPage.goto(`${baseUrl}/billing/case-receipts`, { waitUntil: 'domcontentloaded' })
     const receiptPage = await (await receiptResponse).json() as Json
     const receipt = (receiptPage.items as Json[]).find((item) => item.case_id === caseId && item.fee_type === 'SERVICE')
     expect(receipt).toBeDefined()
-
-    const center = overlay.center_snapshot
+    const receiptRow = this.operatorPage.locator('.el-table__row').filter({ hasText: caseDetail.case_no })
+    await expect(receiptRow).toHaveCount(1)
+    await expect(receiptRow).toContainText(receipt.fee_code)
+    await expect(receiptRow).toContainText('服务费')
+    await expect(receiptRow).toContainText(this.bundleAmount)
+    await expect(receiptRow).toContainText(receipt.currency)
     return {
       case_id: caseId,
       route_object_ids: { case: caseId, draft: this.draftId, bill: this.billId },
@@ -1675,6 +1711,14 @@ class IntegratedJourneyDriver {
       payment_unapplied: payment.unapplied_amt,
       bundle_amount: this.bundleAmount,
       currency: bill.currency,
+      visible_surfaces: {
+        case: { case_no: caseDetail.case_no, lifecycle_tuple: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status] },
+        draft: { id: draft.id, status: '已锁定', amount: amountLabel, currency: draft.currency },
+        bill: { bill_no: bill.bill_no, status: '已结清', balance: zeroLabel, currency: bill.currency },
+        payment: { pay_no: payment.pay_no, status: '已核销', amount: amountLabel, unapplied: zeroLabel },
+        offset: { bill_no: bill.bill_no, status: '正常', amount: this.bundleAmount },
+        receipt: { case_no: caseDetail.case_no, fee_code: receipt.fee_code, fee_type: '服务费', amount: this.bundleAmount, currency: receipt.currency },
+      },
       synthetic_zero_count: [draft.total_service, bill.amount, receipt.receivable_amt, receipt.received_amt].filter((value) => value === '0.00').length,
     }
   }
