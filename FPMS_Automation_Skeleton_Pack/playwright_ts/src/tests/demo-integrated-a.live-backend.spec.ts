@@ -1533,7 +1533,7 @@ class IntegratedJourneyDriver {
     const detailResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/bills/${created.bill.id}`))
     await this.operatorPage.goto(`${baseUrl}/billing/bills/${created.bill.id}`, { waitUntil: 'domcontentloaded' })
     const detail = await (await detailResponse).json() as Json
-    await expect(this.operatorPage.getByText(detail.bill_no, { exact: false })).toBeVisible()
+    await expect(this.operatorPage.getByRole('heading', { name: `账单号 ${detail.bill_no}`, exact: true })).toBeVisible()
     return {
       bill_id: detail.id,
       replayed_bill_id: replayed.bill.id,
