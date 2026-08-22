@@ -1806,6 +1806,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   }
   const outputMap = new Map(outputRows.map((item) => [`${item.oa_sequence}:${item.official_file_role}`, item]))
   const journey = new IntegratedJourneyDriver(page, reviewerPage, evidenceRoleMap, request, operatorToken, evidenceDescriptors(), outputMap)
+  const task0Checkpoints: Json[] = []
   const task5Checkpoints: Json[] = []
   const task6Checkpoints: Json[] = []
   const task7Checkpoints: Json[] = []
@@ -1845,6 +1846,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await expect(page.getByTestId('rate-source-version')).toHaveText(expectedProvenance.rate_source_version!)
     await expect(page.getByTestId('rate-source-sha256')).toHaveText(expectedProvenance.rate_source_sha256!)
     await expect(page.getByTestId('demo-disclaimer')).toHaveText(expectedDisclaimer!)
+    task0Checkpoints.push({ checkpoint: 'IA-00', result: snapshot })
   })
 
   await test.step(checkpointContract[1], async () => {
@@ -1979,7 +1981,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     expect(x.lifecycle_status).toBe('GRANT_REGISTRATION_IN_PROGRESS'); expect(x.lifecycle_stage).toBe('GRANT_REGISTRATION'); expect(x.application_status).toBe('APPLICATION_PENDING'); expect(x.source_state).toBe('CONFIRMED'); expect(x.legacy_display).toBe('GRANT_PENDING'); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.checkpoints_passed).toBe(19); expect(evidenceRoleMap.size).toBe(12)
     task9Checkpoints.push({ checkpoint: 'IA-18', result: x })
     await page.screenshot({ path: path.join(evidenceDir!, 'integrated-final.png'), fullPage: true })
-    await writeFile(path.join(evidenceDir!, 'task9-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints, ...task8Checkpoints, ...task9Checkpoints], evidence_bindings: [...evidenceRoleMap.values()], final_summary: x }, null, 2))
+    await writeFile(path.join(evidenceDir!, 'task9-checkpoints.json'), JSON.stringify({ checkpoints: [...task0Checkpoints, ...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints, ...task8Checkpoints, ...task9Checkpoints], evidence_bindings: [...evidenceRoleMap.values()], final_summary: x }, null, 2))
   })
 
   const orderedEvidenceLedger = assertCompleteEvidenceLedger(evidenceRoleMap)

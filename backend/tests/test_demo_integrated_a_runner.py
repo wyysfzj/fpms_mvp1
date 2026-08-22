@@ -253,6 +253,8 @@ def test_integrated_spec_closes_ia18_with_authoritative_summary_artifacts():
 
     assert "if (this.summaryReads > 1) return this.red('IA-18')" not in source
     assert "checkpoints_passed: checkpointContract.length" in source
+    assert "task0Checkpoints.push({ checkpoint: 'IA-00', result: snapshot })" in source
+    assert "checkpoints: [...task0Checkpoints, ...task5Checkpoints" in source
     assert "'task9-checkpoints.json'" in source
     assert "'integrated-final.png'" in source
 
