@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import runpy
 import sqlite3
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from app.core.demo_bundle import DemoBundleError
+from app.modules.documents.official_notice_catalog import OFFICIAL_NOTICE_CATALOG
 
 try:
     from scripts import run_local_demo_abc, validate_demo_bundle
@@ -139,6 +141,17 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
             ).fetchone()[0]
             == 60
         )
+        official_notice_rows = connection.execute(
+            "SELECT code, name, direction, input_fields FROM t_doc_template "
+            "WHERE code LIKE 'OFFICIAL_NOTICE_%' ORDER BY code"
+        ).fetchall()
+        assert [
+            (code, name, direction, json.loads(input_fields)["catalog_kind"])
+            for code, name, direction, input_fields in official_notice_rows
+        ] == [
+            (f"OFFICIAL_NOTICE_{index:03d}", name, "IN", "OFFICIAL_NOTICE")
+            for index, (name, _official_codes) in enumerate(OFFICIAL_NOTICE_CATALOG, start=1)
+        ]
         assert connection.execute(
             "SELECT name, direction, need_reply FROM t_doc_template WHERE code = 'OA_OUT'"
         ).fetchone() == ("审查意见答复书（发文）", "OUT", 0)
