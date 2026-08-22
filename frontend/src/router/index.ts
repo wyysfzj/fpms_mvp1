@@ -9,6 +9,7 @@ const routes = [
     component: MainLayout,
     children: [
       { path: 'dashboard', name: 'dashboard', component: () => import('../modules/dashboard/pages/Dashboard.vue') },
+      { path: 'demo/inputs', name: 'demo_inputs', component: () => import('../modules/demo/pages/DemoInputs.vue') },
       { path: 'demo/abc', name: 'demo_abc', component: () => import('../modules/demo/pages/DemoAbc.vue') },
 
       // Cases

@@ -44,6 +44,7 @@ export const ZH = {
     },
     route: {
         dashboard: '工作台',
+        demo_inputs: '演示输入',
         cases: '案件列表',
         case_new: '新建案件',
         case_detail: '案件详情',

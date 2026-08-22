@@ -146,11 +146,11 @@ async function loginThroughUi(page: Page): Promise<Response> {
   return loginResponse;
 }
 
-async function expectRenderedGateSnapshot(page: Page, expected: string[]): Promise<void> {
-  const rows = page.locator('[data-testid="overlay-decision-gates"] .gate-row');
-  await expect(rows).toHaveCount(29);
-  expect(await rows.evaluateAll((items) => items.map((item) => item.getAttribute("data-gate-key"))))
-    .toEqual(expected);
+async function expectGateDiagnosticsHidden(page: Page): Promise<void> {
+  await expect(page.getByTestId("overlay-decision-gates")).toHaveCount(0);
+  await expect(page.locator("[data-gate-key]")).toHaveCount(0);
+  await expect(page.getByText("客户决策", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("DG-LEGACY-FORM-CLASS", { exact: false })).toHaveCount(0);
 }
 
 test("real UI traverses stable three-page lifecycle overlay without fulfilled routes", async ({
@@ -208,7 +208,7 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
   await expect(page.getByTestId("lifecycle-center-lane")).toBeVisible();
   await expect(page.getByTestId("document-evidence-lane")).toBeVisible();
   await expect(page.getByTestId("fee-obligation-lane")).toBeVisible();
-  await expectRenderedGateSnapshot(page, expectedIdentities);
+  await expectGateDiagnosticsHidden(page);
 
   const fallback = first.decision_gates.find(
     (gate) =>
@@ -221,24 +221,6 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
     source_reference: "v8-overlay-live-all-22",
     source_version: "2026-08-10",
   });
-  const fallbackRow = page.locator(
-    '[data-gate-key="DG-LEGACY-FORM-CLASS:form-004"]',
-  );
-  await expect(fallbackRow).toContainText("请求范围：form-004");
-  await expect(fallbackRow).toContainText("解析范围：ALL-22");
-  await expect(fallbackRow).toContainText("来源引用：v8-overlay-live-all-22");
-
-  const unresolvedRow = page.locator(
-    `[data-gate-key="DG-FEE-GRANT-YEAR-DRAFT:case:${fixture.caseId}"]`,
-  );
-  await expect(unresolvedRow).toContainText("解析状态：UNRESOLVED");
-  await expect(unresolvedRow).toContainText("DECISION_GATE_NOT_FOUND");
-  const referenceRow = page.locator(
-    '[data-gate-key="DG-LEGACY-FORM-CLASS:form-002"]',
-  );
-  await expect(referenceRow.getByText("仅供参考", { exact: true })).toBeVisible();
-  await expect(referenceRow.getByText("非激活", { exact: true })).toBeVisible();
-  await expect(referenceRow.locator("button, input, select, textarea")).toHaveCount(0);
   expect(
     first.warnings.some(
       (warning) =>
@@ -247,6 +229,9 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
         warning.message === "该客户决策分类仅供参考，不得激活",
     ),
   ).toBe(true);
+  await expect(
+    page.getByText("该客户决策分类仅供参考，不得激活", { exact: true }),
+  ).toHaveCount(0);
 
   const snapshot = gateSnapshot(first);
   const secondResponsePromise = page.waitForResponse((response) =>
@@ -267,7 +252,7 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
   expect(second.next_cursor).toBe(400);
   expect(second.has_more).toBe(true);
   expect(gateSnapshot(second)).toEqual(snapshot);
-  await expectRenderedGateSnapshot(page, expectedIdentities);
+  await expectGateDiagnosticsHidden(page);
 
   const thirdResponsePromise = page.waitForResponse((response) =>
     overlayResponseFor(response, fixture.caseId),
@@ -286,7 +271,7 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
   expect(third.has_more).toBe(false);
   expect(gateSnapshot(third)).toEqual(snapshot);
 
-  await expectRenderedGateSnapshot(page, expectedIdentities);
+  await expectGateDiagnosticsHidden(page);
   await expect(page.getByText("已加载全部生命周期记录", { exact: true })).toBeVisible();
   await expect(page.getByTestId("lifecycle-center-lane")).toBeVisible();
   await expect(page.getByTestId("document-evidence-lane")).toBeVisible();

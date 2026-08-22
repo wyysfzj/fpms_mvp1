@@ -39,42 +39,13 @@
         <span v-else>已加载全部生命周期记录</span>
       </div>
 
-      <section class="overlay-facts" data-testid="overlay-decision-gates">
-        <h2>客户决策</h2>
-        <article
-          v-for="gate in overlay.decisionGates"
-          :key="lifecycleOverlayGateKey(gate)"
-          class="gate-row"
-          :data-gate-key="lifecycleOverlayGateKey(gate)"
-        >
-          <p>门禁代码：{{ gate.gateCode }}</p>
-          <p>请求范围：{{ gate.requestedScopeKey }}</p>
-          <p>解析状态：{{ gate.resolutionStatus }}</p>
-          <template v-if="gate.resolutionStatus === 'RESOLVED'">
-            <p>解析范围：{{ displayValue(gate.resolvedScopeKey) }}</p>
-            <p>决策值：{{ displayValue(gate.decisionValue) }}</p>
-            <p>来源引用：{{ displayValue(gate.sourceReference) }}</p>
-            <p>来源版本：{{ displayValue(gate.sourceVersion) }}</p>
-            <p>确认人：{{ displayValue(gate.confirmedBy) }}</p>
-            <p>生效时间：{{ displayValue(gate.effectiveAt) }}</p>
-            <div v-if="isReferenceOnlyGate(gate)" class="gate-markers">
-              <span>仅供参考</span>
-              <span>非激活</span>
-            </div>
-            <div v-else-if="gate.decisionValue === 'CURRENT_OFFICIAL'" class="gate-markers">
-              <span>可供后续激活</span>
-            </div>
-          </template>
-          <template v-else>
-            <p>未解析原因</p>
-            <p>{{ unresolvedReasonText(gate.unresolvedReason) }}</p>
-          </template>
-        </article>
-      </section>
-
-      <section class="overlay-facts" data-testid="overlay-snapshot-warnings">
+      <section
+        v-if="visibleSnapshotWarnings.length > 0"
+        class="overlay-facts"
+        data-testid="overlay-snapshot-warnings"
+      >
         <h2>当前快照警告</h2>
-        <article v-for="(warning, index) in overlay.warnings" :key="index" class="warning-row">
+        <article v-for="(warning, index) in visibleSnapshotWarnings" :key="index" class="warning-row">
           <p>{{ warningKindLabel(warning.kind) }}</p>
           <p>{{ warning.message }}</p>
           <p>警告代码：{{ warning.code }}</p>
@@ -87,14 +58,14 @@
       </section>
 
       <section
-        v-for="milestone in milestonesWithWarnings"
-        :key="milestone.activityId"
+        v-for="entry in milestonesWithWarnings"
+        :key="entry.milestone.activityId"
         class="overlay-facts"
-        :data-testid="`overlay-activity-warnings-${milestone.activityId}`"
+        :data-testid="`overlay-activity-warnings-${entry.milestone.activityId}`"
       >
         <h2>活动局部警告</h2>
-        <p>活动编号：{{ milestone.activityId }}</p>
-        <article v-for="(warning, index) in milestone.warnings" :key="index" class="warning-row">
+        <p>活动编号：{{ entry.milestone.activityId }}</p>
+        <article v-for="(warning, index) in entry.warnings" :key="index" class="warning-row">
           <p>{{ warningKindLabel(warning.kind) }}</p>
           <p>{{ warning.message }}</p>
           <p>警告代码：{{ warning.code }}</p>
@@ -111,10 +82,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getLifecycleOverlay, lifecycleOverlayGateKey } from '../../../api/lifecycleOverlay'
+import { getLifecycleOverlay } from '../../../api/lifecycleOverlay'
 import type {
   LifecycleOverlay,
-  OverlayDecisionGate,
+  OverlayWarning,
   OverlayWarningKind,
 } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
@@ -138,15 +109,6 @@ const traversalRevision = ref<number | null>(null)
 const loadingMore = ref(false)
 const loadMoreError = ref<ApiError | null>(null)
 
-const unresolvedReasonLabels: Readonly<Record<string, string>> = {
-  DECISION_GATE_NOT_FOUND: '未找到适用的客户决策',
-  DECISION_GATE_REVOKED: '客户决策已撤销',
-  DECISION_GATE_NOT_EFFECTIVE: '客户决策尚未生效',
-  DECISION_GATE_CANDIDATE_MULTIPLICITY: '存在多个候选客户决策',
-  DECISION_GATE_CURRENT_IDENTITY_CONFLICT: '当前客户决策标识冲突',
-  DECISION_GATE_CURRENT_ROW_CORRUPT: '当前客户决策记录损坏',
-  DECISION_GATE_LEGACY_MAP_CORRUPT: '历史表单分类映射损坏',
-}
 const warningKindLabels: Readonly<Record<OverlayWarningKind, string>> = {
   UNVERIFIED: '未核验',
   CUSTOMER_DECISION_GATE: '客户待确认',
@@ -154,8 +116,14 @@ const warningKindLabels: Readonly<Record<OverlayWarningKind, string>> = {
   REFERENCE_ONLY: '仅供参考',
 }
 
+const visibleSnapshotWarnings = computed(() =>
+  overlay.value?.warnings.filter(isCustomerVisibleWarning) ?? [],
+)
 const milestonesWithWarnings = computed(() =>
-  overlay.value?.milestones.filter((milestone) => milestone.warnings.length > 0) ?? [],
+  overlay.value?.milestones.flatMap((milestone) => {
+    const warnings = milestone.warnings.filter(isCustomerVisibleWarning)
+    return warnings.length > 0 ? [{ milestone, warnings }] : []
+  }) ?? [],
 )
 
 async function loadOverlay(): Promise<void> {
@@ -272,14 +240,9 @@ function invalidPageError(message: string): ApiError {
   }
 }
 
-function unresolvedReasonText(reason: string | null): string {
-  if (!reason) return '-'
-  const label = unresolvedReasonLabels[reason]
-  return label ? `${label}（${reason}）` : reason
-}
-
-function isReferenceOnlyGate(gate: OverlayDecisionGate): boolean {
-  return gate.decisionValue === 'HISTORICAL' || gate.decisionValue === 'INTERNAL_ONLY'
+function isCustomerVisibleWarning(warning: OverlayWarning): boolean {
+  return warning.kind !== 'CUSTOMER_DECISION_GATE'
+    && warning.sourceObjectType !== 'CUSTOMER_DECISION_GATE'
 }
 
 function warningKindLabel(kind: OverlayWarningKind): string {
@@ -330,7 +293,6 @@ function warningKindLabel(kind: OverlayWarningKind): string {
   margin: 0;
 }
 
-.gate-row,
 .warning-row {
   display: grid;
   gap: 5px;
@@ -338,14 +300,6 @@ function warningKindLabel(kind: OverlayWarningKind): string {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   overflow-wrap: anywhere;
-}
-
-.gate-markers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--el-color-warning-dark-2);
-  font-weight: 600;
 }
 
 @media (max-width: 1100px) {

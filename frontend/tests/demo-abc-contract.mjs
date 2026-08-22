@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const api = readFileSync(join(root, 'src/modules/demo/demo.api.ts'), 'utf8')
 const page = readFileSync(join(root, 'src/modules/demo/pages/DemoAbc.vue'), 'utf8')
+const inputsPage = readFileSync(join(root, 'src/modules/demo/pages/DemoInputs.vue'), 'utf8')
 const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
 const menu = readFileSync(join(root, 'src/constants/menu.ts'), 'utf8')
 
@@ -31,7 +32,43 @@ for (const forbidden of [
 }
 
 assert.ok(router.includes("path: 'demo/abc'"))
-assert.ok(menu.includes("route: '/demo/abc'"))
+assert.ok(router.includes("path: 'demo/inputs'"))
+assert.ok(!menu.includes("route: '/demo/abc'"))
+assert.ok(!menu.includes('ABC 演示台'))
+assert.match(inputsPage, /import \{ readDemoPreflight \} from '\.\.\/demo\.api'/)
+for (const readOnlyField of [
+  'readiness',
+  'authority_classification',
+  'customer_activation_eligible',
+  'business_counts',
+  'bundle_id',
+  'bundle_version',
+  'manifest_sha256',
+  'template_code',
+  'template_sha256',
+  'item_code',
+  'source_ref',
+  'source_version',
+  'source_sha256',
+]) assert.ok(inputsPage.includes(readOnlyField), `missing read-only input field ${readOnlyField}`)
+for (const businessCount of [
+  'client', 'contact', 'case', 'package', 'task', 'obligation', 'draft', 'bill', 'payment', 'offset',
+]) assert.ok(inputsPage.includes(`key: '${businessCount}'`), `missing business count ${businessCount}`)
+for (const forbiddenControl of [
+  'createDemoServiceObligation',
+  'recordDemoPayInstruction',
+  'createDemoDraft',
+  'lockDemoDraft',
+  'createDemoBill',
+  'createDemoBankReceipt',
+  'createDemoFullOffset',
+  'readDemoServiceItem',
+  'data-testid="create-obligation"',
+  'data-testid="create-draft"',
+  'data-testid="create-bill"',
+  'data-testid="create-payment"',
+  'data-testid="create-offset"',
+]) assert.ok(!inputsPage.includes(forbiddenControl), `read-only input page exposes ${forbiddenControl}`)
 assert.ok(page.includes('DEMO_ONLY'))
 assert.ok(page.includes('template_sha256'))
 assert.ok(page.includes('manifest_sha256'))

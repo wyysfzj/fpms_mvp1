@@ -13,18 +13,30 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
 
     const lane = page.getByTestId('lifecycle-center-lane')
     await expect(lane.getByRole('heading', { name: '案件生命周期' })).toBeVisible()
-    await expect(lane.getByText('业务阶段：PROSECUTION_MANAGEMENT', { exact: true })).toBeVisible()
-    await expect(lane.getByText('官方程序阶段：SUBSTANTIVE_EXAMINATION', { exact: true })).toBeVisible()
-    await expect(lane.getByText('法律状态：APPLICATION_PENDING', { exact: true })).toBeVisible()
+    await expect(lane.getByText('业务阶段：流程管理', { exact: true })).toBeVisible()
+    await expect(lane.getByText('官方程序阶段：实质审查', { exact: true })).toBeVisible()
+    await expect(lane.getByText('法律状态：申请审理中', { exact: true })).toBeVisible()
     await expect(
-        lane.getByLabel('当前案件生命周期状态').getByText('核验状态：CONFIRMED', { exact: true }),
+        lane.getByLabel('当前案件生命周期状态').getByText('核验状态：已确认', { exact: true }),
     ).toBeVisible()
 
     const confirmed = lane.getByTestId('center-change-activity-confirmed')
-    await expect(confirmed.getByText('事件类型：SUBSTANTIVE_EXAMINATION_STARTED', { exact: true })).toBeVisible()
-    await expect(confirmed.getByText('官方程序阶段：PRELIMINARY_EXAMINATION → SUBSTANTIVE_EXAMINATION', { exact: true })).toBeVisible()
+    await expect(confirmed.getByText('官方程序阶段：初步审查 → 实质审查', { exact: true })).toBeVisible()
+    await expect(confirmed.getByText('业务阶段：未识别状态 → 流程管理', { exact: true })).toBeVisible()
     await expect(lane.getByTestId('center-change-activity-review')).toHaveCount(0)
-    await expect(lane.getByText('PATENT_IN_FORCE', { exact: false })).toHaveCount(0)
+    for (const internalValue of [
+        'PROSECUTION_MANAGEMENT',
+        'SUBSTANTIVE_EXAMINATION',
+        'APPLICATION_PENDING',
+        'CONFIRMED',
+        'SUBSTANTIVE_EXAMINATION_STARTED',
+        'PRELIMINARY_EXAMINATION',
+        'FUTURE_STAGE',
+        'activity-confirmed',
+        'PATENT_IN_FORCE',
+    ]) {
+        await expect(lane.getByText(internalValue, { exact: false })).toHaveCount(0)
+    }
 })
 
 async function mockCaseOverlay(page: Page): Promise<void> {
@@ -110,6 +122,10 @@ function overlayResponse() {
                 OFFICIAL_PROCEDURE_STAGE: {
                     previous_value: 'PRELIMINARY_EXAMINATION',
                     current_value: 'SUBSTANTIVE_EXAMINATION',
+                },
+                BUSINESS_STAGE: {
+                    previous_value: 'FUTURE_STAGE',
+                    current_value: 'PROSECUTION_MANAGEMENT',
                 },
             }),
             milestone('activity-review', 'NEEDS_REVIEW', {

@@ -40,14 +40,6 @@ const dashboardItem: MenuItem = {
     route: '/dashboard',
 }
 
-const demoAbcItem: MenuItem = {
-    key: 'demo_abc',
-    label: 'ABC 演示台',
-    shortLabel: '演',
-    icon: '▶️',
-    route: '/demo/abc',
-}
-
 const todayRemindersItem: MenuItem = {
     key: 'tasks_today',
     label: '今日提醒',
@@ -690,7 +682,7 @@ export const PRODUCT_NAV_GROUPS: ProductMenuGroup[] = [
         key: 'my-work',
         label: '我的工作',
         description: '日常入口',
-        children: [demoAbcItem, dashboardItem, todayRemindersItem, tasksItem, taskSpecialSearchItem],
+        children: [dashboardItem, todayRemindersItem, tasksItem, taskSpecialSearchItem],
     },
     {
         mode: 'work',
@@ -737,7 +729,7 @@ export const PRODUCT_NAV_GROUPS: ProductMenuGroup[] = [
         mode: 'module',
         key: 'module-work',
         label: '我的工作',
-        children: [demoAbcItem, dashboardItem, todayRemindersItem, tasksItem, taskSpecialSearchItem],
+        children: [dashboardItem, todayRemindersItem, tasksItem, taskSpecialSearchItem],
     },
     {
         mode: 'module',

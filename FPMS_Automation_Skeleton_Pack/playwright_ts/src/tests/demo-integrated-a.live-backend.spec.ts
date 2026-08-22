@@ -1623,10 +1623,18 @@ class IntegratedJourneyDriver {
     const center = overlay.center_snapshot
     await expect(this.operatorPage.getByText(caseDetail.case_no, { exact: true }).first()).toBeVisible()
     const lifecycleState = this.operatorPage.locator('[aria-label="当前案件生命周期状态"]')
-    await expect(lifecycleState).toContainText(`业务阶段：${center.business_stage}`)
-    await expect(lifecycleState).toContainText(`官方程序阶段：${center.official_procedure_stage}`)
-    await expect(lifecycleState).toContainText(`法律状态：${center.legal_status}`)
-    await expect(lifecycleState).toContainText(`核验状态：${center.verification_status}`)
+    await expect(lifecycleState).toContainText('业务阶段：授权登记中')
+    await expect(lifecycleState).toContainText('官方程序阶段：授权登记')
+    await expect(lifecycleState).toContainText('法律状态：申请审理中')
+    await expect(lifecycleState).toContainText('核验状态：已确认')
+    for (const rawValue of [
+      center.business_stage,
+      center.official_procedure_stage,
+      center.legal_status,
+      center.verification_status,
+    ]) {
+      await expect(lifecycleState).not.toContainText(rawValue)
+    }
 
     const groupedAmount = this.bundleAmount.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
     const amountLabel = `¥${groupedAmount}`

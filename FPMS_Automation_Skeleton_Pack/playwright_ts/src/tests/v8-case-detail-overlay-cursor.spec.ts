@@ -13,7 +13,7 @@ const nonLegacyCodes = [
     'DG-SERVICE-RATE-VERSION',
 ] as const
 
-test('case overlay traverses one frozen revision with milestone dedupe and full gate replacement', async ({ page }) => {
+test('case overlay traverses one frozen revision with milestone dedupe and hidden gate diagnostics', async ({ page }) => {
     const overlayRequests: Request[] = []
     const mutationRequests: string[] = []
     await mockCaseOverlay(page, overlayRequests, mutationRequests)
@@ -26,7 +26,7 @@ test('case overlay traverses one frozen revision with milestone dedupe and full 
     expectOverlayQuery(overlayRequests[0], '0', null)
     await expect(page.getByText(`快照修订：${firstRevision}`, { exact: true })).toBeVisible()
     await expectMilestoneActivities(page, ['activity-010', 'activity-020', 'activity-030'])
-    await expectGateSnapshot(page, 1)
+    await expectGateDiagnosticsHidden(page)
     await expectProjectionLabels(page)
 
     const loadMore = page.getByRole('button', { name: '加载更多生命周期记录', exact: true })
@@ -44,7 +44,7 @@ test('case overlay traverses one frozen revision with milestone dedupe and full 
         'activity-050',
     ])
     await expect(page.getByTestId('center-change-activity-replayed-030')).toHaveCount(0)
-    await expectGateSnapshot(page, 2)
+    await expectGateDiagnosticsHidden(page)
     await expectProjectionLabels(page)
     await expect(page.getByText(`快照修订：${firstRevision}`, { exact: true })).toBeVisible()
     await expect(loadMore).toBeVisible()
@@ -64,7 +64,7 @@ test('case overlay traverses one frozen revision with milestone dedupe and full 
     ])
     await expect(page.getByTestId('center-change-activity-replayed-020')).toHaveCount(0)
     await expect(page.getByTestId('center-change-activity-replayed-050')).toHaveCount(0)
-    await expectGateSnapshot(page, 3)
+    await expectGateDiagnosticsHidden(page)
     await expectProjectionLabels(page)
     await expect(page.getByText(`快照修订：${firstRevision}`, { exact: true })).toBeVisible()
     await expect(loadMore).toHaveCount(0)
@@ -134,7 +134,7 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
         expectOverlayQuery(overlayRequests[index + 1], '37', String(firstRevision))
         await expect(page.getByText(message, { exact: true })).toBeVisible()
         await expectMilestoneActivities(page, ['activity-010', 'activity-020', 'activity-030'])
-        await expectGateSnapshot(page, 1)
+        await expectGateDiagnosticsHidden(page)
         await expect(page.getByText('已加载全部生命周期记录', { exact: true })).toHaveCount(0)
         await expect(loadMore).toBeVisible()
     }
@@ -148,7 +148,7 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
         'activity-030',
         'activity-040',
     ])
-    await expectGateSnapshot(page, 2)
+    await expectGateDiagnosticsHidden(page)
     await expect(loadMore).toHaveCount(0)
     await expect(page.getByText('已加载全部生命周期记录', { exact: true })).toBeVisible()
     expect(mutationRequests).toEqual([])
@@ -162,38 +162,27 @@ async function expectMilestoneActivities(page: Page, activityIds: string[]): Pro
     )
 }
 
-async function expectGateSnapshot(page: Page, pageNumber: number): Promise<void> {
-    const gates = page.getByTestId('overlay-decision-gates')
-    const rows = gates.locator('[data-gate-key]')
-    await expect(rows).toHaveCount(29)
-    expect(await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-gate-key')))).toEqual([
-        ...nonLegacyCodes.map((code) => `${code}:case:${caseId}`),
-        ...Array.from(
-            { length: 22 },
-            (_, index) => `DG-LEGACY-FORM-CLASS:form-${String(index + 1).padStart(3, '0')}`,
-        ),
-    ])
-    await expect(gates.getByText(`决策值：PAGE_${pageNumber}`, { exact: true })).toBeVisible()
-    await expect(gates.getByText(`来源引用：case-source-page-${pageNumber}`, { exact: true })).toBeVisible()
-    await expect(gates.getByText(`来源引用：case-source-page-${pageNumber - 1}`, { exact: true })).toHaveCount(0)
-    await expect(gates.getByText('门禁代码：DG-LEGACY-FORM-CLASS', { exact: true })).toHaveCount(22)
-    await expect(gates.getByText('请求范围：form-001', { exact: true })).toBeVisible()
-    await expect(gates.getByText('请求范围：form-002', { exact: true })).toBeVisible()
-    await expect(gates.getByText('请求范围：form-022', { exact: true })).toBeVisible()
-    await expect(gates.getByText('请求范围：ALL-22', { exact: true })).toHaveCount(0)
-    const fallback = rows.filter({ has: page.getByText('请求范围：form-022', { exact: true }) })
-    await expect(fallback.getByText('解析范围：ALL-22', { exact: true })).toBeVisible()
-    await expect(
-        fallback.getByText(`来源引用：fallback-source-page-${pageNumber}`, { exact: true }),
-    ).toBeVisible()
-    await expect(fallback.getByText(`来源版本：fallback-v${pageNumber}`, { exact: true })).toBeVisible()
+async function expectGateDiagnosticsHidden(page: Page): Promise<void> {
+    await expect(page.getByTestId('overlay-decision-gates')).toHaveCount(0)
+    await expect(page.locator('[data-gate-key]')).toHaveCount(0)
+    await expect(page.getByText('客户决策', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('DG-LEGACY-FORM-CLASS', { exact: false })).toHaveCount(0)
 }
 
 async function expectProjectionLabels(page: Page): Promise<void> {
     const center = page.getByLabel('当前案件生命周期状态')
-    await expect(center.getByText('业务阶段：PROSECUTION_MANAGEMENT', { exact: true })).toBeVisible()
-    await expect(center.getByText('官方程序阶段：SUBSTANTIVE_EXAMINATION', { exact: true })).toBeVisible()
-    await expect(center.getByText('法律状态：APPLICATION_PENDING', { exact: true })).toBeVisible()
+    await expect(center.getByText('业务阶段：流程管理', { exact: true })).toBeVisible()
+    await expect(center.getByText('官方程序阶段：实质审查', { exact: true })).toBeVisible()
+    await expect(center.getByText('法律状态：申请审理中', { exact: true })).toBeVisible()
+    await expect(center.getByText('核验状态：已确认', { exact: true })).toBeVisible()
+    for (const rawValue of [
+        'PROSECUTION_MANAGEMENT',
+        'SUBSTANTIVE_EXAMINATION',
+        'APPLICATION_PENDING',
+        'CONFIRMED',
+    ]) {
+        await expect(center.getByText(rawValue, { exact: false })).toHaveCount(0)
+    }
 }
 
 function expectOverlayQuery(request: Request, afterSequence: string, asOfRevision: string | null): void {

@@ -21,7 +21,7 @@ const unresolvedReasons = [
     ['DECISION_GATE_LEGACY_MAP_CORRUPT', '历史表单分类映射损坏'],
 ] as const
 
-test('案件详情无损展示 29 个客户决策和两级警告且不发起写请求', async ({ page }) => {
+test('案件详情隐藏 29 个内部客户决策及其警告，保留普通警告且不发起写请求', async ({ page }) => {
     const mutationRequests: string[] = []
     const overlayGetUrls: string[] = []
     await mockCaseOverlay(page, mutationRequests, (url) => {
@@ -32,69 +32,21 @@ test('案件详情无损展示 29 个客户决策和两级警告且不发起写�
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
-    const gates = page.getByTestId('overlay-decision-gates')
-    await expect(gates.getByRole('heading', { name: '客户决策' })).toBeVisible()
-    const rows = gates.locator('[data-gate-key]')
-    await expect(rows).toHaveCount(29)
-    const identities = await rows.evaluateAll((nodes) =>
-        nodes.map((node) => node.getAttribute('data-gate-key')),
-    )
-    expect(identities).toEqual([
-        ...nonLegacyCodes.map((code) => `${code}:case:${caseId}`),
-        ...Array.from(
-            { length: 22 },
-            (_, index) => `DG-LEGACY-FORM-CLASS:form-${String(index + 1).padStart(3, '0')}`,
-        ),
-    ])
-    await expect(
-        gates.getByText('门禁代码：DG-LEGACY-FORM-CLASS', { exact: true }),
-    ).toHaveCount(22)
-    for (let number = 1; number <= 22; number += 1) {
-        await expect(
-            gates.getByText(`请求范围：form-${String(number).padStart(3, '0')}`, { exact: true }),
-        ).toBeVisible()
-    }
-
-    for (const [index, [code, chinese]] of unresolvedReasons.entries()) {
-        const visibleReason = gates.getByText(`${chinese}（${code}）`, { exact: true })
-        await expect(visibleReason).toHaveCount(index === 0 ? 2 : 1)
-        await expect(visibleReason.first()).toBeVisible()
-    }
-    await expect(gates.getByText('请求范围：ALL-22', { exact: true })).toHaveCount(0)
-    const unresolvedLegacy = rows.filter({
-        has: page.getByText('请求范围：form-003', { exact: true }),
-    })
-    await expect(
-        unresolvedLegacy.getByText(
-            '未找到适用的客户决策（DECISION_GATE_NOT_FOUND）',
-            { exact: true },
-        ),
-    ).toBeVisible()
-    const direct = rows.filter({ has: page.getByText('请求范围：form-004', { exact: true }) })
-    await expect(direct.getByText('解析范围：form-004', { exact: true })).toBeVisible()
-    await expect(direct.getByText('来源引用：source-form-004', { exact: true })).toBeVisible()
-    await expect(direct.getByText('来源版本：v1', { exact: true })).toBeVisible()
-    const fallback = rows.filter({ has: page.getByText('请求范围：form-022', { exact: true }) })
-    await expect(fallback.getByText('解析范围：ALL-22', { exact: true })).toBeVisible()
-    await expect(fallback.getByText('来源引用：source-all-22', { exact: true })).toBeVisible()
-    await expect(fallback.getByText('来源版本：v22', { exact: true })).toBeVisible()
-
-    const historical = rows.filter({ has: page.getByText('决策值：HISTORICAL', { exact: true }) })
-    await expect(historical.getByText('仅供参考', { exact: true })).toBeVisible()
-    await expect(historical.getByText('非激活', { exact: true })).toBeVisible()
-    const internal = rows.filter({ has: page.getByText('决策值：INTERNAL_ONLY', { exact: true }) })
-    await expect(internal.getByText('仅供参考', { exact: true })).toBeVisible()
-    await expect(internal.getByText('非激活', { exact: true })).toBeVisible()
-    await expect(fallback.getByText('可供后续激活', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('overlay-decision-gates')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: '客户决策' })).toHaveCount(0)
+    await expect(page.locator('[data-gate-key]')).toHaveCount(0)
+    await expect(page.getByText('DG-FEE-APPLICATION-DRAFT', { exact: false })).toHaveCount(0)
+    await expect(page.getByText('DG-LEGACY-FORM-CLASS', { exact: false })).toHaveCount(0)
 
     const snapshotWarnings = page.getByTestId('overlay-snapshot-warnings')
     const activityWarnings = page.getByTestId('overlay-activity-warnings-activity-warning')
     await expect(snapshotWarnings.getByText('快照层重复警告', { exact: true })).toBeVisible()
-    await expect(snapshotWarnings.getByText('快照层客户警告', { exact: true })).toBeVisible()
+    await expect(snapshotWarnings.getByText('快照层客户警告', { exact: true })).toHaveCount(0)
+    await expect(snapshotWarnings.getByText('快照层客户来源警告', { exact: true })).toHaveCount(0)
     await expect(snapshotWarnings.getByText('未核验', { exact: true })).toBeVisible()
-    await expect(snapshotWarnings.getByText('客户待确认', { exact: true })).toBeVisible()
     await expect(activityWarnings.getByText('活动层重复警告', { exact: true })).toBeVisible()
     await expect(activityWarnings.getByText('活动层参考警告', { exact: true })).toBeVisible()
+    await expect(activityWarnings.getByText('活动层客户来源警告', { exact: true })).toHaveCount(0)
     await expect(activityWarnings.getByText('来源冲突', { exact: true })).toBeVisible()
     await expect(activityWarnings.getByText('仅供参考', { exact: true })).toBeVisible()
     await expect(
@@ -110,13 +62,6 @@ test('案件详情无损展示 29 个客户决策和两级警告且不发起写�
         [
             '未核验',
             '快照层重复警告',
-            '警告代码：DUPLICATE-WARNING-CODE',
-            '关联活动：-',
-            '来源对象：Case / case-v8-gates-warnings',
-        ],
-        [
-            '客户待确认',
-            '快照层客户警告',
             '警告代码：DUPLICATE-WARNING-CODE',
             '关联活动：-',
             '来源对象：Case / case-v8-gates-warnings',
@@ -259,13 +204,18 @@ function decisionGates() {
     return [...unresolved, ...legacy]
 }
 
-function warning(kind: string, message: string, activityId: string | null) {
+function warning(
+    kind: string,
+    message: string,
+    activityId: string | null,
+    sourceObjectType = activityId ? 'Document' : 'Case',
+) {
     return {
         kind,
         code: 'DUPLICATE-WARNING-CODE',
         message,
         activity_id: activityId,
-        source_object_type: activityId ? 'Document' : 'Case',
+        source_object_type: sourceObjectType,
         source_object_id: activityId ? 'document-warning' : caseId,
     }
 }
@@ -301,6 +251,12 @@ function overlayResponse() {
                 warnings: [
                     warning('CONFLICT', '活动层重复警告', 'activity-warning'),
                     warning('REFERENCE_ONLY', '活动层参考警告', 'activity-warning'),
+                    warning(
+                        'CONFLICT',
+                        '活动层客户来源警告',
+                        'activity-warning',
+                        'CUSTOMER_DECISION_GATE',
+                    ),
                 ],
             },
         ],
@@ -308,6 +264,12 @@ function overlayResponse() {
         warnings: [
             warning('UNVERIFIED', '快照层重复警告', null),
             warning('CUSTOMER_DECISION_GATE', '快照层客户警告', null),
+            warning(
+                'REFERENCE_ONLY',
+                '快照层客户来源警告',
+                null,
+                'CUSTOMER_DECISION_GATE',
+            ),
         ],
         legacy_conflicts: [],
         next_cursor: null,
