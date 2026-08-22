@@ -50,8 +50,12 @@
 
 **Files:**
 - Modify: `docs/postdemo/demo-lifecycle-customer-v5-runbook.md`
+- Modify: `docs/product/v8/source-decision-registry.md`
+- Create: `docs/product/v8/customer-decisions/2026-08-22-customer-demo-presentation-boundary.txt`
 
 - [ ] Change Step 0 to `/demo/inputs` and state that it is a presenter-only preflight screen shown before customer operations.
+- [ ] In the same browser session, complete the existing `/demo/abc` preflight once in an unshared tab before business objects exist, so the later presenter controls remain ready without a second preflight or new cross-page state implementation.
+- [ ] Register the exact customer requirement/follow-up/approval bytes with source version, hash, actor, effective scope/time and rollback; mark Catalog IDs as N/A.
 - [ ] State that `/demo/abc` is an unshared presenter control surface; customer-visible verification uses normal case, fee draft, bill, payment and offset pages.
 - [ ] In the existing running V5 environment, verify both navigation modes omit ABC, `/demo/inputs` is read-only, and the live case shows Chinese lifecycle facts without customer-decision diagnostics.
 - [ ] Recheck the payment empty state by observing `/payments`, `/offsets`, `/clients`, and `/bills`; record rather than speculate if the non-reproducible transport cancellation returns.

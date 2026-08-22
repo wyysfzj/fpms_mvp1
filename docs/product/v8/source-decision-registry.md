@@ -415,6 +415,37 @@ dispatch lane.
   blocks Task 1. Rollback performs no data mutation and must not delete or reinterpret historical
   evidence or review reports.
 
+### `DEC-CUSTOMER-DEMO-PRESENTATION-BOUNDARY-20260822`
+
+- Status: `APPROVED_CUSTOMER_PRESENTATION_SCOPE`; exact implementation acceptance remains subject
+  to independent High review.
+- Exact source/version: the customer's visible-screen requirements, follow-up question and exact
+  approval in Codex task `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved as a labelled UTF-8/LF
+  transcript with one terminal LF at
+  `docs/product/v8/customer-decisions/2026-08-22-customer-demo-presentation-boundary.txt`, decision
+  version `customer-decision:2026-08-22:customer-demo-presentation-boundary:v1`, received on
+  `2026-08-22` in timezone `Asia/Shanghai`.
+- Exact source size: `475` bytes.
+- Source SHA-256:
+  `95059054da95327a2f32362f9b60cfbef30ee4ae82ad565c5aeaa25354fa0d92`.
+- Actor and acceptance authority: the repository customer/user required the internal ABC console
+  to be absent from customer-visible navigation, requested a separate prepared-input screen,
+  required the central lifecycle statuses to be Chinese, questioned the customer-decision
+  diagnostics, and then explicitly sent `approve`. One independent High reviewer of the exact
+  implementation candidate remains the acceptance authority for code and runbook closure.
+- Approved decision: customer-visible work/module menus omit the internal ABC control surface; a
+  separate read-only input page may show the synthetic runtime-input and fresh-run boundary; the
+  central lifecycle projection uses Simplified Chinese labels and does not expose raw state/event
+  codes or source IDs; internal customer-decision cards and their diagnostic warnings are hidden
+  from the customer case page while the persisted backend decision-gate facts remain unchanged.
+- Effective scope/time: active from `2026-08-22` only for the local V5 customer-presentation
+  boundary and its exact focused tests/runbook. It does not authorize a route-security model,
+  backend decision deletion, customer template/fee activation, production deployment, release or
+  a speculative transport retry.
+- Rollback impact: reverting the exact presentation task restores the previous navigation and
+  raw/internal case projection but performs no database, lifecycle, fee or decision-gate mutation.
+  The historical customer transcript and prior demo evidence must not be deleted or reinterpreted.
+
 The first story that relies on a new or changed source/decision must update this registry
 with source/version/hash, decision value, actor, effective scope/time and rollback impact.
 Official/legal/fee/customer truth remains `PROTECTED` and requires independent review.

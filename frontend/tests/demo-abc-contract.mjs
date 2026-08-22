@@ -9,6 +9,7 @@ const page = readFileSync(join(root, 'src/modules/demo/pages/DemoAbc.vue'), 'utf
 const inputsPage = readFileSync(join(root, 'src/modules/demo/pages/DemoInputs.vue'), 'utf8')
 const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
 const menu = readFileSync(join(root, 'src/constants/menu.ts'), 'utf8')
+const runbook = readFileSync(join(root, '../docs/postdemo/demo-lifecycle-customer-v5-runbook.md'), 'utf8')
 
 for (const endpoint of [
   '/fees/demo-preflight',
@@ -34,7 +35,10 @@ for (const forbidden of [
 assert.ok(router.includes("path: 'demo/abc'"))
 assert.ok(router.includes("path: 'demo/inputs'"))
 assert.ok(!menu.includes("route: '/demo/abc'"))
+assert.ok(!menu.includes("route: '/demo/inputs'"))
 assert.ok(!menu.includes('ABC 演示台'))
+assert.ok(runbook.includes('同一浏览器会话中保留一个不共享的 `/demo/abc` 标签页'))
+assert.ok(runbook.includes('点击“校验全新演示环境”'))
 assert.match(inputsPage, /import \{ readDemoPreflight \} from '\.\.\/demo\.api'/)
 for (const readOnlyField of [
   'readiness',

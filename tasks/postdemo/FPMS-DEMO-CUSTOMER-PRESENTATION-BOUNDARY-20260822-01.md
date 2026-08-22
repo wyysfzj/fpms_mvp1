@@ -2,7 +2,9 @@
 
 Status: PENDING_REVIEW
 Risk-Class: PROTECTED
-Source: Customer feedback and approval in the active Codex task on 2026-08-22.
+Catalog IDs: N/A — this task changes only the V5 customer presentation boundary.
+Source: `DEC-CUSTOMER-DEMO-PRESENTATION-BOUNDARY-20260822` in
+`docs/product/v8/source-decision-registry.md`.
 Dependency: Customer Demo V5 candidate `0a824dbbbf4da85bc07c79e31ea3f77f45dce6f1`.
 
 ## Observable Outcome
@@ -26,6 +28,8 @@ observed separately and is not assigned a speculative retry or business-code fix
 - `tasks/postdemo/FPMS-DEMO-CUSTOMER-PRESENTATION-BOUNDARY-20260822-01.md`
 - `docs/superpowers/plans/2026-08-22-customer-demo-presentation-boundary.md`
 - `docs/postdemo/demo-lifecycle-customer-v5-runbook.md`
+- `docs/product/v8/source-decision-registry.md`
+- `docs/product/v8/customer-decisions/2026-08-22-customer-demo-presentation-boundary.txt`
 - `frontend/src/constants/labels.zh.ts`
 - `frontend/src/constants/menu.ts`
 - `frontend/src/router/index.ts`
@@ -73,6 +77,17 @@ observed separately and is not assigned a speculative retry or business-code fix
   payment/offset empty state showed without `Network Error` in the final observation.
 - The earlier first-load transport cancellation remains `NOT_REPRODUCED` as a stable code defect;
   no speculative retry or business behavior was added.
+- First independent High review of candidate `08acfad48100163bff181cf67ac543c6cc57c395`
+  correctly returned `BLOCKED`: the new Step 0 did not establish the existing presenter-control
+  session, customer screen-output text still named raw lifecycle enums, the customer decision was
+  not durably registered, and two small contract/task metadata assertions were missing. This
+  remediation keeps the same product boundary and changes no backend or business state.
+- Remediation RED: the Node contract returned `1` until the runbook required the existing hidden
+  `/demo/abc` preflight in the same browser session. Remediation GREEN: Node returned `0`; asset
+  validation passed; 46 focused lifecycle-overlay backend tests passed; and the isolated real
+  lifecycle-overlay Playwright spec returned `1 passed`. The Integrated A runner correctly refused
+  to run before the remediation bytes were committed because its clean-candidate preflight is
+  fail-closed; it is rerun only after the new exact candidate is clean.
 
 ## Risk and Rollback
 

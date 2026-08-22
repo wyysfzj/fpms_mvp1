@@ -20,7 +20,8 @@
 - 同一动态客户 ID、案件 ID 贯穿全部业务对象；
 - 12 份演示证据各有独立文件哈希、复核版本和消费结果；
 - 第一轮与第二轮 OA 的通知、期限、任务、答复包和回执身份互不复用；
-- 案件最终四维状态为：
+- 案件最终在客户屏幕显示“授权登记中 / 授权登记 / 申请审理中 / 已确认”；
+- 技术/API 验收四维值为：
   `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED`；
 - 服务费草单为 `LOCKED`，且只包含已配置的 SERVICE 金额；
 - AR 账单为 `SETTLED`，余额为 `0.00 CNY`；
@@ -38,7 +39,7 @@
 | 现场看到的内容 | 正确解释 | 不得宣称 |
 | --- | --- | --- |
 | 递交准备工作包 | 内部递交准备已经建立 | 已向官方系统提交 |
-| `APPLICATION_PENDING` | 申请仍处于在途状态 | 已获得生效专利权 |
+| 申请审理中（技术值 `APPLICATION_PENDING`） | 申请仍处于在途状态 | 已获得生效专利权 |
 | 授权登记处理中 | 已复核授权登记来源推动了内部流程 | 专利已经授权并生效 |
 | 官费对象数量为 0 | 本轮没有写入任何官费对象 | 官费金额为 0 |
 | `官方费用：未配置` | 缺少已激活的正式官费输入 | 官费已缴或无需缴费 |
@@ -181,19 +182,22 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 1. 登录演示管理员账号。
 2. 在客户操作开始前，由主持人打开未加入产品菜单的只读页面 `/demo/inputs`。
 3. 点击“校验演示输入与空业务库”，查看输入来源、费率来源、官费状态和十类业务对象计数。
+4. 校验成功后，在同一浏览器会话中保留一个不共享的 `/demo/abc` 标签页，点击“校验全新演示环境”；确认该控制页显示“演示输入已校验”后保持标签页打开，直到阶段 07 再使用。
 
-> `/demo/inputs` 是主持人预检页，不是客户业务操作页；完成预检后切回正常产品页面。
+> `/demo/inputs` 是主持人可选择展示的只读输入页；`/demo/abc` 始终留在不共享标签页。两次
+> 读取发生在业务对象仍为零时，不会产生客户、案件或财务写入，也不得在阶段 07 重新 preflight。
 
 **屏幕输出**
 
-- `演示输入已校验`；
-- readiness：`READY`；
+- 只读页显示“就绪状态：`READY`”；
 - classification：`SYNTHETIC_TEST_ONLY`；
 - `customer_activation_eligible=false`；
 - bundle ID、bundle version、manifest SHA-256；
 - template code、template file SHA-256；
 - rate item code、source ref、source version、source SHA-256；
 - `官方费用：未配置（不计入总额）`。
+
+不共享的控制标签页另显示“演示输入已校验”；该行不是客户业务页面输出。
 
 **期待与验证**
 
@@ -234,8 +238,8 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 
 - 客户详情显示主联系人；
 - 案件详情显示同一客户；
-- 案件初始 legacy display：`NOT_FILED`；
-- 四维投影：`NEW_CASE / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED`；
+- 案件页显示“未递交”；
+- 中央主线显示“新建案件 / 尚未递交 / 权利尚未成立 / 已确认”；
 - package、task、draft、bill、payment、offset 均为 0。
 
 **期待与验证**
@@ -243,6 +247,7 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 - 客户与联系人各恰好 1 条；
 - `primary_contact.client_id == client.id`；
 - 案件动态 ID 非空，`case.client_id == client.id`；
+- 技术/API 四维值为 `NEW_CASE / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED`；
 - 后续步骤必须复用当前 client ID 和 case ID。
 
 **最近新增**
@@ -273,14 +278,16 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 - 可执行条目可选择；
 - 仅供参考条目禁用；
 - 两次 resolve 返回同一个 package ID；
-- package kind：`FILING_PREP`；
-- 四维投影：`FILING_PREPARATION / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED`。
+- 工作包类型显示“递交准备”；
+- 中央主线显示“递交准备 / 尚未递交 / 权利尚未成立 / 已确认”。
 
 **期待与验证**
 
 - 模板列表请求不出现 422；
 - 重复操作不新增第二个工作包；
-- 法律状态仍为 `NOT_SUBMITTED`。
+- 技术/API 工作包类型为 `FILING_PREP`，四维值为
+  `FILING_PREPARATION / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED`；
+- 官方程序阶段仍为 `NOT_SUBMITTED`，法律状态仍为 `NOT_ESTABLISHED`。
 
 **最近新增**
 
@@ -316,15 +323,16 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 
 **屏幕输出**
 
-- 递交回执后的四维投影：
-  `PROSECUTION_MANAGEMENT / SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE / APPLICATION_PENDING / CONFIRMED`；
+- 递交回执后中央主线显示“流程管理 / 递交已确认，等待受理 / 申请审理中 / 已确认”；
 - 文件 lineage 保留，不用生成物替换原始证据；
-- 进入实审管理后，案件仍保持 `APPLICATION_PENDING`。
+- 进入实审管理后，案件仍显示“申请审理中”。
 
 **期待与验证**
 
 - 六个角色的附件、版本、哈希和消费结果均非空且互不混用；
 - 未复核证据不能推动对应状态；
+- 递交回执后的技术/API 四维值为
+  `PROSECUTION_MANAGEMENT / SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE / APPLICATION_PENDING / CONFIRMED`；
 - UI 显示的案件状态与生命周期权威投影一致。
 
 **最近新增**
@@ -362,7 +370,7 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 4. 负向验证：提交错案件回执和同案错来源回执。
    - 两次均返回 4xx；目标 package、task、receipt 前后快照完全一致。
 5. 上传正确回执并归档。
-   - package 变为 `ARCHIVED`；只关闭第一轮 OA 的 task；案件 legacy display 为 `SUB_EXAM`。
+   - package 变为 `ARCHIVED`；只关闭第一轮 OA 的 task；案件页显示“实质审查”。
 
 **期待与验证**
 
@@ -406,13 +414,14 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 - OA2 的 source/package/task/OA_OUT/receipt ID 均与 OA1 不同；
 - OA2 task 被关闭；
 - OA1 历史前后相等；
-- 案件回到 `SUB_EXAM`，四维投影保持
-  `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED`。
+- 案件页回到“实质审查”，中央主线保持“流程管理 / 实质审查 / 申请审理中 / 已确认”。
 
 **期待与验证**
 
 - 禁止用 OA sequence 1 的来源重放第二轮；
 - 不完整期限三元组不写入；
+- 技术/API 四维值保持
+  `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED`；
 - 两轮证据链、任务和回执完全隔离。
 
 **最近新增**
@@ -439,8 +448,7 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 **现场操作与输出**
 
 1. 上传、复核并消费原始授权登记通知。
-   - 产生一个可操作任务；案件进入
-     `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED`。
+   - 产生一个可操作任务；案件中央主线显示“授权登记中 / 授权登记 / 申请审理中 / 已确认”。
 2. 上传并复核替换通知。
    - 新 document/evidence/activity/task ID 与旧对象不同；
    - `supersedes_activity_id` 指向原 activity；只有替换任务可操作。
@@ -455,6 +463,8 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 
 - 只有替换后的当前任务可修改；
 - 来源替换关系和 predecessor task 均可追踪；
+- 技术/API 四维值为
+  `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED`；
 - 当前授权任务的 `PAY` 只是客户指示，不产生官费金额或草单；
 - 官费 carrier 数量为 0，UI 显示“未配置”，不得解释为官费金额 0。
 
@@ -755,7 +765,7 @@ lsof -nP -iTCP:5173 -sTCP:LISTEN
 | Playwright | headed Chromium，`1 passed (2.1m)` |
 | Checkpoints | IA-00…IA-18，19/19，各一次 |
 | Evidence bindings | 12/12 |
-| Final lifecycle | `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED` |
+| Final lifecycle（技术/API） | `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED` |
 | Final bill/payment | `SETTLED / FULLY_ALLOCATED / 0.00 CNY / 0.00 CNY` |
 | Cleanup | `run_root_removed=true`；8000/5173 已释放 |
 | Checksums | 20/20 `OK` |
