@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FPMS 客户全流程演示 V5</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17213b;
+      --muted: #60708a;
+      --paper: #ffffff;
+      --canvas: #eef3f8;
+      --navy: #173b63;
+      --navy-soft: #eaf2fb;
+      --teal: #087f7a;
+      --teal-soft: #e7f7f4;
+      --amber: #ba6a13;
+      --amber-soft: #fff5e5;
+      --new: #7c3aed;
+      --new-soft: #f2ebff;
+      --line: #d8e1eb;
+      --shadow: 0 14px 40px rgba(23, 59, 99, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(8, 127, 122, 0.08), transparent 30rem),
+        linear-gradient(180deg, #f7faff 0, var(--canvas) 44rem);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(2.15rem, 5vw, 4.35rem); line-height: 1.08; letter-spacing: -0.04em; }
+    h2 { margin-bottom: 10px; font-size: clamp(1.55rem, 3vw, 2.35rem); line-height: 1.2; }
+    h3 { margin-bottom: 8px; font-size: 1.13rem; }
+    p { margin-bottom: 0; color: var(--muted); }
+
+    .page {
+      width: min(1240px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 72px 0 42px;
+    }
+
+    .eyebrow,
+    .section-kicker {
+      margin-bottom: 12px;
+      color: var(--teal);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+      gap: 32px;
+      align-items: end;
+    }
+
+    .hero-copy > p {
+      max-width: 760px;
+      font-size: 1.08rem;
+    }
+
+    .hero-summary {
+      padding: 22px;
+      border: 1px solid rgba(23, 59, 99, 0.14);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.8);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-summary strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--navy);
+      font-size: 1.65rem;
+    }
+
+    .hero-summary span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 5px 10px;
+      border: 1px solid #cfd9e5;
+      border-radius: 999px;
+      color: #35455d;
+      background: rgba(255, 255, 255, 0.9);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .badge-new {
+      border-color: #d8c5ff;
+      color: var(--new);
+      background: var(--new-soft);
+    }
+
+    .badge-boundary {
+      border-color: #f1cf9f;
+      color: #8a4d0c;
+      background: var(--amber-soft);
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .section-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 22px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .section-heading p { max-width: 620px; }
+
+    .journey-overview {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 18px;
+    }
+
+    .overview-step {
+      min-height: 96px;
+      padding: 12px 8px;
+      border-radius: 14px;
+      color: #38506f;
+      background: var(--navy-soft);
+      text-align: center;
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+
+    .overview-step strong {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      margin: 0 auto 8px;
+      border-radius: 50%;
+      color: white;
+      background: var(--navy);
+      font-size: 0.76rem;
+    }
+
+    .stage-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .stage-card {
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    .stage-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 5px;
+      background: var(--navy);
+    }
+
+    .stage-card.stage-evidence::before { background: var(--teal); }
+    .stage-card.stage-finance::before { background: var(--amber); }
+
+    .stage-head {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 18px 18px 13px 22px;
+      border-bottom: 1px solid #e7edf4;
+      background: linear-gradient(135deg, #fbfdff, #f3f7fb);
+    }
+
+    .stage-number {
+      display: grid;
+      flex: 0 0 38px;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: white;
+      background: var(--navy);
+      font-weight: 800;
+    }
+
+    .stage-evidence .stage-number { background: var(--teal); }
+    .stage-finance .stage-number { background: var(--amber); }
+
+    .stage-body {
+      display: grid;
+      gap: 12px;
+      padding: 17px 18px 18px 22px;
+    }
+
+    .stage-field {
+      padding-left: 11px;
+      border-left: 2px solid #dfe7f0;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 3px;
+      color: #8290a4;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .stage-field p {
+      color: #44536a;
+      font-size: 0.9rem;
+    }
+
+    .stage-highlight {
+      padding: 11px;
+      border: 1px solid #dac8ff;
+      border-radius: 12px;
+      background: var(--new-soft);
+    }
+
+    .stage-highlight .field-label { color: var(--new); }
+
+    .synthetic-value {
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px dashed #cbb9f7;
+      border-radius: 10px;
+      background: #faf7ff;
+      color: #503b75;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .synthetic-label {
+      display: block;
+      margin-top: 5px;
+      color: #7656aa;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .lane {
+      padding: 19px;
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+
+    .lane-case { border-top: 5px solid var(--navy); }
+    .lane-evidence { border-top: 5px solid var(--teal); }
+    .lane-finance { border-top: 5px solid var(--amber); }
+
+    .lane p { font-size: 0.9rem; }
+
+    .delta-table {
+      width: 100%;
+      overflow: hidden;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .delta-table th,
+    .delta-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .delta-table th {
+      color: #31435c;
+      background: #eef3f8;
+      font-size: 0.82rem;
+    }
+
+    .delta-table td {
+      color: #536176;
+      font-size: 0.9rem;
+    }
+
+    .delta-table td:last-child {
+      color: #193f5f;
+      background: #f2fbfa;
+      font-weight: 700;
+    }
+
+    .delta-table tr:last-child td { border-bottom: 0; }
+
+    .presenter-strip {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      counter-reset: presenter;
+    }
+
+    .presenter-step {
+      position: relative;
+      min-height: 104px;
+      padding: 38px 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: #42536c;
+      background: #fbfcfe;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+      counter-increment: presenter;
+    }
+
+    .presenter-step::before {
+      content: counter(presenter);
+      position: absolute;
+      top: 9px;
+      left: 50%;
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      color: white;
+      background: var(--navy);
+      transform: translateX(-50%);
+      font-size: 0.68rem;
+    }
+
+    .scope-boundary {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: center;
+      border-color: #ecd0a9;
+      background: linear-gradient(135deg, #fffaf2, #fff);
+    }
+
+    .boundary-list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .boundary-list li {
+      padding: 9px 11px;
+      border-radius: 10px;
+      color: #704311;
+      background: rgba(255, 245, 229, 0.9);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .footer {
+      padding: 16px 0 46px;
+      color: #7a8799;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+
+    @media (max-width: 1050px) {
+      .journey-overview { grid-template-columns: repeat(3, 1fr); }
+      .stage-grid { grid-template-columns: repeat(2, 1fr); }
+      .presenter-strip { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    @media (max-width: 720px) {
+      .page { width: min(100% - 24px, 1240px); }
+      .hero { padding: 44px 0 26px; }
+      .hero-grid, .scope-boundary { grid-template-columns: 1fr; }
+      .hero-stats { margin-top: 4px; }
+      .section { padding: 20px 15px; border-radius: 18px; }
+      .section-heading { display: block; }
+      .section-heading p { margin-top: 8px; }
+      .stage-grid, .lane-grid { grid-template-columns: 1fr; }
+      .presenter-strip { grid-template-columns: repeat(2, 1fr); }
+      .delta-table, .delta-table tbody, .delta-table tr, .delta-table td {
+        display: block;
+        width: 100%;
+      }
+      .delta-table thead { display: none; }
+      .delta-table tr { border-bottom: 8px solid #eef3f8; }
+      .delta-table td { border-bottom: 0; }
+      .delta-table td::before {
+        display: block;
+        margin-bottom: 4px;
+        color: #8995a7;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+      .delta-table td:first-child::before { content: "之前"; }
+      .delta-table td:last-child::before { content: "现在"; }
+    }
+
+    @media (max-width: 430px) {
+      .journey-overview { grid-template-columns: 1fr; }
+      .overview-step {
+        display: flex;
+        min-height: 0;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        text-align: left;
+      }
+      .overview-step strong { flex: 0 0 28px; margin: 0; }
+      .hero-stats { grid-template-columns: 1fr; }
+      .presenter-strip { grid-template-columns: 1fr; }
+      .presenter-step { min-height: 72px; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 12mm; }
+      body { background: #fff; color: #111827; }
+      .page { width: 100%; }
+      .hero { padding: 0 0 22px; }
+      .hero-summary, .section { box-shadow: none; }
+      .section { break-inside: avoid; margin-bottom: 14px; padding: 18px; }
+      .stage-grid { grid-template-columns: repeat(2, 1fr); }
+      .stage-card, .lane, .delta-table tr { break-inside: avoid; }
+      .presenter-strip { grid-template-columns: repeat(4, 1fr); }
+      .footer { padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero" data-section="hero">
+    <div class="page hero-grid">
+      <div class="hero-copy">
+        <div class="eyebrow">FPMS · 客户端到端演示</div>
+        <h1>从案件建立，到证据闭环，<br>再到客户回款</h1>
+        <p>以同一客户、同一案件贯穿全部操作，展示文件如何推动案件、任务如何随证据关闭，以及服务费如何进入账单、回款和核销。</p>
+        <div class="badge-row">
+          <span class="badge">本地技术演示</span>
+          <span class="badge">虚构演示数据</span>
+          <span class="badge badge-boundary">官费未配置不写入</span>
+        </div>
+      </div>
+      <aside class="hero-summary" aria-label="演示范围摘要">
+        <div class="hero-stats">
+          <div><strong>1</strong><span>客户与案件</span></div>
+          <div><strong>2</strong><span>独立 OA 闭环</span></div>
+          <div><strong>1</strong><span>财务闭环</span></div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="section journey" data-section="overview">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">Customer Journey</div>
+          <h2>一条客户主线，九个可解释阶段</h2>
+        </div>
+        <p>旧演示的立案、递交、审查、OA、授权和费用主题全部保留；最近几周新增能力直接标在发生变化的节点上。</p>
+      </div>
+      <div class="journey-overview" aria-label="九阶段总览">
+        <div class="overview-step"><strong>01</strong>客户与案件</div>
+        <div class="overview-step"><strong>02</strong>递交准备</div>
+        <div class="overview-step"><strong>03</strong>受理与审查</div>
+        <div class="overview-step"><strong>04</strong>第一轮 OA</div>
+        <div class="overview-step"><strong>05</strong>第二轮 OA</div>
+        <div class="overview-step"><strong>06</strong>授权登记</div>
+        <div class="overview-step"><strong>07</strong>服务费草单</div>
+        <div class="overview-step"><strong>08</strong>账单与回款</div>
+        <div class="overview-step"><strong>09</strong>后续边界</div>
+      </div>
+    </section>
+
+    <section class="section" data-section="stages">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">Lifecycle</div>
+          <h2>同一案件的完整演示生命周期</h2>
+        </div>
+        <p>每个阶段都说明客户操作、系统结果、事实边界和最近新增，避免用内部技术术语代替业务价值。</p>
+      </div>
+
+      <div class="stage-grid">
+        <article class="stage-card" data-stage="01">
+          <div class="stage-head"><span class="stage-number">01</span><h3>客户与案件</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>从零建立客户、主联系人和专利案件。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>同一客户、同一案件身份贯穿文件、任务和财务页面。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>每次演示使用全新运行，不预置客户业务对象。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>零预置业务对象；现场产生的动态 ID 成为后续唯一关联。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-evidence" data-stage="02">
+          <div class="stage-head"><span class="stage-number">02</span><h3>文件与递交准备</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>选择演示模板，预览文件并生成递交准备工作包。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>重复解析返回同一个工作包；Bundle classification/ID/version/manifest hash 与 template code/file hash 分组展示。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>递交准备不等于官方递交。</p></div>
+            <div class="stage-field stage-highlight">
+              <span class="field-label">最近新增</span><p>模板版本、来源和哈希可见，文件输入不再只靠名称识别。</p>
+              <div class="synthetic-value">演示模板：现场读取模板代码与文件 SHA-256<span class="synthetic-label">合成测试输入（SYNTHETIC_TEST_ONLY，非客户授权）</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-evidence" data-stage="03">
+          <div class="stage-head"><span class="stage-number">03</span><h3>受理与审查</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>依次复核递交回执、受理、初审、公开和实审来源文件。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>案件由已复核证据推动进入对应审查阶段，文件版本和来源保持可追踪。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>没有已复核证据，就不口头补充案件状态。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>60 类官文目录明确区分“可执行”和“仅参考”的文件类型。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-evidence" data-stage="04">
+          <div class="stage-head"><span class="stage-number">04</span><h3>第一轮 OA</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>登记确认期限，创建 OA 答复包，随后归档正确回执。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>OA 答复包形成后任务保持开放；正确回执归档后只关闭目标任务。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>期限必须包含确认日期、来源和确认状态，缺一不可。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>错案/错来源回执零写入；错误输入不会改变任务或工作包。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-evidence" data-stage="05">
+          <div class="stage-head"><span class="stage-number">05</span><h3>第二轮 OA</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>处理第二份 OA 通知、独立期限、答复文件和回执。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>独立通知、独立期限、独立答复包、独立任务和独立回执完整闭环。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>第二轮不得复用第一轮的文件、任务或回执身份。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>两轮 OA 完整隔离；回到继续审查时仍保留各自证据链。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-evidence" data-stage="06">
+          <div class="stage-head"><span class="stage-number">06</span><h3>授权登记准备</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>复核授权登记通知；需要时用更新的已复核来源替换，并在当前授权任务记录 PAY。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>案件进入授权登记处理中；旧任务不可修改，当前来源和替换关系可追踪。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>授权登记处理中，不表示专利已生效。当前授权任务 PAY 不生成官费金额或草单。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>来源替换形成明确关系，过期任务的四类修改请求均被拒绝。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-finance" data-stage="07">
+          <div class="stage-head"><span class="stage-number">07</span><h3>服务费草单</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>单独选择 SERVICE 项目，在 SERVICE 义务记录 PAY，生成关联草单并锁定。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>草单只包含已配置服务费；rate item code、source ref、source version、source SHA-256 分组展示。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>官费未配置；未知金额保持“未配置”，不会被写成零。</p></div>
+            <div class="stage-field stage-highlight">
+              <span class="field-label">最近新增</span><p>服务费来源可见，官费保持待配置；缺少输入时不产生草单。</p>
+              <div class="synthetic-value">示例服务费：¥1,200.00 CNY<span class="synthetic-label">合成测试输入（SYNTHETIC_TEST_ONLY，非客户授权）</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-finance" data-stage="08">
+          <div class="stage-head"><span class="stage-number">08</span><h3>客户账单与回款</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>从锁定草单创建唯一 AR 账单，登记银行回款并执行一次核销。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>账单变为“已结清、余额 0”；回款变为“已全额核销、未核销 0”。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>回款登记不等于已经核销；只有有效核销记录才建立账单关联。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>幂等创建、防重复账单、权威余额和唯一有效核销保持一致。</p></div>
+          </div>
+        </article>
+
+        <article class="stage-card stage-finance" data-stage="09">
+          <div class="stage-head"><span class="stage-number">09</span><h3>后续运维边界</h3></div>
+          <div class="stage-body">
+            <div class="stage-field stage-action"><span class="field-label">客户操作</span><p>后续提供正式客户模板、官费和年费运行时输入包。</p></div>
+            <div class="stage-field stage-result"><span class="field-label">系统结果</span><p>输入经过版本、来源和哈希校验后，才进入对应功能。</p></div>
+            <div class="stage-field stage-boundary"><span class="field-label">事实边界</span><p>官费与年费未配置，不写入任何金额或完成状态；未在本次演示中执行。</p></div>
+            <div class="stage-field stage-highlight"><span class="field-label">最近新增</span><p>以显式 runtime input 边界替代硬编码模板、法定费率和年费假设。</p></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section traceability-lanes" data-section="lanes">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">Three Lanes</div>
+          <h2>客户始终能看到三条线如何对齐</h2>
+        </div>
+        <p>沿用旧版最有价值的三线结构，但把“官费节点”改为本轮真实覆盖的“客户财务”。</p>
+      </div>
+      <div class="lane-grid">
+        <article class="lane lane-case"><h3>案件状态</h3><p>递交准备、受理审查、两轮 OA、授权登记处理；状态只由可核验事实推动。</p></article>
+        <article class="lane lane-evidence"><h3>文件与证据</h3><p>附件、复核版本、期限来源、答复包、回执、归档和替换关系保持明确。</p></article>
+        <article class="lane lane-finance"><h3>客户财务</h3><p>SERVICE 义务、锁定草单、AR 账单、银行回款和核销形成闭环。</p></article>
+      </div>
+    </section>
+
+    <section class="section recent-delta" data-section="delta">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">What Changed</div>
+          <h2>最近几周，客户真正能感知的变化</h2>
+        </div>
+        <p>不是“代码重构了多少”，而是每一步现在能否被解释、被追踪、被安全重试。</p>
+      </div>
+      <table class="delta-table">
+        <thead><tr><th>之前</th><th>现在</th></tr></thead>
+        <tbody>
+          <tr class="delta-row"><td>页面和宽泛阶段可以展示</td><td>证据、期限、任务与工作包形成可追踪链</td></tr>
+          <tr class="delta-row"><td>故事以单轮 OA 为主</td><td>两轮 OA 各自保留独立身份与回执</td></tr>
+          <tr class="delta-row"><td>错误或歧义操作难以解释</td><td>错来源回执与过期任务拒绝且不写业务数据</td></tr>
+          <tr class="delta-row"><td>费用示例容易被理解为固定真值</td><td>服务费显示来源，未知官费保持待配置</td></tr>
+          <tr class="delta-row"><td>财务流程停在草单附近</td><td>锁定草单、唯一账单、银行回款与核销闭环</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section presenter" data-section="presenter">
+      <div class="section-heading">
+        <div>
+          <div class="section-kicker">Live Demo Order</div>
+          <h2>现场讲解顺序</h2>
+        </div>
+        <p>先讲案件与证据，再讲客户财务，最后诚实说明官费、年费和正式模板的配置边界。</p>
+      </div>
+      <div class="presenter-strip">
+        <div class="presenter-step">客户/案件和递交准备</div>
+        <div class="presenter-step">递交回执、受理和审查证据</div>
+        <div class="presenter-step">第一轮 OA</div>
+        <div class="presenter-step">第二轮 OA</div>
+        <div class="presenter-step">授权来源替换和当前任务指示</div>
+        <div class="presenter-step">服务费草单、账单、回款和核销</div>
+        <div class="presenter-step">官费、年费和正式模板待配置边界</div>
+      </div>
+    </section>
+
+    <section class="section scope-boundary" data-section="boundary">
+      <div>
+        <div class="section-kicker">Demo Boundary</div>
+        <h2>本次展示的是可追踪的客户旅程，不是未经授权的业务承诺</h2>
+        <p>本页面不代表产品、生产或发布批准。正式客户模板、官费和年费必须由后续 runtime input 明确提供和激活。</p>
+      </div>
+      <ul class="boundary-list">
+        <li>不宣称已完成官方递交</li>
+        <li>不宣称专利已生效</li>
+        <li>不虚构官费或年费金额</li>
+        <li>不把本地技术演示称为生产就绪</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="page footer">FPMS Customer Demo Lifecycle V5 · 静态客户演示说明页</footer>
+</body>
+</html>
