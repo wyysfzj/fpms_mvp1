@@ -130,8 +130,18 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
         ).fetchall()
         assert [row[0] for row in users] == ["admin", "demo_evidence_reviewer"]
         assert users[0][1] != users[1][1]
-        for table in ["t_client", "t_case", "t_template", "t_fee_rate", "t_doc_template"]:
+        for table in ["t_client", "t_case", "t_template", "t_fee_rate"]:
             assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM t_doc_template").fetchone()[0] == 61
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM t_doc_template WHERE code <> 'OA_OUT'"
+            ).fetchone()[0]
+            == 60
+        )
+        assert connection.execute(
+            "SELECT name, direction, need_reply FROM t_doc_template WHERE code = 'OA_OUT'"
+        ).fetchone() == ("审查意见答复书（发文）", "OUT", 0)
 
     with pytest.raises(DemoBundleError, match="existing run directory"):
         run_local_demo_abc.bootstrap_demo_run()
