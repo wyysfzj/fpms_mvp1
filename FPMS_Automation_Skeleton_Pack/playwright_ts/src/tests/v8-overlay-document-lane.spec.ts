@@ -12,6 +12,8 @@ test('文件驱动线只展示版本、派生、工作包、回执和任务事�
 
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByRole('heading', { name: '文件驱动' })).toBeVisible()
+    await expect(lane.getByText('活动类型：审查意见答复已递交', { exact: true })).toBeVisible()
+    await expect(lane.getByText('OA_EXTERNAL_SUBMISSION_RECORDED', { exact: false })).toHaveCount(0)
     await expect(lane.getByText('角色：OFFICIAL_FINAL_PDF', { exact: true })).toBeVisible()
     await expect(lane.getByText('版本：2', { exact: true })).toBeVisible()
     await expect(lane.getByText('复核状态：APPROVED', { exact: true })).toBeVisible()
@@ -25,7 +27,22 @@ test('文件驱动线只展示版本、派生、工作包、回执和任务事�
     await expect(lane.getByText('1000.00', { exact: false })).toHaveCount(0)
 })
 
-async function mockCaseOverlay(page: Page): Promise<void> {
+test('未知活动类型显示待确认且不暴露原始枚举', async ({ page }) => {
+    await mockCaseOverlay(page, 'UNRECOGNIZED_DOCUMENT_ACTIVITY')
+    await page.addInitScript(() => {
+        window.localStorage.setItem('fpms_token', 'v8-overlay-document-token')
+    })
+    await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+
+    const lane = page.getByTestId('document-evidence-lane')
+    await expect(lane.getByText('活动类型：活动类型待确认', { exact: true })).toBeVisible()
+    await expect(lane.getByText('UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: false })).toHaveCount(0)
+})
+
+async function mockCaseOverlay(
+    page: Page,
+    activityType = 'OA_EXTERNAL_SUBMISSION_RECORDED',
+): Promise<void> {
     await page.route('**/api/v1/**', async (route) => {
         const request = route.request()
         const apiPath = new URL(request.url()).pathname.replace(/^\/api\/v1/, '')
@@ -51,7 +68,7 @@ async function mockCaseOverlay(page: Page): Promise<void> {
             })
         }
         if (request.method() === 'GET' && apiPath === `/cases/${caseId}/lifecycle-overlay`) {
-            return fulfillJson(route, overlayResponse())
+            return fulfillJson(route, overlayResponse(activityType))
         }
         if (request.method() === 'GET' && apiPath === '/tasks') {
             return fulfillJson(route, { items: [], page: 1, page_size: 50, total: 0 })
@@ -64,7 +81,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
     await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 }
 
-function overlayResponse() {
+function overlayResponse(activityType: string) {
     return {
         case_id: caseId,
         lifecycle_revision: 4,
@@ -82,7 +99,7 @@ function overlayResponse() {
                 sequence: 4,
                 activity_id: 'activity-document',
                 lane: 'DOCUMENT',
-                activity_type: 'OA_EXTERNAL_SUBMISSION_RECORDED',
+                activity_type: activityType,
                 source_activity_id: 'activity-source',
                 effective_at: '2026-08-09T09:00:00Z',
                 confirmation_status: 'CONFIRMED',
