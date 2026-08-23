@@ -37,6 +37,10 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_REF = "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md"
 INTEGRATED_CONTRACT_REF = "docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md"
+V6_CONTRACT_REF = (
+    "docs/superpowers/specs/"
+    "2026-08-23-fpms-demo-v6-dual-track-fee-enrichment-design.md"
+)
 INTEGRATED_DECISION_REF = (
     "docs/product/v8/customer-decisions/"
     "2026-08-21-integrated-demo-a-written-spec-acceptance.txt"
@@ -314,12 +318,28 @@ def _write_manifest(bundle_root: Path, manifest: dict[str, object]) -> str:
                 "version": manifest["provenance"]["source_version"],
                 "sha256": manifest["provenance"]["source_sha256"],
             },
-            {
-                "kind": "SERVICE_RATE",
-                "ref": manifest["rates"][0]["source_ref"],
-                "version": manifest["rates"][0]["source_version"],
-                "sha256": manifest["rates"][0]["source_sha256"],
-            },
+            *(
+                {
+                    "kind": "SERVICE_RATE",
+                    "ref": row["source_ref"],
+                    "version": row["source_version"],
+                    "sha256": row["source_sha256"],
+                }
+                for row in manifest["rates"]
+            ),
+            *(
+                [
+                    {
+                        "kind": "OFFICIAL_RATE_BOOK",
+                        "ref": manifest["official_fee_selector"]["source_authority"],
+                        "version": manifest["official_fee_selector"]["rate_book_version"],
+                        "sha256": manifest["official_fee_selector"]["rate_book_sha256"],
+                    }
+                ]
+                if manifest["schema_version"]
+                == "fpms.demo-input-bundle/integrated-a-v2"
+                else []
+            ),
         ],
         "file_digests": sorted(
             ({"path": row["path"], "sha256": row["sha256"]} for row in file_rows),
@@ -528,6 +548,10 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
 def _valid_v6_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
     bundle_root, manifest, _digest = _valid_integrated_bundle(tmp_path)
     manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v2"
+    manifest["contract"] = {
+        "ref": V6_CONTRACT_REF,
+        "sha256": _sha256((REPO_ROOT / V6_CONTRACT_REF).read_bytes()),
+    }
     manifest["official_fee_selector"] = {
         "source_authority": "CNIPA",
         "rate_book_version": "2026.03.30",
@@ -943,7 +967,8 @@ def test_v6_bundle_returns_exact_immutable_descriptors(
         "CNIPA-GRANT-REGISTRATION",
         "CNIPA-GRANT-ANNOUNCEMENT",
     )
-    assert snapshot.readiness == "TECHNICAL_REHEARSAL_PASS"
+    assert snapshot.readiness == "TECHNICAL_REHEARSAL_INPUT_READY"
+    assert manifest["contract"]["ref"] == V6_CONTRACT_REF
     assert "SVC_GRANT_REGISTRATION_CN" not in json.dumps(manifest, ensure_ascii=False)
     assert "FW-SQDJ-001" not in json.dumps(manifest, ensure_ascii=False)
     assert all(
@@ -963,6 +988,53 @@ def test_v6_bundle_returns_exact_immutable_descriptors(
 
     authority = json.loads((root / "authority.json").read_text())
     assert len(authority["file_digests"]) == 13
+    assert [row["kind"] for row in authority["source_digests"]] == [
+        "PROVENANCE",
+        "SERVICE_RATE",
+        "SERVICE_RATE",
+        "OFFICIAL_RATE_BOOK",
+    ]
+
+
+def test_v6_authority_binds_every_service_and_official_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root, _manifest, digest = _valid_v6_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+    authority_path = root / "authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["source_digests"][2]["sha256"] = "0" * 64
+    authority_path.write_text(
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DemoBundleError, match="source digests"):
+        load_demo_bundle(
+            root,
+            expected_manifest_sha256=digest,
+            expected_authority_sha256=_authority_digest(root),
+            expected_authority_classification="SYNTHETIC_TEST_ONLY",
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_v6_customer_authority_cannot_be_created_by_relabelling_synthetic_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root, manifest, _digest = _valid_v6_bundle(tmp_path)
+    manifest["authority_classification"] = "CUSTOMER_AUTHORIZED"
+    digest = _write_manifest(root, manifest)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    with pytest.raises(DemoBundleError, match="customer authorization"):
+        load_demo_bundle(
+            root,
+            expected_manifest_sha256=digest,
+            expected_authority_sha256=_authority_digest(root),
+            expected_authority_classification="CUSTOMER_AUTHORIZED",
+            repo_root=REPO_ROOT,
+        )
 
 
 def test_integrated_schema_is_additive_and_does_not_reinterpret_v1(

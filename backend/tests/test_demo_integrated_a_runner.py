@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import runpy
 from pathlib import Path
 
 import pytest
@@ -108,6 +109,58 @@ def test_customer_profile_requires_exact_external_bundle_contract(tmp_path: Path
     )
     with pytest.raises(RuntimeError, match="absolute"):
         module.resolve_runtime_bundle(relative, tmp_path / "synthetic")
+
+
+def test_customer_profile_rejects_a_complete_synthetic_bundle_with_relabelled_authority(
+    tmp_path: Path,
+):
+    module = _module()
+    helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
+    bundle, manifest, _digest = helpers["_valid_v6_bundle"](tmp_path / "input")
+    manifest["authority_classification"] = "CUSTOMER_AUTHORIZED"
+    manifest_sha = helpers["_write_manifest"](bundle, manifest)
+    authority_sha = helpers["_authority_digest"](bundle)
+    args = module.parse_args(
+        [
+            "--profile",
+            "CUSTOMER_DEMO",
+            "--artifact",
+            str(tmp_path / "artifact"),
+            "--bundle",
+            str(bundle.resolve()),
+            "--expected-manifest-sha256",
+            manifest_sha,
+            "--expected-authority-sha256",
+            authority_sha,
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="customer authorization"):
+        module.resolve_runtime_bundle(args, tmp_path / "synthetic")
+
+
+def test_invalid_bundle_preflight_does_not_create_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _module()
+    artifact = tmp_path / "artifact"
+    monkeypatch.setattr(module.abc, "candidate_identity", lambda: {"commit": "candidate"})
+    monkeypatch.setattr(module, "validate_spec_source", lambda _source: None)
+
+    with pytest.raises(RuntimeError, match="customer bundle arguments"):
+        module.main(
+            [
+                "--profile",
+                "CUSTOMER_DEMO",
+                "--artifact",
+                str(artifact),
+                "--runs",
+                "1",
+                "--headless",
+            ]
+        )
+
+    assert not artifact.exists()
 
 
 @pytest.mark.parametrize("existing_name", ["root", "database", "wal", "shm"])

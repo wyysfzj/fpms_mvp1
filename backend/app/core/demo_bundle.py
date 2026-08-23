@@ -108,6 +108,10 @@ _CONTRACT_REF = "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md
 _INTEGRATED_CONTRACT_REF = (
     "docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md"
 )
+_V6_CONTRACT_REF = (
+    "docs/superpowers/specs/"
+    "2026-08-23-fpms-demo-v6-dual-track-fee-enrichment-design.md"
+)
 _CAPABILITIES = [
     "FICTIONAL_LIFECYCLE_EVIDENCE",
     "INTERNAL_TEMPLATE_PREVIEW",
@@ -710,17 +714,58 @@ def _validate_authority_record(
             "version": manifest["provenance"]["source_version"],
             "sha256": manifest["provenance"]["source_sha256"],
         },
-        {
-            "kind": "SERVICE_RATE",
-            "ref": manifest["rates"][0]["source_ref"],
-            "version": manifest["rates"][0]["source_version"],
-            "sha256": manifest["rates"][0]["source_sha256"],
-        },
+        *(
+            {
+                "kind": "SERVICE_RATE",
+                "ref": row["source_ref"],
+                "version": row["source_version"],
+                "sha256": row["source_sha256"],
+            }
+            for row in manifest["rates"]
+        ),
     ]
+    if manifest["schema_version"] == "fpms.demo-input-bundle/integrated-a-v2":
+        selector = manifest["official_fee_selector"]
+        expected_sources.append(
+            {
+                "kind": "OFFICIAL_RATE_BOOK",
+                "ref": selector["source_authority"],
+                "version": selector["rate_book_version"],
+                "sha256": selector["rate_book_sha256"],
+            }
+        )
     if authority["source_digests"] != expected_sources:
         raise _error("authority source digests do not match the manifest")
     if authority["file_digests"] != expected_file_digests:
         raise _error("authority file digests do not match the manifest")
+    if authority_classification == "CUSTOMER_AUTHORIZED":
+        try:
+            decision_text = decision_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise _error("customer authorization decision must be UTF-8") from exc
+        required_bindings = (
+            "CUSTOMER_AUTHORIZED",
+            manifest_sha256,
+            manifest["bundle_id"],
+            manifest["bundle_version"],
+            manifest["authority"]["decision_version"],
+            approved_by,
+            approved_at,
+            manifest["provenance"]["source_sha256"],
+            *(row["source_sha256"] for row in manifest["rates"]),
+        )
+        if manifest["schema_version"] == "fpms.demo-input-bundle/integrated-a-v2":
+            required_bindings += (
+                manifest["official_fee_selector"]["rate_book_sha256"],
+            )
+        if (
+            not decision_ref.startswith("docs/product/v8/customer-decisions/")
+            or "synthetic" in approved_by.casefold()
+            or any(binding not in decision_text for binding in required_bindings)
+        ):
+            raise _error(
+                "customer authorization decision does not bind the exact bundle sources"
+            )
     return authority_classification, approved_by, approved_at
 
 
@@ -901,13 +946,15 @@ def load_demo_bundle(
         purpose = "LOCAL_ABC_E2E"
         contract_ref = _CONTRACT_REF
         evidence_roles = _EVIDENCE_ROLES
-    elif schema_version in {
-        "fpms.demo-input-bundle/integrated-a-v1",
-        "fpms.demo-input-bundle/integrated-a-v2",
-    }:
+    elif schema_version == "fpms.demo-input-bundle/integrated-a-v1":
         integrated = True
         purpose = "LOCAL_INTEGRATED_A_E2E"
         contract_ref = _INTEGRATED_CONTRACT_REF
+        evidence_roles = _INTEGRATED_EVIDENCE_ROLES
+    elif schema_version == "fpms.demo-input-bundle/integrated-a-v2":
+        integrated = True
+        purpose = "LOCAL_INTEGRATED_A_E2E"
+        contract_ref = _V6_CONTRACT_REF
         evidence_roles = _INTEGRATED_EVIDENCE_ROLES
     else:
         raise _error("schema_version is unsupported")
@@ -1275,9 +1322,9 @@ def load_demo_bundle(
         official_fee_selector=official_fee_selector,
         first_receipt_amount=first_receipt_amount,
         readiness=(
-            "TECHNICAL_REHEARSAL_PASS"
+            "TECHNICAL_REHEARSAL_INPUT_READY"
             if authority_classification == "SYNTHETIC_TEST_ONLY"
-            else "DEMO_INPUT_REQUIRED"
+            else "CUSTOMER_INPUT_VALIDATED"
         ),
         schema_version=schema_version,
         evidence_roles=tuple(evidence_roles),

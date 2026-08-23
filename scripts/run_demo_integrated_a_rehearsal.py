@@ -620,11 +620,11 @@ def main(argv: list[str] | None = None) -> int:
     candidate = abc.candidate_identity()
     source = SPEC.read_text(encoding="utf-8")
     validate_spec_source(source)
-    artifact.mkdir(parents=True)
-    _write_json(artifact / "candidate.json", candidate)
     bundle_parent = Path(tempfile.mkdtemp(prefix="fpms-integrated-a-bundle-"))
     try:
         bundle, manifest_sha, authority_sha = resolve_runtime_bundle(args, bundle_parent)
+        artifact.mkdir(parents=True)
+        _write_json(artifact / "candidate.json", candidate)
         for ordinal in range(1, args.runs + 1):
             _run_one(
                 ordinal,
