@@ -856,7 +856,7 @@ def _demo_grant_official_source_context(
     try:
         payload = json.loads(activity.payload_json)
         confirmed_at = datetime.fromisoformat(payload["confirmed_at"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, RecursionError, TypeError, ValueError):
         _grant_review_lineage_conflict()
     if type(payload) is not dict:
         _grant_review_lineage_conflict()

@@ -174,6 +174,7 @@ def _rate_row_sha256(row: FeeRate) -> str:
         "effective_to": None if row.effective_to is None else row.effective_to.isoformat(),
         "source_doc": row.source_doc,
         "source_url": row.source_url,
+        "source_policy": row.source_policy,
         "source_version": row.source_version,
         "source_status": row.source_status,
     }
@@ -285,7 +286,7 @@ def _task_evidence(
     ):
         try:
             payload = json.loads(activity.payload_json)
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             continue
         if type(payload) is dict and payload.get("grant_fee_task_id") == task.id:
             notice_candidates.append(activity)
@@ -585,7 +586,7 @@ def confirm_grant_official_fees(
     ):
         try:
             stored_payload = json.loads(row.payload_json)
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             _confirmation_conflict()
         if type(stored_payload) is not dict:
             _confirmation_conflict()

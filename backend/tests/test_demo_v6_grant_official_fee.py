@@ -386,6 +386,7 @@ def test_preview_rejects_fee_rate_source_metadata_drift(
         ("default_amount", Decimal("901.00")),
         ("fee_name", "被篡改的费用名称"),
         ("calc_mode", "TIER"),
+        ("source_policy", "PENDING_CONFIRMATION_DO_NOT_EXECUTE"),
     ],
 )
 def test_preview_rejects_digest_unbound_rate_row_drift(
@@ -465,6 +466,35 @@ def test_preview_requires_persisted_grant_registration_notice_activity(
             label="NO-NOTICE-ACTIVITY",
             dispatch_notice=False,
         )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_TASK_CONFLICT",
+            409,
+        )
+
+
+def test_deeply_corrupt_notice_payload_fails_closed_as_409(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        case, _document, task, _evidence, _book = _seed(
+            transaction, label="DEEP-NOTICE-JSON"
+        )
+        notice = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == case.id,
+                CaseActivityEvent.activity_type
+                == "GRANT_REGISTRATION_NOTICE_RECORDED",
+            )
+        )
+        assert notice is not None
+        notice.payload_json = "[" * 1100 + "0" + "]" * 1100
+        transaction.commit()
 
         with pytest.raises(BusinessError) as caught:
             demo_official_fee.preview_grant_official_fees(
@@ -625,6 +655,47 @@ def test_corrupt_source_payload_serialization_fails_closed_as_409(
 
         assert (caught.value.code, caught.value.status_code) == (
             "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+        )
+
+
+def test_deeply_corrupt_source_payload_fails_closed_as_409(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, evidence, _book = _seed(
+            transaction, label="DEEP-SOURCE-JSON"
+        )
+        preview = demo_official_fee.preview_grant_official_fees(
+            transaction, grant_fee_task_id=task.id
+        )
+        command = _command(task, evidence, preview)
+        result = demo_official_fee.confirm_grant_official_fees(command, transaction)
+        transaction.commit()
+        review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        source = transaction.get(CaseActivityEvent, review.source_activity_id)
+        source.payload_json = "[" * 1100 + "0" + "]" * 1100
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            grant_fee_service._demo_grant_official_source_context(
+                transaction,
+                task=task,
+                activity=source,
+            )
+        assert (caught.value.code, caught.value.status_code) == (
+            "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.confirm_grant_official_fees(
+                replace(command, idempotency_key="demo-v6-deep-source-retry"),
+                transaction,
+            )
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_CONFIRMATION_CONFLICT",
             409,
         )
 
