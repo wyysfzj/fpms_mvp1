@@ -7,6 +7,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
 from xml.etree import ElementTree
@@ -25,11 +26,26 @@ class DemoServiceRate:
     item_code: str
     name_zh_cn: str
     currency: str
-    amount: str
+    unit_price: str
+    initial_quantity: int
+    final_quantity: int
+    adjustable: bool
     source_ref: str
     source_version: str
     source_sha256: str
     disclaimer_zh_cn: str
+
+    @property
+    def amount(self) -> str:
+        return self.unit_price
+
+
+@dataclass(frozen=True)
+class DemoOfficialFeeSelector:
+    source_authority: str
+    rate_book_version: str
+    rate_book_sha256: str
+    fee_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -75,10 +91,17 @@ class DemoBundleSnapshot:
     approved_at: str
     local_date: date
     template: DemoTemplate
-    service_rate: DemoServiceRate
+    service_rates: tuple[DemoServiceRate, ...]
+    official_fee_selector: DemoOfficialFeeSelector | None
+    first_receipt_amount: Decimal | None
+    readiness: str
     schema_version: str
     evidence_roles: tuple[str, ...]
     evidence: tuple[DemoEvidence, ...]
+
+    @property
+    def service_rate(self) -> DemoServiceRate:
+        return self.service_rates[0]
 
 
 _CONTRACT_REF = "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md"
@@ -131,6 +154,7 @@ _TOP_KEYS = {
     "evidence",
     "rates",
 }
+_V6_TOP_KEYS = _TOP_KEYS | {"official_fee_selector", "first_receipt_amount"}
 _METADATA_KEYS = {
     "effective_at",
     "received_at",
@@ -146,6 +170,7 @@ _HASH_RE = re.compile(r"[0-9a-f]{64}")
 _BUNDLE_ID_RE = re.compile(r"[a-z0-9._-]{1,64}")
 _VERSION_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _CODE_RE = re.compile(r"[A-Z0-9_]{1,64}")
+_FEE_CODE_RE = re.compile(r"[A-Z0-9_-]{1,64}")
 _VARIABLE_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
@@ -855,7 +880,20 @@ def load_demo_bundle(
         manifest = json.loads(text, object_pairs_hook=_object_without_duplicates)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise _error("manifest JSON is invalid") from exc
-    manifest = _expect_keys(manifest, _TOP_KEYS, "manifest")
+    supported_schemas = {
+        "fpms.demo-input-bundle/v1",
+        "fpms.demo-input-bundle/integrated-a-v1",
+        "fpms.demo-input-bundle/integrated-a-v2",
+    }
+    if not isinstance(manifest, dict) or manifest.get("schema_version") not in supported_schemas:
+        raise _error("schema_version is unsupported")
+    expected_top_keys = (
+        _V6_TOP_KEYS
+        if isinstance(manifest, dict)
+        and manifest.get("schema_version") == "fpms.demo-input-bundle/integrated-a-v2"
+        else _TOP_KEYS
+    )
+    manifest = _expect_keys(manifest, expected_top_keys, "manifest")
 
     schema_version = manifest["schema_version"]
     if schema_version == "fpms.demo-input-bundle/v1":
@@ -863,7 +901,10 @@ def load_demo_bundle(
         purpose = "LOCAL_ABC_E2E"
         contract_ref = _CONTRACT_REF
         evidence_roles = _EVIDENCE_ROLES
-    elif schema_version == "fpms.demo-input-bundle/integrated-a-v1":
+    elif schema_version in {
+        "fpms.demo-input-bundle/integrated-a-v1",
+        "fpms.demo-input-bundle/integrated-a-v2",
+    }:
         integrated = True
         purpose = "LOCAL_INTEGRATED_A_E2E"
         contract_ref = _INTEGRATED_CONTRACT_REF
@@ -1000,36 +1041,178 @@ def load_demo_bundle(
             raise _error("grant replacement semantic metadata must be distinct")
 
     rates = manifest["rates"]
-    if not isinstance(rates, list) or len(rates) != 1:
-        raise _error("rates must contain exactly one row")
-    rate = _expect_keys(
-        rates[0],
-        {
-            "domain",
-            "item_code",
-            "name_zh_cn",
-            "currency",
-            "calc_mode",
-            "amount",
-            "source_ref",
-            "source_version",
-            "source_sha256",
-            "disclaimer_zh_cn",
-        },
-        "rates[0]",
-    )
-    _exact(rate["domain"], "SERVICE_DEMO_PRICE", "rates[0].domain")
-    item_code = _matches(rate["item_code"], _CODE_RE, "rates[0].item_code")
-    name_zh_cn = _string(rate["name_zh_cn"], "rates[0].name_zh_cn", maximum=120)
-    _exact(rate["currency"], "CNY", "rates[0].currency")
-    _exact(rate["calc_mode"], "FIXED", "rates[0].calc_mode")
-    amount = _matches(rate["amount"], _AMOUNT_RE, "rates[0].amount")
-    if amount == "0.00":
-        raise _error("rates[0].amount must be positive")
-    source_ref = _string(rate["source_ref"], "rates[0].source_ref", maximum=240)
-    source_version = _string(rate["source_version"], "rates[0].source_version", maximum=120)
-    source_sha = _matches(rate["source_sha256"], _HASH_RE, "rates[0].source_sha256")
-    disclaimer = _string(rate["disclaimer_zh_cn"], "rates[0].disclaimer_zh_cn", maximum=200)
+    service_rates: list[DemoServiceRate] = []
+    official_fee_selector: DemoOfficialFeeSelector | None = None
+    first_receipt_amount: Decimal | None = None
+    if schema_version == "fpms.demo-input-bundle/integrated-a-v2":
+        if not isinstance(rates, list) or len(rates) < 2:
+            raise _error("rates must contain at least two service rows")
+        item_codes: set[str] = set()
+        changed_rows = 0
+        for index, value in enumerate(rates):
+            label = f"rates[{index}]"
+            rate = _expect_keys(
+                value,
+                {
+                    "domain",
+                    "item_code",
+                    "name_zh_cn",
+                    "currency",
+                    "unit_price",
+                    "initial_quantity",
+                    "final_quantity",
+                    "adjustable",
+                    "source_ref",
+                    "source_version",
+                    "source_sha256",
+                    "disclaimer_zh_cn",
+                },
+                label,
+            )
+            _exact(rate["domain"], "SERVICE_DEMO_PRICE", f"{label}.domain")
+            item_code = _matches(rate["item_code"], _CODE_RE, f"{label}.item_code")
+            if item_code in item_codes:
+                raise _error("rates item_code values must be unique")
+            item_codes.add(item_code)
+            initial_quantity = rate["initial_quantity"]
+            final_quantity = rate["final_quantity"]
+            if type(initial_quantity) is not int or initial_quantity <= 0:
+                raise _error(f"{label}.initial_quantity must be positive")
+            if type(final_quantity) is not int or final_quantity <= 0:
+                raise _error(f"{label}.final_quantity must be positive")
+            adjustable = rate["adjustable"]
+            if type(adjustable) is not bool:
+                raise _error(f"{label}.adjustable must be boolean")
+            if not adjustable and final_quantity != initial_quantity:
+                raise _error("fixed service rate final_quantity must equal initial_quantity")
+            if final_quantity != initial_quantity:
+                changed_rows += 1
+                if not adjustable:
+                    raise _error("changed service rate must be adjustable")
+            _exact(rate["currency"], "CNY", f"{label}.currency")
+            unit_price = _matches(rate["unit_price"], _AMOUNT_RE, f"{label}.unit_price")
+            if unit_price == "0.00":
+                raise _error(f"{label}.unit_price must be positive")
+            service_rates.append(
+                DemoServiceRate(
+                    item_code=item_code,
+                    name_zh_cn=_string(
+                        rate["name_zh_cn"], f"{label}.name_zh_cn", maximum=120
+                    ),
+                    currency="CNY",
+                    unit_price=unit_price,
+                    initial_quantity=initial_quantity,
+                    final_quantity=final_quantity,
+                    adjustable=adjustable,
+                    source_ref=_string(
+                        rate["source_ref"], f"{label}.source_ref", maximum=240
+                    ),
+                    source_version=_string(
+                        rate["source_version"], f"{label}.source_version", maximum=120
+                    ),
+                    source_sha256=_matches(
+                        rate["source_sha256"], _HASH_RE, f"{label}.source_sha256"
+                    ),
+                    disclaimer_zh_cn=_string(
+                        rate["disclaimer_zh_cn"],
+                        f"{label}.disclaimer_zh_cn",
+                        maximum=200,
+                    ),
+                )
+            )
+        if not any(row.adjustable for row in service_rates):
+            raise _error("rates must contain an adjustable service row")
+        if not any(not row.adjustable for row in service_rates):
+            raise _error("rates must contain a fixed service row")
+        if changed_rows != 1:
+            raise _error("exactly one adjustable service row must change final_quantity")
+
+        selector = _expect_keys(
+            manifest["official_fee_selector"],
+            {"source_authority", "rate_book_version", "rate_book_sha256", "fee_codes"},
+            "official_fee_selector",
+        )
+        _exact(selector["source_authority"], "CNIPA", "official_fee_selector.source_authority")
+        fee_codes = selector["fee_codes"]
+        if (
+            not isinstance(fee_codes, list)
+            or len(fee_codes) < 2
+            or len(set(fee_codes)) != len(fee_codes)
+            or any(
+                not isinstance(code, str) or _FEE_CODE_RE.fullmatch(code) is None
+                for code in fee_codes
+            )
+        ):
+            raise _error("official_fee_selector.fee_codes must contain at least two unique codes")
+        official_fee_selector = DemoOfficialFeeSelector(
+            source_authority="CNIPA",
+            rate_book_version=_string(
+                selector["rate_book_version"],
+                "official_fee_selector.rate_book_version",
+                maximum=120,
+            ),
+            rate_book_sha256=_matches(
+                selector["rate_book_sha256"],
+                _HASH_RE,
+                "official_fee_selector.rate_book_sha256",
+            ),
+            fee_codes=tuple(fee_codes),
+        )
+        receipt_text = _matches(
+            manifest["first_receipt_amount"], _AMOUNT_RE, "first_receipt_amount"
+        )
+        first_receipt_amount = Decimal(receipt_text)
+        final_total = sum(
+            Decimal(row.unit_price) * row.final_quantity for row in service_rates
+        )
+        if first_receipt_amount <= 0 or first_receipt_amount >= final_total:
+            raise _error("first_receipt_amount must be positive and less than final service total")
+    else:
+        if not isinstance(rates, list) or len(rates) != 1:
+            raise _error("rates must contain exactly one row")
+        rate = _expect_keys(
+            rates[0],
+            {
+                "domain",
+                "item_code",
+                "name_zh_cn",
+                "currency",
+                "calc_mode",
+                "amount",
+                "source_ref",
+                "source_version",
+                "source_sha256",
+                "disclaimer_zh_cn",
+            },
+            "rates[0]",
+        )
+        _exact(rate["domain"], "SERVICE_DEMO_PRICE", "rates[0].domain")
+        _exact(rate["currency"], "CNY", "rates[0].currency")
+        _exact(rate["calc_mode"], "FIXED", "rates[0].calc_mode")
+        amount = _matches(rate["amount"], _AMOUNT_RE, "rates[0].amount")
+        if amount == "0.00":
+            raise _error("rates[0].amount must be positive")
+        service_rates.append(
+            DemoServiceRate(
+                item_code=_matches(rate["item_code"], _CODE_RE, "rates[0].item_code"),
+                name_zh_cn=_string(rate["name_zh_cn"], "rates[0].name_zh_cn", maximum=120),
+                currency="CNY",
+                unit_price=amount,
+                initial_quantity=1,
+                final_quantity=1,
+                adjustable=False,
+                source_ref=_string(rate["source_ref"], "rates[0].source_ref", maximum=240),
+                source_version=_string(
+                    rate["source_version"], "rates[0].source_version", maximum=120
+                ),
+                source_sha256=_matches(
+                    rate["source_sha256"], _HASH_RE, "rates[0].source_sha256"
+                ),
+                disclaimer_zh_cn=_string(
+                    rate["disclaimer_zh_cn"], "rates[0].disclaimer_zh_cn", maximum=200
+                ),
+            )
+        )
 
     actual_files: set[str] = set()
     for candidate in root.rglob("*"):
@@ -1088,15 +1271,13 @@ def load_demo_bundle(
             sha256=template_row["sha256"],
             required_variables=tuple(variables),
         ),
-        service_rate=DemoServiceRate(
-            item_code=item_code,
-            name_zh_cn=name_zh_cn,
-            currency="CNY",
-            amount=amount,
-            source_ref=source_ref,
-            source_version=source_version,
-            source_sha256=source_sha,
-            disclaimer_zh_cn=disclaimer,
+        service_rates=tuple(service_rates),
+        official_fee_selector=official_fee_selector,
+        first_receipt_amount=first_receipt_amount,
+        readiness=(
+            "TECHNICAL_REHEARSAL_PASS"
+            if authority_classification == "SYNTHETIC_TEST_ONLY"
+            else "DEMO_INPUT_REQUIRED"
         ),
         schema_version=schema_version,
         evidence_roles=tuple(evidence_roles),

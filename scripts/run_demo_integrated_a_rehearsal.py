@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import runpy
 import secrets
 import shutil
@@ -12,8 +13,10 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -22,6 +25,11 @@ if str(ROOT) not in sys.path:
 from scripts import run_demo_abc_rehearsal as abc  # noqa: E402
 
 BACKEND = ROOT / "backend"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+from app.core.demo_bundle import load_demo_bundle  # noqa: E402
+
 PLAYWRIGHT = ROOT / "FPMS_Automation_Skeleton_Pack" / "playwright_ts"
 SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"
 STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a-static-contract.mjs"
@@ -121,10 +129,19 @@ REHEARSAL_SCENARIO = {
     "bank_ref_prefix": "BTR-CYZN",
 }
 CUSTOMER_STAGE_ORDER = tuple(f"{index:02d}" for index in range(1, 10))
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run FPMS Integrated Scheme A rehearsal")
+    parser.add_argument(
+        "--profile",
+        choices=("TECHNICAL_REHEARSAL", "CUSTOMER_DEMO"),
+        required=True,
+    )
+    parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--expected-manifest-sha256")
+    parser.add_argument("--expected-authority-sha256")
     parser.add_argument("--artifact", type=Path, default=DEFAULT_ARTIFACT)
     parser.add_argument("--runs", type=int, choices=(1, 2), default=2)
     parser.add_argument("--headless", action="store_true")
@@ -133,12 +150,80 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def build_integrated_bundle(parent: Path) -> tuple[Path, str, str]:
     helpers = runpy.run_path(str(BACKEND / "tests" / "test_demo_abc_runtime_bundle.py"))
-    builder = helpers.get("_valid_integrated_bundle")
+    builder = helpers.get("_valid_v6_bundle")
     if builder is None:
-        raise RuntimeError("integrated-a-v1 bundle builder is unavailable")
+        raise RuntimeError("integrated-a-v2 bundle builder is unavailable")
     bundle, _manifest, manifest_sha = builder(parent)
     authority_sha = hashlib.sha256((bundle / "authority.json").read_bytes()).hexdigest()
     return bundle, manifest_sha, authority_sha
+
+
+def resolve_runtime_bundle(
+    args: argparse.Namespace, synthetic_parent: Path
+) -> tuple[Path, str, str]:
+    supplied = (
+        args.bundle,
+        args.expected_manifest_sha256,
+        args.expected_authority_sha256,
+    )
+    if args.profile == "TECHNICAL_REHEARSAL" and all(value is None for value in supplied):
+        return build_integrated_bundle(synthetic_parent)
+    if any(value is None for value in supplied):
+        raise RuntimeError("customer bundle arguments must be supplied together")
+    bundle = args.bundle
+    assert bundle is not None
+    if not bundle.is_absolute():
+        raise RuntimeError("runtime bundle path must be absolute")
+    manifest_sha = str(args.expected_manifest_sha256)
+    authority_sha = str(args.expected_authority_sha256)
+    if _SHA256_RE.fullmatch(manifest_sha) is None or _SHA256_RE.fullmatch(authority_sha) is None:
+        raise RuntimeError("runtime bundle digests must be exact lowercase SHA-256 values")
+    expected_classification = (
+        "CUSTOMER_AUTHORIZED"
+        if args.profile == "CUSTOMER_DEMO"
+        else "SYNTHETIC_TEST_ONLY"
+    )
+    snapshot = load_demo_bundle(
+        bundle,
+        expected_manifest_sha256=manifest_sha,
+        expected_authority_sha256=authority_sha,
+        expected_authority_classification=expected_classification,
+        repo_root=ROOT,
+    )
+    if snapshot.schema_version != "fpms.demo-input-bundle/integrated-a-v2":
+        raise RuntimeError("runtime bundle must use the integrated-a-v2 contract")
+    return snapshot.bundle_root, manifest_sha, authority_sha
+
+
+def assert_fresh_run_paths(run_root: Path, database_path: Path) -> None:
+    candidates = (
+        run_root,
+        database_path,
+        Path(f"{database_path}-wal"),
+        Path(f"{database_path}-shm"),
+    )
+    existing = [path for path in candidates if path.exists() or path.is_symlink()]
+    if existing:
+        raise RuntimeError(f"demo run path already exists: {existing[0]}")
+
+
+def build_run_record(
+    *,
+    run_id: str,
+    database_path: Path,
+    manifest_sha256: str,
+    created_at: str,
+) -> dict[str, str]:
+    if not database_path.is_absolute():
+        raise RuntimeError("run database path must be absolute")
+    if _SHA256_RE.fullmatch(manifest_sha256) is None:
+        raise RuntimeError("run bundle digest must be an exact lowercase SHA-256 value")
+    return {
+        "run_id": run_id,
+        "database_path": str(database_path),
+        "bundle_manifest_sha256": manifest_sha256,
+        "created_at": created_at,
+    }
 
 
 def integrated_evidence_descriptors(bundle: Path) -> list[dict[str, Any]]:
@@ -367,7 +452,7 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
     if len(set(run_ids)) != runs or any(identity_sets[left] & identity_sets[right] for left in range(runs) for right in range(left + 1, runs)):
         raise RuntimeError("integrated runs must use distinct run and business identities")
     return {
-        "status": "DIAGNOSTIC_PASS",
+        "status": "TECHNICAL_REHEARSAL_PASS",
         "runs": runs,
         "checkpoint_counts": [19] * runs,
         "evidence_binding_counts": [12] * runs,
@@ -392,11 +477,23 @@ def _run_one(
     authority_sha: str,
     candidate: dict[str, Any],
     headless: bool,
+    profile: str,
 ) -> None:
     run_id = f"integrated-r{ordinal}-{secrets.token_hex(6)}"
     run_root = (Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}").resolve()
+    database_path = run_root / "fpms-demo.db"
+    assert_fresh_run_paths(run_root, database_path)
     run_artifact = artifact / f"run{ordinal}"
     run_artifact.mkdir()
+    _write_json(
+        run_artifact / "run.json",
+        build_run_record(
+            run_id=run_id,
+            database_path=database_path,
+            manifest_sha256=manifest_sha,
+            created_at=datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
+        ),
+    )
     manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
     template = manifest["templates"][0]
     rate = manifest["rates"][0]
@@ -409,12 +506,14 @@ def _run_one(
     env.update(
         FPMS_ENV="demo",
         FPMS_DEMO_SCOPE="LOCAL_ABC_E2E",
-        FPMS_DEMO_RUN_PROFILE="TECHNICAL_REHEARSAL",
+        FPMS_DEMO_RUN_PROFILE=profile,
         FPMS_DEMO_RUN_ID=run_id,
         FPMS_DEMO_BUNDLE_PATH=str(bundle),
         FPMS_DEMO_EXPECTED_MANIFEST_SHA256=manifest_sha,
         FPMS_DEMO_EXPECTED_AUTHORITY_SHA256=authority_sha,
-        FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION="SYNTHETIC_TEST_ONLY",
+        FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION=(
+            "CUSTOMER_AUTHORIZED" if profile == "CUSTOMER_DEMO" else "SYNTHETIC_TEST_ONLY"
+        ),
         FPMS_DEMO_ADMIN_USERNAME="admin",
         FPMS_DEMO_ADMIN_PASSWORD=admin_password,
         FPMS_DEMO_REVIEWER_USERNAME="demo_evidence_reviewer",
@@ -525,9 +624,18 @@ def main(argv: list[str] | None = None) -> int:
     _write_json(artifact / "candidate.json", candidate)
     bundle_parent = Path(tempfile.mkdtemp(prefix="fpms-integrated-a-bundle-"))
     try:
-        bundle, manifest_sha, authority_sha = build_integrated_bundle(bundle_parent)
+        bundle, manifest_sha, authority_sha = resolve_runtime_bundle(args, bundle_parent)
         for ordinal in range(1, args.runs + 1):
-            _run_one(ordinal, artifact, bundle, manifest_sha, authority_sha, candidate, args.headless)
+            _run_one(
+                ordinal,
+                artifact,
+                bundle,
+                manifest_sha,
+                authority_sha,
+                candidate,
+                args.headless,
+                args.profile,
+            )
     finally:
         if bundle_parent.exists():
             shutil.rmtree(bundle_parent)

@@ -30,10 +30,40 @@ def _module():
 def test_runner_selects_only_the_integrated_spec_and_supports_one_or_two_runs():
     module = _module()
     assert module.SPEC == SPEC
-    assert module.parse_args(["--artifact", "/tmp/integrated-a", "--runs", "1", "--headless"]).runs == 1
-    assert module.parse_args(["--artifact", "/tmp/integrated-a", "--runs", "2"]).runs == 2
+    assert module.parse_args(
+        [
+            "--profile",
+            "TECHNICAL_REHEARSAL",
+            "--artifact",
+            "/tmp/integrated-a",
+            "--runs",
+            "1",
+            "--headless",
+        ]
+    ).runs == 1
+    assert module.parse_args(
+        [
+            "--profile",
+            "TECHNICAL_REHEARSAL",
+            "--artifact",
+            "/tmp/integrated-a",
+            "--runs",
+            "2",
+        ]
+    ).runs == 2
     with pytest.raises(SystemExit):
-        module.parse_args(["--artifact", "/tmp/integrated-a", "--runs", "3"])
+        module.parse_args(
+            [
+                "--profile",
+                "TECHNICAL_REHEARSAL",
+                "--artifact",
+                "/tmp/integrated-a",
+                "--runs",
+                "3",
+            ]
+        )
+    with pytest.raises(SystemExit):
+        module.parse_args(["--artifact", "/tmp/integrated-a"])
 
 
 def test_runner_builds_the_integrated_bundle_successor(tmp_path: Path):
@@ -44,8 +74,81 @@ def test_runner_builds_the_integrated_bundle_successor(tmp_path: Path):
     assert len(manifest_sha) == 64
     assert len(authority_sha) == 64
     manifest = (bundle / "manifest.json").read_text(encoding="utf-8")
-    assert '"schema_version":"fpms.demo-input-bundle/integrated-a-v1"' in manifest
+    assert '"schema_version":"fpms.demo-input-bundle/integrated-a-v2"' in manifest
     assert manifest.count('"classification":"FICTIONAL_DEMO_EVIDENCE"') == 12
+
+
+def test_customer_profile_requires_exact_external_bundle_contract(tmp_path: Path):
+    module = _module()
+    args = module.parse_args(
+        [
+            "--profile",
+            "CUSTOMER_DEMO",
+            "--artifact",
+            str(tmp_path / "artifact"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="customer bundle arguments"):
+        module.resolve_runtime_bundle(args, tmp_path / "synthetic")
+
+    relative = module.parse_args(
+        [
+            "--profile",
+            "CUSTOMER_DEMO",
+            "--artifact",
+            str(tmp_path / "artifact"),
+            "--bundle",
+            "relative-bundle",
+            "--expected-manifest-sha256",
+            "a" * 64,
+            "--expected-authority-sha256",
+            "b" * 64,
+        ]
+    )
+    with pytest.raises(RuntimeError, match="absolute"):
+        module.resolve_runtime_bundle(relative, tmp_path / "synthetic")
+
+
+@pytest.mark.parametrize("existing_name", ["root", "database", "wal", "shm"])
+def test_fresh_run_preflight_rejects_every_existing_run_identity(
+    tmp_path: Path, existing_name: str
+):
+    module = _module()
+    run_root = tmp_path / "fresh-run"
+    targets = {
+        "root": run_root,
+        "database": Path(f"{run_root}.db"),
+        "wal": Path(f"{run_root}.db-wal"),
+        "shm": Path(f"{run_root}.db-shm"),
+    }
+    target = targets[existing_name]
+    if existing_name == "root":
+        target.mkdir()
+    else:
+        target.write_text("occupied", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="already exists"):
+        module.assert_fresh_run_paths(run_root, Path(f"{run_root}.db"))
+
+
+def test_run_record_contains_only_recovery_binding_fields(tmp_path: Path):
+    module = _module()
+    database = (tmp_path / "run" / "fpms-demo.db").resolve()
+
+    record = module.build_run_record(
+        run_id="integrated-r1-abcdef",
+        database_path=database,
+        manifest_sha256="a" * 64,
+        created_at="2026-08-23T20:00:00+08:00",
+    )
+
+    assert record == {
+        "run_id": "integrated-r1-abcdef",
+        "database_path": str(database),
+        "bundle_manifest_sha256": "a" * 64,
+        "created_at": "2026-08-23T20:00:00+08:00",
+    }
 
 
 def test_runner_uses_permission_safe_run_root_cleanup():
@@ -392,7 +495,7 @@ def test_runner_accepts_only_two_clean_runs_with_disjoint_business_identities(tm
 
     summary = module.build_diagnostic_summary(tmp_path, 2)
 
-    assert summary["status"] == "DIAGNOSTIC_PASS"
+    assert summary["status"] == "TECHNICAL_REHEARSAL_PASS"
     assert summary["runs"] == 2
     assert summary["checkpoint_counts"] == [19, 19]
     assert summary["evidence_binding_counts"] == [12, 12]

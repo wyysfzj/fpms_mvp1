@@ -525,6 +525,49 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
     return bundle_root, manifest, _write_manifest(bundle_root, manifest)
 
 
+def _valid_v6_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
+    bundle_root, manifest, _digest = _valid_integrated_bundle(tmp_path)
+    manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v2"
+    manifest["official_fee_selector"] = {
+        "source_authority": "CNIPA",
+        "rate_book_version": "2026.03.30",
+        "rate_book_sha256": "e" * 64,
+        "fee_codes": ["CNIPA-GRANT-REGISTRATION", "CNIPA-GRANT-ANNOUNCEMENT"],
+    }
+    manifest["first_receipt_amount"] = "1000.00"
+    manifest["rates"] = [
+        {
+            "domain": "SERVICE_DEMO_PRICE",
+            "item_code": "FWSQDJ001",
+            "name_zh_cn": "授权登记阶段代理服务费",
+            "currency": "CNY",
+            "unit_price": "1200.00",
+            "initial_quantity": 1,
+            "final_quantity": 1,
+            "adjustable": False,
+            "source_ref": "synthetic-integrated-a-rate",
+            "source_version": "2026.08.21",
+            "source_sha256": "d" * 64,
+            "disclaimer_zh_cn": "仅用于本地合成技术排练，不是正式报价或官方费用。",
+        },
+        {
+            "domain": "SERVICE_DEMO_PRICE",
+            "item_code": "FWSQDJ002",
+            "name_zh_cn": "授权登记附加文件处理服务费",
+            "currency": "CNY",
+            "unit_price": "300.00",
+            "initial_quantity": 1,
+            "final_quantity": 2,
+            "adjustable": True,
+            "source_ref": "synthetic-integrated-a-rate",
+            "source_version": "2026.08.21",
+            "source_sha256": "f" * 64,
+            "disclaimer_zh_cn": "仅用于本地合成技术排练，不是正式报价或官方费用。",
+        },
+    ]
+    return bundle_root, manifest, _write_manifest(bundle_root, manifest)
+
+
 def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     dependencies = tomllib.loads((REPO_ROOT / "backend/pyproject.toml").read_text())["project"][
         "dependencies"
@@ -542,7 +585,7 @@ def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: py
     assert snapshot.customer_activation_eligible is False
     assert snapshot.approved_by == "synthetic-test-fixture-generator"
     assert snapshot.approved_at == "2026-08-16T12:00:00+08:00"
-    assert snapshot.service_rate.amount == "1200.00"
+    assert snapshot.service_rates[0].unit_price == "1200.00"
     assert snapshot.evidence_roles == tuple(EVIDENCE_ROLES)
 
 
@@ -850,15 +893,15 @@ def test_authority_record_is_independently_pinned_and_exact(tmp_path: Path, monk
         _load_bundle(root, digest)
 
 
-def test_integrated_bundle_returns_exact_immutable_descriptors(
+def test_v6_bundle_returns_exact_immutable_descriptors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    root, manifest, digest = _valid_integrated_bundle(tmp_path)
+    root, manifest, digest = _valid_v6_bundle(tmp_path)
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
 
     snapshot = _load_bundle(root, digest)
 
-    assert snapshot.schema_version == "fpms.demo-input-bundle/integrated-a-v1"
+    assert snapshot.schema_version == "fpms.demo-input-bundle/integrated-a-v2"
     assert snapshot.bundle_id == "fpms-integrated-a"
     assert snapshot.evidence_roles == tuple(INTEGRATED_EVIDENCE_ROLES)
     assert len(snapshot.evidence) == 12
@@ -890,10 +933,23 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
         for role, name in zip(INTEGRATED_EVIDENCE_ROLES, evidence_basenames, strict=True)
     )
     assert manifest["rates"][0]["name_zh_cn"] == "授权登记阶段代理服务费"
-    assert snapshot.service_rate.item_code == "FWSQDJ001"
+    assert [row.item_code for row in snapshot.service_rates] == ["FWSQDJ001", "FWSQDJ002"]
+    assert [row.adjustable for row in snapshot.service_rates] == [False, True]
+    assert snapshot.service_rates[1].initial_quantity == 1
+    assert snapshot.service_rates[1].final_quantity == 2
+    assert snapshot.first_receipt_amount > 0
+    assert snapshot.official_fee_selector.source_authority == "CNIPA"
+    assert snapshot.official_fee_selector.fee_codes == (
+        "CNIPA-GRANT-REGISTRATION",
+        "CNIPA-GRANT-ANNOUNCEMENT",
+    )
+    assert snapshot.readiness == "TECHNICAL_REHEARSAL_PASS"
     assert "SVC_GRANT_REGISTRATION_CN" not in json.dumps(manifest, ensure_ascii=False)
     assert "FW-SQDJ-001" not in json.dumps(manifest, ensure_ascii=False)
-    assert not snapshot.service_rate.item_code.startswith(("DEMO_", "IA-"))
+    assert all(
+        not row.item_code.startswith(("DEMO_", "IA-"))
+        for row in snapshot.service_rates
+    )
     assert "虚构" not in manifest["provenance"]["label_zh_cn"]
     assert "虚构" not in manifest["rates"][0]["disclaimer_zh_cn"]
     assert snapshot.evidence[8].metadata.oa_sequence == 2
@@ -958,8 +1014,64 @@ def test_integrated_roles_missing_extra_alias_and_schema_confusion_fail_closed(
         _load_bundle(root, _write_manifest(root, manifest))
 
     root, manifest, _digest = _valid_integrated_bundle(tmp_path / "unknown-schema")
-    manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v2"
+    manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v3"
     with pytest.raises(DemoBundleError, match="schema_version"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda manifest: manifest["rates"].pop(), "at least two"),
+        (
+            lambda manifest: manifest["rates"][1].update(
+                item_code=manifest["rates"][0]["item_code"]
+            ),
+            "item_code",
+        ),
+        (
+            lambda manifest: [
+                row.update(
+                    adjustable=False,
+                    final_quantity=row["initial_quantity"],
+                )
+                for row in manifest["rates"]
+            ],
+            "adjustable",
+        ),
+        (
+            lambda manifest: [row.update(adjustable=True) for row in manifest["rates"]],
+            "fixed",
+        ),
+        (lambda manifest: manifest["rates"][1].update(currency="USD"), "currency"),
+        (
+            lambda manifest: manifest["rates"][0].update(final_quantity=2),
+            "fixed",
+        ),
+        (
+            lambda manifest: manifest["rates"][1].update(final_quantity=0),
+            "final_quantity",
+        ),
+        (lambda manifest: manifest.update(first_receipt_amount="0.00"), "first_receipt"),
+        (
+            lambda manifest: manifest["official_fee_selector"].update(
+                fee_codes=["CNIPA-GRANT-REGISTRATION"]
+            ),
+            "fee_codes",
+        ),
+    ],
+)
+def test_v6_runtime_fee_contract_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation,
+    message: str,
+):
+    root, manifest, _digest = _valid_v6_bundle(tmp_path)
+    mutation(manifest)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    with pytest.raises(DemoBundleError, match=message):
         _load_bundle(root, _write_manifest(root, manifest))
 
 
