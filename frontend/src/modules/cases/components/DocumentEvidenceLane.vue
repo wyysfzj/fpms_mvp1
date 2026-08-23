@@ -93,6 +93,7 @@ const ACTIVITY_TYPE_LABELS: Readonly<Record<string, string>> = {
   OA_NOTICE_RECORDED: '审查意见通知已登记',
   OA_EXTERNAL_SUBMISSION_RECORDED: '审查意见答复已递交',
   OA_RECEIPT_ARCHIVED: '审查意见答复回执已归档',
+  GRANT_REGISTRATION_NOTICE_RECORDED: '授权登记通知已登记',
 }
 
 const props = defineProps<{

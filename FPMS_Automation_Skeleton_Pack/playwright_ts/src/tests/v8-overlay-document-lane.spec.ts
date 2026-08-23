@@ -39,6 +39,18 @@ test('未知活动类型显示待确认且不暴露原始枚举', async ({ page 
     await expect(lane.getByText('UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: false })).toHaveCount(0)
 })
 
+test('授权登记通知活动以中文显示', async ({ page }) => {
+    await mockCaseOverlay(page, 'GRANT_REGISTRATION_NOTICE_RECORDED')
+    await page.addInitScript(() => {
+        window.localStorage.setItem('fpms_token', 'v8-overlay-document-token')
+    })
+    await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+
+    const lane = page.getByTestId('document-evidence-lane')
+    await expect(lane.getByText('活动类型：授权登记通知已登记', { exact: true })).toBeVisible()
+    await expect(lane.getByText('GRANT_REGISTRATION_NOTICE_RECORDED', { exact: false })).toHaveCount(0)
+})
+
 async function mockCaseOverlay(
     page: Page,
     activityType = 'OA_EXTERNAL_SUBMISSION_RECORDED',
