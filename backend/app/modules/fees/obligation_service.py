@@ -1326,7 +1326,7 @@ def _detail_recognition_lines(
             continue
         try:
             review_payload = _strict_json_loads(cast(str, row["payload_json"]))
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             _stored_state_invalid()
         if type(review_payload) is not dict:
             _stored_state_invalid()
@@ -1345,13 +1345,16 @@ def _detail_recognition_lines(
     if len(reviews) != 1:
         _stored_state_invalid()
     review, review_payload = reviews[0]
-    canonical_review = json.dumps(
-        review_payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
+    try:
+        canonical_review = json.dumps(
+            review_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError):
+        _stored_state_invalid()
     try:
         confirmed_at = datetime.fromisoformat(cast(str, review_payload.get("confirmed_at")))
     except (TypeError, ValueError):

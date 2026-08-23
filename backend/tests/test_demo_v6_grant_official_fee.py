@@ -700,6 +700,71 @@ def test_deeply_corrupt_source_payload_fails_closed_as_409(
         )
 
 
+def test_deeply_corrupt_registration_review_fails_closed_as_409(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, evidence, _book = _seed(
+            transaction, label="DEEP-REVIEW-JSON"
+        )
+        preview = demo_official_fee.preview_grant_official_fees(
+            transaction, grant_fee_task_id=task.id
+        )
+        result = demo_official_fee.confirm_grant_official_fees(
+            _command(task, evidence, preview), transaction
+        )
+        transaction.commit()
+        review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        obligation_lines = tuple(
+            transaction.scalars(
+                select(FeeObligationLine)
+                .where(FeeObligationLine.obligation_id == result.fee_obligation_id)
+                .order_by(
+                    FeeObligationLine.fee_year_key,
+                    FeeObligationLine.fee_code,
+                    FeeObligationLine.id,
+                )
+            )
+        )
+        review_command = grant_fee_service.ConfirmGrantOfficialFeesCommand(
+            grant_fee_task_id=task.id,
+            source_activity_id=review.source_activity_id,
+            obligation_id=result.fee_obligation_id,
+            reviewed_evidence_version_id=evidence.id,
+            expected_content_hash=evidence.content_hash,
+            confirmed_at=CONFIRMED_AT,
+            actor_id="demo-v6-gov-reviewer",
+            idempotency_key=review.idempotency_key,
+            lines=tuple(
+                grant_fee_service.GrantOfficialFeeReviewLineInput(
+                    obligation_line_id=line.id,
+                    official_full_amount=line.official_full_amount,
+                    confirmed_payable_amount=line.payable_amount,
+                )
+                for line in obligation_lines
+            ),
+        )
+        review.payload_json = "[" * 1100 + "0" + "]" * 1100
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            grant_fee_service.confirm_grant_official_fees(
+                review_command, transaction
+            )
+        assert (caught.value.code, caught.value.status_code) == (
+            "GRANT_OFFICIAL_FEE_REVIEW_IDEMPOTENCY_CONFLICT",
+            409,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            get_fee_obligation(result.fee_obligation_id, transaction)
+        assert (caught.value.code, caught.value.status_code) == (
+            "FEE_OBLIGATION_STORED_STATE_INVALID",
+            409,
+        )
+
+
 def test_confirmation_drift_rolls_back_the_entire_composite(
     session_factory: sessionmaker, runtime_bundle: Path
 ) -> None:

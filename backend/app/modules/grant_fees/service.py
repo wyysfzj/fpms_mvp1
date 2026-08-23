@@ -1525,7 +1525,7 @@ def _precheck_existing_grant_review(
 ) -> None:
     try:
         payload = json.loads(existing.payload_json)
-    except (TypeError, ValueError):
+    except (RecursionError, TypeError, ValueError):
         _grant_review_idempotency_conflict()
     if type(payload) is not dict:
         _grant_review_idempotency_conflict()
@@ -1582,7 +1582,7 @@ def _matching_grant_review_activities(
     ):
         try:
             payload = json.loads(candidate.payload_json)
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             _grant_review_lineage_conflict()
         if type(payload) is not dict:
             _grant_review_lineage_conflict()
@@ -1628,7 +1628,7 @@ def _replay_grant_official_fee_review(
     )
     try:
         stored_payload = json.loads(existing.payload_json)
-    except (TypeError, ValueError):
+    except (RecursionError, TypeError, ValueError):
         _grant_review_idempotency_conflict()
     if (
         type(stored_payload) is not dict
