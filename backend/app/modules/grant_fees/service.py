@@ -901,7 +901,7 @@ def _demo_grant_official_source_context(
         or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or activity.actor_id != activity.reviewer_id
         or not _valid_review_text(activity.actor_id, limit=36)
-        or activity.source_activity_id is not None
+        or not _valid_review_text(activity.source_activity_id, limit=36)
         or activity.supersedes_event_id is not None
         or activity.occurred_at != confirmed_at
         or activity.effective_at != confirmed_at
@@ -957,6 +957,22 @@ def _demo_grant_official_source_context(
         _grant_review_lineage_conflict()
     evidence = _grant_review_current_evidence(transaction, task=task, payload=payload)
     if evidence.id != payload["reviewed_evidence_version_id"]:
+        _grant_review_lineage_conflict()
+    notice = transaction.get(CaseActivityEvent, activity.source_activity_id)
+    if notice is None:
+        _grant_review_link_not_found()
+    try:
+        notice_payload, _notice_evidence_refs = _validated_stored_grant_notice(
+            transaction,
+            activity=notice,
+            task=task,
+        )
+    except BusinessError:
+        _grant_review_lineage_conflict()
+    if (
+        notice_payload["reviewed_evidence_version_id"] != evidence.id
+        or notice_payload["reviewed_evidence_content_hash"] != evidence.content_hash
+    ):
         _grant_review_lineage_conflict()
     expected_refs = (
         EvidenceReference(

@@ -46,6 +46,7 @@ class DemoOfficialFeeSelector:
     rate_book_version: str
     rate_book_sha256: str
     fee_codes: tuple[str, ...]
+    fee_row_sha256s: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -734,6 +735,15 @@ def _validate_authority_record(
                 "sha256": selector["rate_book_sha256"],
             }
         )
+        expected_sources.extend(
+            {
+                "kind": "OFFICIAL_FEE_RATE",
+                "ref": fee_code,
+                "version": selector["rate_book_version"],
+                "sha256": selector["fee_row_sha256s"][fee_code],
+            }
+            for fee_code in selector["fee_codes"]
+        )
     if authority["source_digests"] != expected_sources:
         raise _error("authority source digests do not match the manifest")
     if authority["file_digests"] != expected_file_digests:
@@ -757,6 +767,12 @@ def _validate_authority_record(
         if manifest["schema_version"] == "fpms.demo-input-bundle/integrated-a-v2":
             required_bindings += (
                 manifest["official_fee_selector"]["rate_book_sha256"],
+                *(
+                    manifest["official_fee_selector"]["fee_row_sha256s"][
+                        fee_code
+                    ]
+                    for fee_code in manifest["official_fee_selector"]["fee_codes"]
+                ),
             )
         if (
             not decision_ref.startswith("docs/product/v8/customer-decisions/")
@@ -1176,7 +1192,13 @@ def load_demo_bundle(
 
         selector = _expect_keys(
             manifest["official_fee_selector"],
-            {"source_authority", "rate_book_version", "rate_book_sha256", "fee_codes"},
+            {
+                "source_authority",
+                "rate_book_version",
+                "rate_book_sha256",
+                "fee_codes",
+                "fee_row_sha256s",
+            },
             "official_fee_selector",
         )
         _exact(selector["source_authority"], "CNIPA", "official_fee_selector.source_authority")
@@ -1191,6 +1213,18 @@ def load_demo_bundle(
             )
         ):
             raise _error("official_fee_selector.fee_codes must contain at least two unique codes")
+        fee_row_sha256s = selector["fee_row_sha256s"]
+        if (
+            not isinstance(fee_row_sha256s, dict)
+            or set(fee_row_sha256s) != set(fee_codes)
+            or any(
+                not isinstance(value, str) or _HASH_RE.fullmatch(value) is None
+                for value in fee_row_sha256s.values()
+            )
+        ):
+            raise _error(
+                "official_fee_selector.fee_row_sha256s must exactly bind fee_codes"
+            )
         official_fee_selector = DemoOfficialFeeSelector(
             source_authority="CNIPA",
             rate_book_version=_string(
@@ -1204,6 +1238,9 @@ def load_demo_bundle(
                 "official_fee_selector.rate_book_sha256",
             ),
             fee_codes=tuple(fee_codes),
+            fee_row_sha256s=tuple(
+                (fee_code, fee_row_sha256s[fee_code]) for fee_code in fee_codes
+            ),
         )
         receipt_text = _matches(
             manifest["first_receipt_amount"], _AMOUNT_RE, "first_receipt_amount"

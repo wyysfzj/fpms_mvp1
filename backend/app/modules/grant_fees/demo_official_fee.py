@@ -47,6 +47,7 @@ from app.modules.grant_fees.service import (
 from app.modules.grant_fees.service import (
     GrantOfficialFeeReviewLineInput,
     RecordGrantFeeTaskInstructionCommand,
+    _validated_stored_grant_notice,
     record_grant_fee_task_instruction,
 )
 from app.modules.grant_fees.service import (
@@ -55,7 +56,6 @@ from app.modules.grant_fees.service import (
 
 _SOURCE_EVENT = "DEMO_GRANT_OFFICIAL_FEE_CONFIRMED"
 _SOURCE_SCHEMA = "FPMS_DEMO_GRANT_OFFICIAL_FEE_CONFIRMED_V1"
-_RATE_ROW_ATTESTATION_PREFIX = "FPMS_DEMO_RATE_ROW_SHA256:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,12 +72,16 @@ class GrantOfficialFeePreviewLine:
     source_reference: str
     source_version: str
     source_sha256: str
+    rate_row_sha256: str
+    effective_from: date
+    effective_to: date | None
 
 
 @dataclass(frozen=True, slots=True)
 class GrantOfficialFeePreview:
     grant_fee_task_id: str
     case_id: str
+    grant_notice_activity_id: str
     source_document_id: str
     reviewed_evidence_version_id: str
     reviewed_evidence_content_hash: str
@@ -141,12 +145,9 @@ def _confirmation_conflict() -> None:
     _fail("DEMO_GOV_CONFIRMATION_CONFLICT", "官费人工确认与当前预览不一致", status_code=409)
 
 
-def _rate_row_attestation(row: FeeRate, book: OfficialRateBook) -> str:
+def _rate_row_sha256(row: FeeRate) -> str:
     payload = {
-        "schema": "FPMS_DEMO_RATE_ROW_ATTESTATION_V1",
-        "book_id": book.id,
-        "book_version": book.version_code,
-        "book_sha256": book.source_snapshot_hash,
+        "schema": "FPMS_DEMO_RATE_ROW_DIGEST_V1",
         "fee_code": row.fee_code,
         "fee_name": row.fee_name,
         "fee_type": row.fee_type,
@@ -175,7 +176,6 @@ def _rate_row_attestation(row: FeeRate, book: OfficialRateBook) -> str:
         "source_url": row.source_url,
         "source_version": row.source_version,
         "source_status": row.source_status,
-        "official_rate_book_id": row.official_rate_book_id,
     }
     canonical = json.dumps(
         payload,
@@ -184,9 +184,7 @@ def _rate_row_attestation(row: FeeRate, book: OfficialRateBook) -> str:
         separators=(",", ":"),
         allow_nan=False,
     )
-    return _RATE_ROW_ATTESTATION_PREFIX + hashlib.sha256(
-        canonical.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _projection(case: Case) -> LifecycleProjection:
@@ -217,7 +215,7 @@ def _projection(case: Case) -> LifecycleProjection:
 
 def _task_evidence(
     transaction: Session, grant_fee_task_id: str
-) -> tuple[T_GrantFeeTask, Case, DocumentEvidenceVersion]:
+) -> tuple[T_GrantFeeTask, Case, DocumentEvidenceVersion, CaseActivityEvent]:
     task = transaction.get(T_GrantFeeTask, grant_fee_task_id)
     if task is None:
         _fail("DEMO_GOV_TASK_NOT_FOUND", "授权费用任务不存在", status_code=404)
@@ -278,13 +276,43 @@ def _task_evidence(
         or evidence.current_identity_key != f"{task.case_id}|{evidence.lineage_key}"
     ):
         _evidence_conflict()
-    return task, cast(Case, case), evidence
+    notice_candidates: list[CaseActivityEvent] = []
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == task.case_id,
+            CaseActivityEvent.activity_type == "GRANT_REGISTRATION_NOTICE_RECORDED",
+        )
+    ):
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("grant_fee_task_id") == task.id:
+            notice_candidates.append(activity)
+    if len(notice_candidates) != 1:
+        _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务缺少已归档通知活动", status_code=409)
+    notice = notice_candidates[0]
+    try:
+        notice_payload, _notice_evidence_refs = _validated_stored_grant_notice(
+            transaction,
+            activity=notice,
+            task=task,
+        )
+    except BusinessError:
+        _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务缺少已归档通知活动", status_code=409)
+    if (
+        notice_payload["reviewed_evidence_version_id"] != evidence.id
+        or notice_payload["reviewed_evidence_content_hash"] != evidence.content_hash
+    ):
+        _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务缺少已归档通知活动", status_code=409)
+    return task, cast(Case, case), evidence, notice
 
 
 def _canonical_preview_payload(
     *,
     task: T_GrantFeeTask,
     evidence: DocumentEvidenceVersion,
+    notice: CaseActivityEvent,
     book: OfficialRateBook,
     lines: tuple[GrantOfficialFeePreviewLine, ...],
 ) -> str:
@@ -293,6 +321,7 @@ def _canonical_preview_payload(
             "schema": "FPMS_DEMO_GRANT_OFFICIAL_FEE_PREVIEW_V1",
             "grant_fee_task_id": task.id,
             "case_id": task.case_id,
+            "grant_notice_activity_id": notice.id,
             "source_document_id": task.source_document_id,
             "reviewed_evidence_version_id": evidence.id,
             "reviewed_evidence_content_hash": evidence.content_hash,
@@ -316,6 +345,13 @@ def _canonical_preview_payload(
                     "source_reference": line.source_reference,
                     "source_version": line.source_version,
                     "source_sha256": line.source_sha256,
+                    "rate_row_sha256": line.rate_row_sha256,
+                    "effective_from": line.effective_from.isoformat(),
+                    "effective_to": (
+                        None
+                        if line.effective_to is None
+                        else line.effective_to.isoformat()
+                    ),
                 }
                 for line in lines
             ],
@@ -344,7 +380,9 @@ def preview_grant_official_fees(
             status_code=409,
         )
     with transaction.no_autoflush:
-        task, _case, evidence = _task_evidence(transaction, grant_fee_task_id)
+        task, _case, evidence, notice = _task_evidence(
+            transaction, grant_fee_task_id
+        )
     snapshot = _bundle()
     selector = snapshot.official_fee_selector
     if snapshot.schema_version != "fpms.demo-input-bundle/integrated-a-v2" or selector is None:
@@ -388,6 +426,7 @@ def preview_grant_official_fees(
     if len(rows) != len(selector.fee_codes) or set(by_code) != set(selector.fee_codes):
         _source_conflict()
     lines: list[GrantOfficialFeePreviewLine] = []
+    expected_row_sha256s = dict(selector.fee_row_sha256s)
     for fee_code in selector.fee_codes:
         row = by_code[fee_code]
         amount = row.default_amount
@@ -408,7 +447,7 @@ def preview_grant_official_fees(
             or row.source_doc != book.source_reference
             or row.source_version != book.source_version
             or row.source_status != "ACTIVE"
-            or row.source_policy != _rate_row_attestation(row, book)
+            or _rate_row_sha256(row) != expected_row_sha256s.get(fee_code)
         ):
             _source_conflict()
         lines.append(
@@ -425,18 +464,23 @@ def preview_grant_official_fees(
                 source_reference=book.source_reference,
                 source_version=book.source_version,
                 source_sha256=book.source_snapshot_hash,
+                rate_row_sha256=expected_row_sha256s[fee_code],
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
             )
         )
     line_tuple = tuple(lines)
     canonical = _canonical_preview_payload(
         task=task,
         evidence=evidence,
+        notice=notice,
         book=book,
         lines=line_tuple,
     )
     return GrantOfficialFeePreview(
         grant_fee_task_id=task.id,
         case_id=task.case_id,
+        grant_notice_activity_id=notice.id,
         source_document_id=cast(str, task.source_document_id),
         reviewed_evidence_version_id=evidence.id,
         reviewed_evidence_content_hash=evidence.content_hash,
@@ -524,7 +568,9 @@ def confirm_grant_official_fees(
         )
     ):
         _confirmation_conflict()
-    task, case, evidence = _task_evidence(transaction, command.grant_fee_task_id)
+    task, case, evidence, notice = _task_evidence(
+        transaction, command.grant_fee_task_id
+    )
     source_key = f"demo-gov-confirm-source:{command.idempotency_key}"
     recognition_key = f"demo-gov-confirm-obligation:{command.idempotency_key}"
     review_key = f"demo-gov-confirm-review:{command.idempotency_key}"
@@ -597,7 +643,7 @@ def confirm_grant_official_fees(
                 actor_id=command.actor_id,
                 reviewer_id=command.actor_id,
                 idempotency_key=source_key,
-                source_activity_id=None,
+                source_activity_id=notice.id,
                 supersedes_event_id=None,
                 payload=payload,
                 confirmation_status=ConfirmationStatus.CONFIRMED,
@@ -642,7 +688,7 @@ def confirm_grant_official_fees(
                             reduction_ratio=Decimal("0.0000"),
                             payable_amount=line.payable_amount,
                             source_amount=line.payable_amount,
-                            source_date=preview.effective_from,
+                            source_date=line.effective_from,
                             difference_review_state=(
                                 FeeDifferenceReviewState.REVIEW_REQUIRED
                             ),

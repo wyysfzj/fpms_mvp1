@@ -334,7 +334,28 @@ def _write_manifest(bundle_root: Path, manifest: dict[str, object]) -> str:
                         "ref": manifest["official_fee_selector"]["source_authority"],
                         "version": manifest["official_fee_selector"]["rate_book_version"],
                         "sha256": manifest["official_fee_selector"]["rate_book_sha256"],
-                    }
+                    },
+                    *(
+                        {
+                            "kind": "OFFICIAL_FEE_RATE",
+                            "ref": fee_code,
+                            "version": manifest["official_fee_selector"][
+                                "rate_book_version"
+                            ],
+                            "sha256": row_sha256,
+                        }
+                        for fee_code, row_sha256 in (
+                            (
+                                fee_code,
+                                manifest["official_fee_selector"][
+                                    "fee_row_sha256s"
+                                ].get(fee_code, "0" * 64),
+                            )
+                            for fee_code in manifest["official_fee_selector"][
+                                "fee_codes"
+                            ]
+                        )
+                    ),
                 ]
                 if manifest["schema_version"]
                 == "fpms.demo-input-bundle/integrated-a-v2"
@@ -557,6 +578,10 @@ def _valid_v6_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         "rate_book_version": "2026.03.30",
         "rate_book_sha256": "e" * 64,
         "fee_codes": ["CNIPA-GRANT-REGISTRATION", "CNIPA-GRANT-ANNOUNCEMENT"],
+        "fee_row_sha256s": {
+            "CNIPA-GRANT-REGISTRATION": "f" * 64,
+            "CNIPA-GRANT-ANNOUNCEMENT": "a" * 64,
+        },
     }
     manifest["first_receipt_amount"] = "1000.00"
     manifest["rates"] = [
@@ -967,6 +992,10 @@ def test_v6_bundle_returns_exact_immutable_descriptors(
         "CNIPA-GRANT-REGISTRATION",
         "CNIPA-GRANT-ANNOUNCEMENT",
     )
+    assert snapshot.official_fee_selector.fee_row_sha256s == (
+        ("CNIPA-GRANT-REGISTRATION", "f" * 64),
+        ("CNIPA-GRANT-ANNOUNCEMENT", "a" * 64),
+    )
     assert snapshot.readiness == "TECHNICAL_REHEARSAL_INPUT_READY"
     assert manifest["contract"]["ref"] == V6_CONTRACT_REF
     assert "SVC_GRANT_REGISTRATION_CN" not in json.dumps(manifest, ensure_ascii=False)
@@ -993,6 +1022,8 @@ def test_v6_bundle_returns_exact_immutable_descriptors(
         "SERVICE_RATE",
         "SERVICE_RATE",
         "OFFICIAL_RATE_BOOK",
+        "OFFICIAL_FEE_RATE",
+        "OFFICIAL_FEE_RATE",
     ]
 
 
@@ -1130,6 +1161,18 @@ def test_integrated_roles_missing_extra_alias_and_schema_confusion_fail_closed(
                 fee_codes=["CNIPA-GRANT-REGISTRATION"]
             ),
             "fee_codes",
+        ),
+        (
+            lambda manifest: manifest["official_fee_selector"][
+                "fee_row_sha256s"
+            ].pop("CNIPA-GRANT-ANNOUNCEMENT"),
+            "fee_row_sha256s",
+        ),
+        (
+            lambda manifest: manifest["official_fee_selector"][
+                "fee_row_sha256s"
+            ].update({"CNIPA-GRANT-REGISTRATION": "bad"}),
+            "fee_row_sha256s",
         ),
     ],
 )

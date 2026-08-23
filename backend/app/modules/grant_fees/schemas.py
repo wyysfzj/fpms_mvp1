@@ -139,6 +139,9 @@ class GrantOfficialFeePreviewLineOut(BaseModel):
     source_reference: str
     source_version: str
     source_sha256: str
+    rate_row_sha256: str
+    effective_from: date
+    effective_to: date | None
 
 
 class GrantOfficialFeePreviewOut(BaseModel):

@@ -50,6 +50,52 @@ SOURCE_SNAPSHOT = json.dumps(
 )
 BOOK_HASH = hashlib.sha256(SOURCE_SNAPSHOT.encode("utf-8")).hexdigest()
 CONFIRMED_AT = datetime(2026, 8, 23, 10, 0)
+NOTICE_RECORDED_AT = datetime(2026, 7, 27, 10, 0)
+BOOK_REFERENCE = "https://www.cnipa.gov.cn/official-fees"
+BOOK_VERSION = "2026.03.30"
+
+
+def _rate_row(
+    *, code: str, name: str, amount: str, effective_from: date, book_id: str
+) -> FeeRate:
+    return FeeRate(
+        id=str(uuid4()),
+        fee_code=code,
+        fee_name=name,
+        fee_type="GOV",
+        currency="CNY",
+        default_amount=Decimal(amount),
+        enabled=True,
+        calc_mode="FIXED",
+        allow_reduction=False,
+        effective_from=effective_from,
+        effective_to=None,
+        source_doc=BOOK_REFERENCE,
+        source_url=BOOK_REFERENCE,
+        source_policy="CNIPA-GRANT-DEMO-V6",
+        source_version=BOOK_VERSION,
+        source_status="ACTIVE",
+        official_rate_book_id=book_id,
+    )
+
+
+def _selected_rate_rows(book_id: str) -> tuple[FeeRate, FeeRate]:
+    return (
+        _rate_row(
+            code=FEE_CODES[0],
+            name="授权登记费",
+            amount="900.00",
+            effective_from=date(2026, 3, 30),
+            book_id=book_id,
+        ),
+        _rate_row(
+            code=FEE_CODES[1],
+            name="授权公告印刷费",
+            amount="50.00",
+            effective_from=date(2026, 4, 15),
+            book_id=book_id,
+        ),
+    )
 
 
 @pytest.fixture
@@ -57,6 +103,10 @@ def runtime_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
     bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](tmp_path)
     manifest["official_fee_selector"]["rate_book_sha256"] = BOOK_HASH
+    manifest["official_fee_selector"]["fee_row_sha256s"] = {
+        row.fee_code: demo_official_fee._rate_row_sha256(row)
+        for row in _selected_rate_rows("runtime-selector")
+    }
     manifest_sha = helpers["_write_manifest"](bundle, manifest)
     authority_sha = helpers["_authority_digest"](bundle)
     monkeypatch.setenv("FPMS_ENV", "demo")
@@ -81,8 +131,8 @@ def _seed_rate_book(transaction: Session) -> OfficialRateBook:
         book_code="CNIPA-GRANT-DEMO-V6",
         version_code="2026.03.30",
         source_authority="CNIPA",
-        source_reference="https://www.cnipa.gov.cn/official-fees",
-        source_version="2026.03.30",
+        source_reference=BOOK_REFERENCE,
+        source_version=BOOK_VERSION,
         source_published_on=date(2026, 3, 30),
         source_snapshot=SOURCE_SNAPSHOT,
         source_snapshot_hash=BOOK_HASH,
@@ -98,36 +148,25 @@ def _seed_rate_book(transaction: Session) -> OfficialRateBook:
     )
     transaction.add(book)
     transaction.flush()
-    for code, name, amount in (
-        (FEE_CODES[0], "授权登记费", "900.00"),
-        (FEE_CODES[1], "授权公告印刷费", "50.00"),
-    ):
-        rate = FeeRate(
-            id=str(uuid4()),
-            fee_code=code,
-            fee_name=name,
-            fee_type="GOV",
-            currency="CNY",
-            default_amount=Decimal(amount),
-            enabled=True,
-            calc_mode="FIXED",
-            allow_reduction=False,
-            effective_from=date(2026, 3, 30),
-            effective_to=None,
-            source_doc=book.source_reference,
-            source_version=book.source_version,
-            source_status="ACTIVE",
-            official_rate_book_id=book.id,
-        )
-        rate.source_policy = demo_official_fee._rate_row_attestation(rate, book)
-        transaction.add(rate)
+    transaction.add_all(_selected_rate_rows(book.id))
     transaction.flush()
     return book
 
 
-def _seed(transaction: Session, *, label: str = "V6"):
+def _seed(transaction: Session, *, label: str = "V6", dispatch_notice: bool = True):
     case, document, task, evidence = _grant_fixture(transaction, label=label)
     book = _seed_rate_book(transaction)
+    if dispatch_notice:
+        grant_fee_service.dispatch_grant_registration_notice(
+            grant_fee_task_id=task.id,
+            source_document_id=document.id,
+            reviewed_evidence_version_id=evidence.id,
+            expected_content_hash=evidence.content_hash,
+            actor_id="demo-v6-notice-reviewer",
+            recorded_at=NOTICE_RECORDED_AT,
+            idempotency_key=f"demo-v6-notice-{label}",
+            transaction=transaction,
+        )
     transaction.commit()
     return case, document, task, evidence, book
 
@@ -417,6 +456,26 @@ def test_preview_requires_actionable_grant_notice_document_semantics(
         )
 
 
+def test_preview_requires_persisted_grant_registration_notice_activity(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction,
+            label="NO-NOTICE-ACTIVITY",
+            dispatch_notice=False,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_TASK_CONFLICT",
+            409,
+        )
+
 def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
     session_factory: sessionmaker, runtime_bundle: Path
 ) -> None:
@@ -458,6 +517,8 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         recognition = transaction.get(
             CaseActivityEvent, instruction.source_activity_id
         )
+        source = transaction.get(CaseActivityEvent, recognition.source_activity_id)
+        notice = transaction.get(CaseActivityEvent, source.source_activity_id)
         assert first.reused is False
         assert obligation.case_id == case.id
         assert obligation.fee_domain == "GOV"
@@ -487,6 +548,8 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
             "FPMS_GRANT_REGISTRATION_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
         )
         assert recognition is not None
+        assert source.activity_type == "DEMO_GRANT_OFFICIAL_FEE_CONFIRMED"
+        assert notice.activity_type == "GRANT_REGISTRATION_NOTICE_RECORDED"
         assert recognition.sequence < review.sequence
         assert instruction.source_activity_id == recognition.id
         assert json.loads(recognition.payload_json)["obligation"][
@@ -496,12 +559,16 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         assert draft.total_service == Decimal("0.00")
         assert {item.fee_type for item in items} == {"GOV"}
         assert {item.fee_code for item in items} == set(FEE_CODES)
+        assert {line.fee_code: line.source_date for line in lines} == {
+            FEE_CODES[0]: date(2026, 3, 30),
+            FEE_CODES[1]: date(2026, 4, 15),
+        }
         assert transaction.scalar(select(func.count()).select_from(PayList)) == 0
         assert transaction.scalar(select(func.count()).select_from(GovPayment)) == 0
 
         replay = demo_official_fee.confirm_grant_official_fees(command, transaction)
         assert replay == replace(first, reused=True)
-        assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
+        assert _counts(transaction) == (6, 0, 1, 2, 2, 1, 2, 0, 0)
 
         with pytest.raises(BusinessError) as caught:
             grant_fee_service.validated_grant_year_official_fee_review_for_draft(
@@ -523,7 +590,7 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
             409,
         )
         transaction.rollback()
-        assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
+        assert _counts(transaction) == (6, 0, 1, 2, 2, 1, 2, 0, 0)
 
 
 def test_corrupt_source_payload_serialization_fails_closed_as_409(
@@ -649,6 +716,13 @@ def test_http_contract_permissions_statuses_and_validation(
     assert preview_response.status_code == 200, preview_response.text
     preview = preview_response.json()
     assert "canonical_payload" not in preview
+    assert {
+        (line["fee_code"], line["effective_from"], line["rate_row_sha256"])
+        for line in preview["lines"]
+    } == {
+        (row.fee_code, row.effective_from.isoformat(), demo_official_fee._rate_row_sha256(row))
+        for row in _selected_rate_rows("not-digest-bound")
+    }
     confirmation_path = f"/api/v1/grant-fee-tasks/{task_id}/official-fee-confirmation"
     body = {
         "preview_digest": preview["preview_digest"],
