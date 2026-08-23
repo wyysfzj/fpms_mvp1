@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -17,6 +17,14 @@ from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.documents.schemas import DocumentCreateIn, DocumentOut
 from app.modules.fees.models import T_GrantFeeTask
+from app.modules.grant_fees.demo_official_fee import (
+    ConfirmGrantOfficialFeeCommand,
+    GrantOfficialFeeConfirmationLine,
+    preview_grant_official_fees,
+)
+from app.modules.grant_fees.demo_official_fee import (
+    confirm_grant_official_fees as confirm_demo_grant_official_fees,
+)
 from app.modules.grant_fees.schemas import (
     GrantFeeDraftGenerateOut,
     GrantFeeTaskBatchInstructionIn,
@@ -31,6 +39,9 @@ from app.modules.grant_fees.schemas import (
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
     GrantNoticeLifecycleIn,
+    GrantOfficialFeeConfirmationIn,
+    GrantOfficialFeeConfirmationOut,
+    GrantOfficialFeePreviewOut,
     GrantOfficialFeeReviewIn,
     GrantOfficialFeeReviewOut,
 )
@@ -268,6 +279,64 @@ def post_grant_official_fee_review_endpoint(
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )
+
+
+@router.get(
+    "/grant-fee-tasks/{task_id}/official-fee-preview",
+    response_model=GrantOfficialFeePreviewOut,
+    summary="预览授权登记官费",
+)
+def get_grant_official_fee_preview_endpoint(
+    task_id: GrantFeeTaskPathId,
+    _perm: None = Depends(require_perm("GrantFeeTask.Read")),
+    db: Session = Depends(get_db),
+) -> GrantOfficialFeePreviewOut:
+    return GrantOfficialFeePreviewOut.model_validate(
+        preview_grant_official_fees(db, grant_fee_task_id=task_id)
+    )
+
+
+@router.post(
+    "/grant-fee-tasks/{task_id}/official-fee-confirmation",
+    status_code=status.HTTP_201_CREATED,
+    response_model=GrantOfficialFeeConfirmationOut,
+    summary="确认授权登记官费并生成草单",
+)
+def post_grant_official_fee_confirmation_endpoint(
+    task_id: GrantFeeTaskPathId,
+    payload: GrantOfficialFeeConfirmationIn,
+    response: Response,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantOfficialFeeConfirmationOut:
+    try:
+        result = confirm_demo_grant_official_fees(
+            ConfirmGrantOfficialFeeCommand(
+                grant_fee_task_id=task_id,
+                preview_digest=payload.preview_digest,
+                reviewed_evidence_version_id=payload.reviewed_evidence_version_id,
+                expected_content_hash=payload.expected_content_hash,
+                confirmed_at=payload.confirmed_at,
+                actor_id=current_user.id,
+                idempotency_key=payload.idempotency_key,
+                lines=tuple(
+                    GrantOfficialFeeConfirmationLine(
+                        fee_code=line.fee_code,
+                        quantity=line.quantity,
+                        confirmed_payable_amount=line.confirmed_payable_amount,
+                    )
+                    for line in payload.lines
+                ),
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    response.status_code = status.HTTP_200_OK if result.reused else status.HTTP_201_CREATED
+    return GrantOfficialFeeConfirmationOut.model_validate(result)
 
 
 @router.post(

@@ -124,6 +124,100 @@ class GrantOfficialFeeReviewOut(BaseModel):
     reused: bool
 
 
+class GrantOfficialFeePreviewLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    fee_code: str
+    fee_name: str
+    quantity: int
+    unit_price: Decimal
+    calculation_mode: str
+    candidate_amount: Decimal
+    official_full_amount: Decimal
+    payable_amount: Decimal
+    currency: str
+    source_reference: str
+    source_version: str
+    source_sha256: str
+
+
+class GrantOfficialFeePreviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    grant_fee_task_id: str
+    case_id: str
+    source_document_id: str
+    reviewed_evidence_version_id: str
+    reviewed_evidence_content_hash: str
+    source_authority: str
+    rate_book_version: str
+    rate_book_sha256: str
+    effective_from: date
+    effective_to: date | None
+    currency: str
+    lines: list[GrantOfficialFeePreviewLineOut]
+    total_payable_amount: Decimal
+    preview_digest: str
+
+
+class GrantOfficialFeeConfirmationLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fee_code: str = Field(..., strict=True, min_length=1, max_length=64)
+    quantity: int = Field(..., strict=True, ge=1, le=1)
+    confirmed_payable_amount: Decimal = Field(
+        ..., gt=0, max_digits=18, decimal_places=2
+    )
+
+    @field_validator("fee_code")
+    @classmethod
+    def require_exact_fee_code(cls, value: str) -> str:
+        if value != value.strip() or "\x00" in value:
+            raise ValueError("必须为无首尾空白的有效费用代码")
+        return value
+
+
+class GrantOfficialFeeConfirmationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preview_digest: str = Field(..., strict=True, pattern=r"^sha256:[0-9a-f]{64}$")
+    reviewed_evidence_version_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    expected_content_hash: str = Field(
+        ..., strict=True, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
+    confirmed_at: datetime
+    idempotency_key: str = Field(..., strict=True, min_length=1, max_length=128)
+    lines: list[GrantOfficialFeeConfirmationLineIn] = Field(..., min_length=2)
+
+    @field_validator("reviewed_evidence_version_id", "idempotency_key")
+    @classmethod
+    def require_exact_confirmation_text(cls, value: str) -> str:
+        if value != value.strip() or "\x00" in value:
+            raise ValueError("必须为无首尾空白的有效文本")
+        return value
+
+    @field_validator("confirmed_at")
+    @classmethod
+    def require_naive_confirmation_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            raise ValueError("必须为不带时区的日期时间")
+        return value
+
+
+class GrantOfficialFeeConfirmationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    grant_fee_task_id: str
+    fee_obligation_id: str
+    review_activity_id: str
+    draft_id: str
+    obligation_line_ids: list[str]
+    fee_item_ids: list[str]
+    preview_digest: str
+    idempotency_key: str
+    reused: bool
+
+
 class GrantFeeReplacementDocumentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
