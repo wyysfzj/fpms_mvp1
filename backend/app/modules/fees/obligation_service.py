@@ -1318,7 +1318,8 @@ def _detail_recognition_lines(
             _stored_state_invalid()
         return lines
     if (
-        header["obligation_type"] != "GRANT_YEAR_ANNUITY"
+        header["obligation_type"]
+        not in {"GRANT_YEAR_ANNUITY", "GRANT_REGISTRATION_OFFICIAL_FEES"}
         or header["obligation_status"] != FeeObligationStatus.RECOGNIZED.value
     ):
         _stored_state_invalid()

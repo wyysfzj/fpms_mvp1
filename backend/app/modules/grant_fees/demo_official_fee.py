@@ -25,21 +25,30 @@ from app.modules.cases.lifecycle_contracts import (
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents.models import DocumentEvidenceVersion
 from app.modules.fees.demo_service import _bundle
-from app.modules.fees.models import FeeRate, OfficialRateBook, T_GrantFeeTask
+from app.modules.fees.models import FeeObligation, FeeRate, OfficialRateBook, T_GrantFeeTask
 from app.modules.fees.obligation_contracts import (
-    FeeClientInstruction,
     FeeDifferenceReviewState,
     FeeDomain,
     FeeObligationLineInput,
     FeeSourceStatus,
     PrepareFeeObligationDraftCommand,
     RecognizeFeeObligationCommand,
-    RecordFeeObligationInstructionCommand,
 )
 from app.modules.fees.obligation_service import (
+    get_fee_obligation,
     prepare_draft,
     recognize_obligation,
-    record_client_instruction,
+)
+from app.modules.grant_fees.service import (
+    ConfirmGrantOfficialFeesCommand as ConfirmGrantReviewCommand,
+)
+from app.modules.grant_fees.service import (
+    GrantOfficialFeeReviewLineInput,
+    RecordGrantFeeTaskInstructionCommand,
+    record_grant_fee_task_instruction,
+)
+from app.modules.grant_fees.service import (
+    confirm_grant_official_fees as confirm_grant_official_fee_review,
 )
 
 _SOURCE_EVENT = "DEMO_GRANT_OFFICIAL_FEE_CONFIRMED"
@@ -165,6 +174,7 @@ def _task_evidence(
     if (
         case is None
         or task.type != "GRANT"
+        or task.superseded_by_task_id is not None
         or task.source_document_id is None
         or task.currency != "CNY"
         or type(task.due_date) is not date
@@ -254,7 +264,14 @@ def preview_grant_official_fees(
         or len(grant_fee_task_id) > 36
     ):
         _fail("DEMO_GOV_INPUT_INVALID", "官费预览输入无效", status_code=400)
-    task, _case, evidence = _task_evidence(transaction, grant_fee_task_id)
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _fail(
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            "官费预览要求干净事务",
+            status_code=409,
+        )
+    with transaction.no_autoflush:
+        task, _case, evidence = _task_evidence(transaction, grant_fee_task_id)
     snapshot = _bundle()
     selector = snapshot.official_fee_selector
     if snapshot.schema_version != "fpms.demo-input-bundle/integrated-a-v2" or selector is None:
@@ -278,6 +295,8 @@ def preview_grant_official_fees(
     book = books[0]
     if (
         book.current_identity_key != f"CNIPA|{book.book_code}"
+        or hashlib.sha256(book.source_snapshot.encode("utf-8")).hexdigest()
+        != book.source_snapshot_hash
         or book.approved_by is None
         or book.approved_at is None
         or book.activated_by is None
@@ -313,6 +332,9 @@ def preview_grant_official_fees(
             or row.effective_from is None
             or row.effective_from > task.due_date
             or (row.effective_to is not None and row.effective_to < task.due_date)
+            or row.source_doc != book.source_reference
+            or row.source_version != book.source_version
+            or row.source_status != "ACTIVE"
         ):
             _source_conflict()
         lines.append(
@@ -393,6 +415,18 @@ def confirm_grant_official_fees(
     command = _validate_confirmation(command)
     if transaction.new or transaction.dirty or transaction.deleted:
         _confirmation_conflict()
+    connection = transaction.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    elif connection.dialect.name != "sqlite":
+        transaction.scalar(
+            select(T_GrantFeeTask.id)
+            .where(T_GrantFeeTask.id == command.grant_fee_task_id)
+            .with_for_update()
+        )
     if (
         transaction.get(
             DocumentEvidenceVersion, command.reviewed_evidence_version_id
@@ -419,16 +453,24 @@ def confirm_grant_official_fees(
     task, case, evidence = _task_evidence(transaction, command.grant_fee_task_id)
     source_key = f"demo-gov-confirm-source:{command.idempotency_key}"
     recognition_key = f"demo-gov-confirm-obligation:{command.idempotency_key}"
+    review_key = f"demo-gov-confirm-review:{command.idempotency_key}"
     instruction_key = f"demo-gov-confirm-instruction:{command.idempotency_key}"
     draft_key = f"demo-gov-confirm-draft:{command.idempotency_key}"
-    prior_for_task = tuple(
-        transaction.scalars(
-            select(CaseActivityEvent).where(
-                CaseActivityEvent.case_id == task.case_id,
-                CaseActivityEvent.activity_type == _SOURCE_EVENT,
-            )
+    prior_for_task: list[CaseActivityEvent] = []
+    for row in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == task.case_id,
+            CaseActivityEvent.activity_type == _SOURCE_EVENT,
         )
-    )
+    ):
+        try:
+            stored_payload = json.loads(row.payload_json)
+        except (TypeError, ValueError):
+            _confirmation_conflict()
+        if type(stored_payload) is not dict:
+            _confirmation_conflict()
+        if stored_payload.get("grant_fee_task_id") == task.id:
+            prior_for_task.append(row)
     if prior_for_task and any(row.idempotency_key != source_key for row in prior_for_task):
         _confirmation_conflict()
     projection = _projection(case)
@@ -452,12 +494,6 @@ def confirm_grant_official_fees(
             for line in command.lines
         ],
     }
-    connection = transaction.connection()
-    if (
-        connection.dialect.name == "sqlite"
-        and not connection.connection.driver_connection.in_transaction
-    ):
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
     with transaction.begin_nested():
         source = append_case_activity(
             LifecycleEventCommand(
@@ -469,7 +505,15 @@ def confirm_grant_official_fees(
                 evidence_refs=(
                     EvidenceReference(
                         case_id=task.case_id,
-                        evidence_kind="REVIEWED_GRANT_NOTICE",
+                        evidence_kind="SOURCE_DOCUMENT",
+                        object_type="Document",
+                        object_id=cast(str, task.source_document_id),
+                        content_hash=evidence.content_hash,
+                        captured_at=command.confirmed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=task.case_id,
+                        evidence_kind="DOCUMENT_EVIDENCE_VERSION",
                         object_type="DocumentEvidenceVersion",
                         object_id=evidence.id,
                         content_hash=evidence.content_hash,
@@ -490,41 +534,86 @@ def confirm_grant_official_fees(
             legacy_case_status=case.status,
             conflict_codes=(),
         )
-        recognition = recognize_obligation(
-            RecognizeFeeObligationCommand(
-                case_id=task.case_id,
-                source_activity_id=source.activity_id,
-                source_document_id=task.source_document_id,
-                fee_domain=FeeDomain.GOV,
-                obligation_type="GRANT_REGISTRATION_OFFICIAL_FEES",
-                due_date=task.due_date,
-                currency="CNY",
-                source_status=FeeSourceStatus.VERIFIED,
-                lines=tuple(
-                    FeeObligationLineInput(
-                        fee_code=line.fee_code,
-                        fee_name=line.fee_name,
-                        fee_year_key=0,
-                        official_full_amount=line.official_full_amount,
-                        reduction_ratio=Decimal("0.0000"),
-                        payable_amount=line.payable_amount,
-                        source_amount=line.payable_amount,
-                        source_date=preview.effective_from,
-                        difference_review_state=FeeDifferenceReviewState.MATCHED,
+        if source.reused:
+            stored_obligations = tuple(
+                transaction.scalars(
+                    select(FeeObligation).where(
+                        FeeObligation.case_id == task.case_id,
+                        FeeObligation.source_activity_id == source.activity_id,
+                        FeeObligation.obligation_type
+                        == "GRANT_REGISTRATION_OFFICIAL_FEES",
                     )
-                    for line in preview.lines
+                )
+            )
+            if len(stored_obligations) != 1:
+                _confirmation_conflict()
+            obligation = get_fee_obligation(stored_obligations[0].id, transaction)
+        else:
+            recognition = recognize_obligation(
+                RecognizeFeeObligationCommand(
+                    case_id=task.case_id,
+                    source_activity_id=source.activity_id,
+                    source_document_id=task.source_document_id,
+                    fee_domain=FeeDomain.GOV,
+                    obligation_type="GRANT_REGISTRATION_OFFICIAL_FEES",
+                    due_date=task.due_date,
+                    currency="CNY",
+                    source_status=FeeSourceStatus.VERIFIED,
+                    lines=tuple(
+                        FeeObligationLineInput(
+                            fee_code=line.fee_code,
+                            fee_name=line.fee_name,
+                            fee_year_key=0,
+                            official_full_amount=None,
+                            reduction_ratio=Decimal("0.0000"),
+                            payable_amount=line.payable_amount,
+                            source_amount=line.payable_amount,
+                            source_date=preview.effective_from,
+                            difference_review_state=(
+                                FeeDifferenceReviewState.REVIEW_REQUIRED
+                            ),
+                        )
+                        for line in preview.lines
+                    ),
+                    actor_id=command.actor_id,
+                    idempotency_key=recognition_key,
+                    supersedes_obligation_id=None,
+                    supersede_reason=None,
                 ),
+                transaction,
+            )
+            obligation = recognition.obligation
+        supplied_by_code = {line.fee_code: line for line in command.lines}
+        review = confirm_grant_official_fee_review(
+            ConfirmGrantReviewCommand(
+                grant_fee_task_id=task.id,
+                source_activity_id=source.activity_id,
+                obligation_id=obligation.id,
+                reviewed_evidence_version_id=evidence.id,
+                expected_content_hash=evidence.content_hash,
+                confirmed_at=command.confirmed_at,
                 actor_id=command.actor_id,
-                idempotency_key=recognition_key,
-                supersedes_obligation_id=None,
-                supersede_reason=None,
+                idempotency_key=review_key,
+                lines=tuple(
+                    GrantOfficialFeeReviewLineInput(
+                        obligation_line_id=line.id,
+                        official_full_amount=supplied_by_code[
+                            line.fee_code
+                        ].confirmed_payable_amount,
+                        confirmed_payable_amount=supplied_by_code[
+                            line.fee_code
+                        ].confirmed_payable_amount,
+                    )
+                    for line in obligation.lines
+                ),
             ),
             transaction,
         )
-        instruction = record_client_instruction(
-            RecordFeeObligationInstructionCommand(
-                obligation_id=recognition.obligation.id,
-                instruction=FeeClientInstruction.PAY,
+        instruction = record_grant_fee_task_instruction(
+            RecordGrantFeeTaskInstructionCommand(
+                grant_fee_task_id=task.id,
+                source_activity_id=source.activity_id,
+                instruction="PAY",
                 actor_id=command.actor_id,
                 idempotency_key=instruction_key,
             ),
@@ -532,17 +621,17 @@ def confirm_grant_official_fees(
         )
         draft = prepare_draft(
             PrepareFeeObligationDraftCommand(
-                obligation_id=recognition.obligation.id,
+                obligation_id=obligation.id,
                 actor_id=command.actor_id,
                 idempotency_key=draft_key,
             ),
             transaction,
         )
-    reused = source.reused and recognition.reused and instruction.reused and draft.activity_reused
+    reused = source.reused and review.reused and instruction.reused and draft.activity_reused
     return ConfirmGrantOfficialFeeResult(
         grant_fee_task_id=task.id,
-        fee_obligation_id=recognition.obligation.id,
-        review_activity_id=source.activity_id,
+        fee_obligation_id=obligation.id,
+        review_activity_id=review.review_activity_id,
         draft_id=draft.draft_id,
         obligation_line_ids=tuple(link.obligation_line_id for link in draft.links),
         fee_item_ids=tuple(link.fee_item_id for link in draft.links),

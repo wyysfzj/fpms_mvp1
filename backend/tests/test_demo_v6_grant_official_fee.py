@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 from test_v8_grant_notice_lifecycle_adapter import _grant_fixture
 
@@ -20,7 +20,7 @@ from app.core.errors import BusinessError
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.auth.models import T_User
 from app.modules.billing.models import DemoFinanceCommand
-from app.modules.cases.models import CaseActivityEvent
+from app.modules.cases.models import CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.fees.demo_service import _load_bundle_snapshot
 from app.modules.fees.models import (
     FeeDraft,
@@ -30,7 +30,9 @@ from app.modules.fees.models import (
     FeeObligationLine,
     FeeRate,
     OfficialRateBook,
+    T_GrantFeeTask,
 )
+from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.grant_fees import demo_official_fee
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,14 +40,22 @@ FEE_CODES = (
     "CNIPA-GRANT-REGISTRATION",
     "CNIPA-GRANT-ANNOUNCEMENT",
 )
-BOOK_HASH = "e" * 64
+SOURCE_SNAPSHOT = json.dumps(
+    {"fixture": "demo-v6", "source": "CNIPA"},
+    ensure_ascii=False,
+    sort_keys=True,
+    separators=(",", ":"),
+)
+BOOK_HASH = hashlib.sha256(SOURCE_SNAPSHOT.encode("utf-8")).hexdigest()
 CONFIRMED_AT = datetime(2026, 8, 23, 10, 0)
 
 
 @pytest.fixture
 def runtime_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
-    bundle, _manifest, manifest_sha = helpers["_valid_v6_bundle"](tmp_path)
+    bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](tmp_path)
+    manifest["official_fee_selector"]["rate_book_sha256"] = BOOK_HASH
+    manifest_sha = helpers["_write_manifest"](bundle, manifest)
     authority_sha = helpers["_authority_digest"](bundle)
     monkeypatch.setenv("FPMS_ENV", "demo")
     monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
@@ -72,7 +82,7 @@ def _seed_rate_book(transaction: Session) -> OfficialRateBook:
         source_reference="https://www.cnipa.gov.cn/official-fees",
         source_version="2026.03.30",
         source_published_on=date(2026, 3, 30),
-        source_snapshot=json.dumps({"fixture": "demo-v6"}, separators=(",", ":")),
+        source_snapshot=SOURCE_SNAPSHOT,
         source_snapshot_hash=BOOK_HASH,
         approval_status="APPROVED",
         approved_by=actor.id,
@@ -138,6 +148,32 @@ def _counts(transaction: Session) -> tuple[int, ...]:
     )
 
 
+def _exact_state(transaction: Session) -> dict[str, tuple[tuple[object, ...], ...]]:
+    models = (
+        CaseActivityEvent,
+        CaseActivityEventEvidence,
+        DemoFinanceCommand,
+        FeeObligation,
+        FeeObligationLine,
+        FeeObligationDraftItemLink,
+        FeeDraft,
+        FeeItem,
+        PayList,
+        GovPayment,
+    )
+    state: dict[str, tuple[tuple[object, ...], ...]] = {}
+    with transaction.no_autoflush:
+        for model in models:
+            columns = tuple(inspect(model).columns)
+            rows = transaction.execute(
+                select(*(column for column in columns)).order_by(
+                    *(column.asc() for column in columns)
+                )
+            ).all()
+            state[model.__tablename__] = tuple(tuple(row) for row in rows)
+    return state
+
+
 def _command(task, evidence, preview, **changes: object):
     values: dict[str, object] = {
         "grant_fee_task_id": task.id,
@@ -165,13 +201,13 @@ def test_preview_is_exact_multi_line_and_provably_write_free(
 ) -> None:
     with session_factory() as transaction:
         _case, _document, task, evidence, book = _seed(transaction)
-        before = _counts(transaction)
+        before = _exact_state(transaction)
 
         preview = demo_official_fee.preview_grant_official_fees(
             transaction, grant_fee_task_id=task.id
         )
 
-        assert _counts(transaction) == before
+        assert _exact_state(transaction) == before
         assert preview.grant_fee_task_id == task.id
         assert preview.reviewed_evidence_version_id == evidence.id
         assert preview.source_authority == "CNIPA"
@@ -189,6 +225,59 @@ def test_preview_is_exact_multi_line_and_provably_write_free(
         ).hexdigest()
 
 
+def test_preview_rejects_a_dirty_session_without_flushing_it(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(transaction, label="DIRTY")
+        before = _exact_state(transaction)
+        task.remark = "不得由预览自动写入"
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            409,
+        )
+        assert _exact_state(transaction) == before
+
+
+def test_preview_rejects_superseded_task(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        case, _document, task, _evidence, _book = _seed(
+            transaction, label="SUPERSEDED"
+        )
+        successor = T_GrantFeeTask(
+            id=str(uuid4()),
+            case_id=case.id,
+            type="GRANT",
+            due_date=task.due_date,
+            source_document_id=None,
+            currency="CNY",
+        )
+        transaction.add(successor)
+        transaction.flush()
+        task.superseded_by_task_id = successor.id
+        transaction.commit()
+        before = _exact_state(transaction)
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_TASK_CONFLICT",
+            409,
+        )
+        assert _exact_state(transaction) == before
+
+
 @pytest.mark.parametrize(
     ("mutation", "code"),
     [
@@ -197,6 +286,8 @@ def test_preview_is_exact_multi_line_and_provably_write_free(
         (lambda _task, _evidence, book: setattr(book, "effective_to", date(2026, 8, 22)),
          "DEMO_GOV_RATE_SOURCE_CONFLICT"),
         (lambda _task, _evidence, book: setattr(book, "source_snapshot_hash", "0" * 64),
+         "DEMO_GOV_RATE_SOURCE_CONFLICT"),
+        (lambda _task, _evidence, book: setattr(book, "source_snapshot", '{"drift":true}'),
          "DEMO_GOV_RATE_SOURCE_CONFLICT"),
     ],
 )
@@ -218,6 +309,34 @@ def test_preview_fails_closed_for_evidence_and_rate_source_drift(
         assert caught.value.code == code
         assert caught.value.status_code == 409
         assert _counts(transaction) == before
+
+
+@pytest.mark.parametrize("field", ["source_doc", "source_version", "source_status"])
+def test_preview_rejects_fee_rate_source_metadata_drift(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    field: str,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label=f"RATE-{field}"
+        )
+        rate = transaction.scalar(
+            select(FeeRate).where(FeeRate.fee_code == FEE_CODES[0])
+        )
+        assert rate is not None
+        setattr(rate, field, "DRIFT")
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_RATE_SOURCE_CONFLICT",
+            409,
+        )
 
 
 def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
@@ -247,6 +366,20 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
                 select(FeeItem).where(FeeItem.draft_id == draft.id).order_by(FeeItem.fee_code)
             )
         )
+        review = transaction.get(CaseActivityEvent, first.review_activity_id)
+        assert review is not None
+        review_payload = json.loads(review.payload_json)
+        assert get_fee_obligation(obligation.id, transaction).id == obligation.id
+        instruction = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == case.id,
+                CaseActivityEvent.activity_type == "FEE_CLIENT_INSTRUCTION_RECORDED",
+            )
+        )
+        assert instruction is not None
+        recognition = transaction.get(
+            CaseActivityEvent, instruction.source_activity_id
+        )
         assert first.reused is False
         assert obligation.case_id == case.id
         assert obligation.fee_domain == "GOV"
@@ -255,6 +388,26 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         assert obligation.draft_status == "CREATED"
         assert {line.fee_code for line in lines} == set(FEE_CODES)
         assert all(line.difference_review_state == "MATCHED" for line in lines)
+        assert all(line.official_full_amount == line.payable_amount for line in lines)
+        assert {
+            row["difference_review_state"] for row in review_payload["before_lines"]
+        } == {"REVIEW_REQUIRED"}
+        assert {
+            row["official_full_amount"] for row in review_payload["before_lines"]
+        } == {None}
+        assert {
+            row["difference_review_state"] for row in review_payload["after_lines"]
+        } == {"MATCHED"}
+        assert {
+            row["official_full_amount"] for row in review_payload["after_lines"]
+        } == {"50.00", "900.00"}
+        assert review_payload["grant_fee_task_id"] == task.id
+        assert recognition is not None
+        assert recognition.sequence < review.sequence
+        assert instruction.source_activity_id == recognition.id
+        assert json.loads(recognition.payload_json)["obligation"][
+            "source_activity_id"
+        ] == review.source_activity_id
         assert draft.total_gov == draft.amount == Decimal("950.00")
         assert draft.total_service == Decimal("0.00")
         assert {item.fee_type for item in items} == {"GOV"}
@@ -264,7 +417,22 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
 
         replay = demo_official_fee.confirm_grant_official_fees(command, transaction)
         assert replay == replace(first, reused=True)
-        assert _counts(transaction) == (4, 0, 1, 2, 2, 1, 2, 0, 0)
+        assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
+
+        second_command = replace(
+            command,
+            idempotency_key="demo-v6-gov-confirm-02",
+        )
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.confirm_grant_official_fees(
+                second_command, transaction
+            )
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_CONFIRMATION_CONFLICT",
+            409,
+        )
+        transaction.rollback()
+        assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
 
 
 def test_confirmation_drift_rolls_back_the_entire_composite(
