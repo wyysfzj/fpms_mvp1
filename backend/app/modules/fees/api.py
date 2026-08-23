@@ -18,16 +18,22 @@ from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocumentEvidenceVersion
 from app.modules.fees.demo_service import (
+    DemoServiceAdjustmentCommand,
+    adjust_demo_service_draft,
     create_demo_service_obligation,
     get_demo_preflight,
     get_demo_service_item,
 )
 from app.modules.fees.demo_service_schemas import (
     DemoPreflightOut,
+    DemoServiceAdjustmentIn,
+    DemoServiceAdjustmentOut,
     DemoServiceItemOut,
     DemoServiceObligationIn,
     DemoServiceObligationOut,
+    DemoV6DraftSourceFactsOut,
 )
+from app.modules.fees.demo_v6_source_facts import get_demo_v6_draft_source_facts
 from app.modules.fees.fee_reduction import FeeReductionValidationError
 from app.modules.fees.fee_reduction_approval_schemas import (
     FeeReductionApprovalCreateIn,
@@ -153,7 +159,6 @@ def post_local_demo_service_obligation(
         result = create_demo_service_obligation(
             db,
             case_id=str(payload.case_id),
-            item_code=payload.item_code,
             actor_id=str(current_user.id),
             idempotency_key=payload.idempotency_key,
             recognized_at=_service_price_book_utcnow(),
@@ -166,6 +171,59 @@ def post_local_demo_service_obligation(
     if result.reused:
         response.status_code = status.HTTP_200_OK
     return output
+
+
+@router.post(
+    "/fees/drafts/{draft_id}/demo-service-adjustment",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoServiceAdjustmentOut,
+    summary="Adjust one authorized service-fee quantity",
+)
+def post_demo_service_adjustment(
+    payload: DemoServiceAdjustmentIn,
+    response: Response,
+    draft_id: UUID = Path(...),
+    _perm: None = Depends(require_perm("Fee.Draft.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoServiceAdjustmentOut:
+    try:
+        result = adjust_demo_service_draft(
+            DemoServiceAdjustmentCommand(
+                draft_id=str(draft_id),
+                item_id=str(payload.item_id),
+                expected_quantity=payload.expected_quantity,
+                new_quantity=payload.new_quantity,
+                reason=payload.reason,
+                actor_id=str(current_user.id),
+                idempotency_key=payload.idempotency_key,
+                adjusted_at=_service_price_book_utcnow(),
+            ),
+            db,
+        )
+        output = DemoServiceAdjustmentOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.reused:
+        response.status_code = status.HTTP_200_OK
+    return output
+
+
+@router.get(
+    "/fees/drafts/{draft_id}/source-facts",
+    response_model=DemoV6DraftSourceFactsOut,
+    summary="Read authoritative fee calculation and source facts",
+)
+def get_demo_v6_source_facts(
+    draft_id: UUID = Path(...),
+    _perm: None = Depends(require_perm("Fee.Draft.Read")),
+    db: Session = Depends(get_db),
+) -> DemoV6DraftSourceFactsOut:
+    return DemoV6DraftSourceFactsOut.model_validate(
+        get_demo_v6_draft_source_facts(str(draft_id), db)
+    )
 
 
 def _get_client_display_name(client: Client) -> str | None:

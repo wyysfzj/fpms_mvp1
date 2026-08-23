@@ -26,7 +26,7 @@ from app.modules.masterdata.clients.models import Client
 
 def _bundle(tmp_path: Path, *, integrated: bool = False):
     helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_abc_runtime_bundle.py")))
-    builder = "_valid_integrated_bundle" if integrated else "_valid_bundle"
+    builder = "_valid_v6_bundle" if integrated else "_valid_bundle"
     return helpers[builder](tmp_path)
 
 
@@ -114,28 +114,28 @@ def _configure_bundle(
     return root, digest
 
 
-@pytest.mark.parametrize("integrated", [False, True])
-def test_runtime_service_item_to_pay_locked_draft(
+def test_runtime_service_items_to_pay_locked_draft(
     client,
     auth_headers,
     session_factory,
     tmp_path,
     monkeypatch,
-    integrated,
 ):
-    _configure_bundle(tmp_path, monkeypatch, integrated=integrated)
+    _configure_bundle(tmp_path, monkeypatch, integrated=True)
     client_id, case_id = _seed_case(session_factory)
-    expected_item = "FWSQDJ001" if integrated else "DEMO_SERVICE_1"
-    expected_template = (
-        "DEMO_INTEGRATED_LETTER_1" if integrated else "DEMO_INTERNAL_LETTER_1"
-    )
+    expected_items = ["FWSQDJ001", "FWSQDJ002"]
+    expected_template = "DEMO_INTEGRATED_LETTER_1"
 
     item_response = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
     assert item_response.status_code == 200, item_response.text
-    assert item_response.json()["amount"] == "1200.00"
-    assert item_response.json()["item_code"] == expected_item
-    if integrated:
-        assert not item_response.json()["item_code"].startswith(("DEMO_", "IA-"))
+    assert item_response.json()["total_amount"] == "1500.00"
+    assert [row["item_code"] for row in item_response.json()["items"]] == expected_items
+    assert [row["quantity"] for row in item_response.json()["items"]] == [1, 1]
+    assert [row["adjustable"] for row in item_response.json()["items"]] == [False, True]
+    assert all(
+        not row["item_code"].startswith(("DEMO_", "IA-"))
+        for row in item_response.json()["items"]
+    )
     assert item_response.json()["classification"] == "DEMO_ONLY"
     assert item_response.json()["template_code"] == expected_template
     assert len(item_response.json()["template_sha256"]) == 64
@@ -143,7 +143,6 @@ def test_runtime_service_item_to_pay_locked_draft(
 
     command = {
         "case_id": case_id,
-        "item_code": expected_item,
         "idempotency_key": "demo-service-intent-1",
     }
     create_response = client.post(
@@ -152,7 +151,8 @@ def test_runtime_service_item_to_pay_locked_draft(
     assert create_response.status_code == 201, create_response.text
     created = create_response.json()
     obligation_id = created["obligation"]["id"]
-    assert created["amount"] == "1200.00"
+    assert created["total_amount"] == "1500.00"
+    assert [row["item_code"] for row in created["items"]] == expected_items
     assert created["manifest_sha256"]
     assert created["reused"] is False
 
@@ -183,9 +183,9 @@ def test_runtime_service_item_to_pay_locked_draft(
     )
     assert draft_response.status_code == 201, draft_response.text
     draft_id = draft_response.json()["id"]
-    assert draft_response.json()["total_service"] == "1200.00"
+    assert draft_response.json()["total_service"] == "1500.00"
     assert draft_response.json()["total_gov"] == "0.00"
-    assert draft_response.json()["amount"] == "1200.00"
+    assert draft_response.json()["amount"] == "1500.00"
 
     lock_response = client.post(f"/api/v1/fees/drafts/{draft_id}/lock", headers=auth_headers)
     assert lock_response.status_code == 200, lock_response.text
@@ -199,9 +199,12 @@ def test_runtime_service_item_to_pay_locked_draft(
         assert detail.statuses.pay_list_status is FeePayListStatus.NOT_CREATED
         assert db.get(FeeDraft, draft_id).status == "LOCKED"
         items = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).all()
-        assert len(items) == 1
-        assert items[0].fee_type == "SERVICE"
-        assert items[0].amount == 1200
+        assert len(items) == 2
+        assert {item.fee_type for item in items} == {"SERVICE"}
+        assert {item.fee_code: item.amount for item in items} == {
+            "FWSQDJ001": Decimal("1200.00"),
+            "FWSQDJ002": Decimal("300.00"),
+        }
         assert db.query(FeeObligation).count() == 1
         source_rows = (
             db.query(CaseActivityEvent)
@@ -232,14 +235,18 @@ def test_runtime_service_item_to_pay_locked_draft(
     assert [
         (line["fee_code"], line["payable_amount"])
         for line in overlay_obligation["lines"]
-    ] == [(expected_item, "1200.00")]
+    ] == [("FWSQDJ001", "1200.00"), ("FWSQDJ002", "300.00")]
     assert overlay_obligation["related_facts"] == [
         {"kind": "DRAFT", "object_id": draft_id, "status": "LOCKED"}
     ]
 
     _, other_case_id = _seed_case(session_factory)
     with session_factory() as db:
-        item = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).one()
+        item = (
+            db.query(FeeItem)
+            .filter(FeeItem.draft_id == draft_id, FeeItem.fee_code == "FWSQDJ001")
+            .one()
+        )
         draft = db.get(FeeDraft, draft_id)
         assert draft is not None
 
@@ -269,7 +276,7 @@ def test_runtime_service_item_to_pay_locked_draft(
             pay_list_no=f"SERVICE-INVALID-{uuid4().hex[:8]}",
             status="DRAFT",
             currency="CNY",
-            total_amount=Decimal("1200.00"),
+            total_amount=Decimal("1500.00"),
         )
         db.add(pay_list)
         db.flush()
@@ -317,9 +324,12 @@ def test_demo_preflight_requires_validated_input_and_zero_business_counts(
     }
     assert payload["template_code"] == "DEMO_INTEGRATED_LETTER_1"
     assert len(payload["template_sha256"]) == 64
-    assert payload["item_code"] == "FWSQDJ001"
-    assert not payload["item_code"].startswith(("DEMO_", "IA-"))
-    assert len(payload["source_sha256"]) == 64
+    assert [row["item_code"] for row in payload["items"]] == [
+        "FWSQDJ001",
+        "FWSQDJ002",
+    ]
+    assert payload["total_amount"] == "1500.00"
+    assert all(len(row["source_sha256"]) == 64 for row in payload["items"])
 
     _seed_case(session_factory)
     not_fresh = client.get("/api/v1/fees/demo-preflight", headers=auth_headers)
@@ -354,7 +364,7 @@ def test_invalid_item_creates_no_fee_facts_and_cached_bundle_ignores_external_dr
     tmp_path,
     monkeypatch,
 ):
-    root, _digest = _configure_bundle(tmp_path, monkeypatch)
+    root, _digest = _configure_bundle(tmp_path, monkeypatch, integrated=True)
     _client_id, case_id = _seed_case(session_factory)
     command = {
         "case_id": case_id,
@@ -365,7 +375,7 @@ def test_invalid_item_creates_no_fee_facts_and_cached_bundle_ignores_external_dr
     wrong_item = client.post(
         "/api/v1/fees/demo-service-obligations", json=command, headers=auth_headers
     )
-    assert wrong_item.status_code == 409, wrong_item.text
+    assert wrong_item.status_code == 422, wrong_item.text
 
     first_item = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
     assert first_item.status_code == 200
@@ -374,7 +384,7 @@ def test_invalid_item_creates_no_fee_facts_and_cached_bundle_ignores_external_dr
     cached_item = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
     assert cached_item.status_code == 200
     assert cached_item.json() == first_item.json()
-    command["item_code"] = "DEMO_SERVICE_1"
+    command.pop("item_code")
     created_from_cached_snapshot = client.post(
         "/api/v1/fees/demo-service-obligations", json=command, headers=auth_headers
     )
