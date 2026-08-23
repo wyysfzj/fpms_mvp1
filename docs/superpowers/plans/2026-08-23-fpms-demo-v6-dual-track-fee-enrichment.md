@@ -33,7 +33,7 @@
 实现必须逐条服从：
 
 - `docs/superpowers/specs/2026-08-23-fpms-demo-v6-dual-track-fee-enrichment-design.md`
-- 规格 SHA-256：`3ea6455b53fd87523dd086f0569c6f6492d0031baf80286ef85576d8d42e803b`
+- 规格 SHA-256：`bfcf7497f91613d4e20bec6b42ce0be60c6c1267059d28c90825106a27481ae6`
 - V5 基线：`docs/postdemo/demo-lifecycle-customer-v5.html`
 - V5 runbook：`docs/postdemo/demo-lifecycle-customer-v5-runbook.md`
 

@@ -1,8 +1,8 @@
 # FPMS 客户 Demo V6：授权登记双轨费用增强设计
 
-日期：2026-08-23  
-状态：用户已批准书面规格，独立规格审查零发现  
-前序：`docs/postdemo/demo-lifecycle-customer-v5.html` 及其完整 runbook  
+日期：2026-08-23
+状态：用户已批准书面规格，独立规格审查零发现
+前序：`docs/postdemo/demo-lifecycle-customer-v5.html` 及其完整 runbook
 风险：HIGH（官费、服务应收、回款、核销与来源激活）
 
 ## 1. 设计结论
