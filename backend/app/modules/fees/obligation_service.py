@@ -1559,7 +1559,7 @@ def _validate_detail_activities(
             continue
         try:
             payload = _strict_json_loads(cast(str, row["payload_json"]))
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             if row["source_activity_id"] == header["source_activity_id"]:
                 _stored_state_invalid()
             continue

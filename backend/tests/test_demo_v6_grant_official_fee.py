@@ -711,11 +711,18 @@ def test_deeply_corrupt_registration_review_fails_closed_as_409(
         preview = demo_official_fee.preview_grant_official_fees(
             transaction, grant_fee_task_id=task.id
         )
-        result = demo_official_fee.confirm_grant_official_fees(
-            _command(task, evidence, preview), transaction
-        )
+        command = _command(task, evidence, preview)
+        result = demo_official_fee.confirm_grant_official_fees(command, transaction)
         transaction.commit()
         review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        recognition = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == task.case_id,
+                CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+                CaseActivityEvent.source_activity_id == review.source_activity_id,
+            )
+        )
+        assert recognition is not None
         obligation_lines = tuple(
             transaction.scalars(
                 select(FeeObligationLine)
@@ -746,7 +753,15 @@ def test_deeply_corrupt_registration_review_fails_closed_as_409(
             ),
         )
         review.payload_json = "[" * 1100 + "0" + "]" * 1100
+        recognition.payload_json = "[" * 1100 + "0" + "]" * 1100
         transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.confirm_grant_official_fees(command, transaction)
+        assert (caught.value.code, caught.value.status_code) == (
+            "FEE_OBLIGATION_STORED_STATE_INVALID",
+            409,
+        )
 
         with pytest.raises(BusinessError) as caught:
             grant_fee_service.confirm_grant_official_fees(
