@@ -21,6 +21,7 @@ from app.modules.annuity.models import GovPayment, PayList
 from app.modules.auth.models import T_User
 from app.modules.billing.models import DemoFinanceCommand
 from app.modules.cases.models import CaseActivityEvent, CaseActivityEventEvidence
+from app.modules.documents.models import DocTemplate, Document
 from app.modules.fees.demo_service import _load_bundle_snapshot
 from app.modules.fees.models import (
     FeeDraft,
@@ -34,6 +35,7 @@ from app.modules.fees.models import (
 )
 from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.grant_fees import demo_official_fee
+from app.modules.grant_fees import service as grant_fee_service
 
 ROOT = Path(__file__).resolve().parents[2]
 FEE_CODES = (
@@ -100,25 +102,25 @@ def _seed_rate_book(transaction: Session) -> OfficialRateBook:
         (FEE_CODES[0], "授权登记费", "900.00"),
         (FEE_CODES[1], "授权公告印刷费", "50.00"),
     ):
-        transaction.add(
-            FeeRate(
-                id=str(uuid4()),
-                fee_code=code,
-                fee_name=name,
-                fee_type="GOV",
-                currency="CNY",
-                default_amount=Decimal(amount),
-                enabled=True,
-                calc_mode="FIXED",
-                allow_reduction=False,
-                effective_from=date(2026, 3, 30),
-                effective_to=None,
-                source_doc=book.source_reference,
-                source_version=book.source_version,
-                source_status="ACTIVE",
-                official_rate_book_id=book.id,
-            )
+        rate = FeeRate(
+            id=str(uuid4()),
+            fee_code=code,
+            fee_name=name,
+            fee_type="GOV",
+            currency="CNY",
+            default_amount=Decimal(amount),
+            enabled=True,
+            calc_mode="FIXED",
+            allow_reduction=False,
+            effective_from=date(2026, 3, 30),
+            effective_to=None,
+            source_doc=book.source_reference,
+            source_version=book.source_version,
+            source_status="ACTIVE",
+            official_rate_book_id=book.id,
         )
+        rate.source_policy = demo_official_fee._rate_row_attestation(rate, book)
+        transaction.add(rate)
     transaction.flush()
     return book
 
@@ -339,6 +341,82 @@ def test_preview_rejects_fee_rate_source_metadata_drift(
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("default_amount", Decimal("901.00")),
+        ("fee_name", "被篡改的费用名称"),
+        ("calc_mode", "TIER"),
+    ],
+)
+def test_preview_rejects_digest_unbound_rate_row_drift(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    field: str,
+    value: object,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label=f"RATE-DIGEST-{field}"
+        )
+        rate = transaction.scalar(
+            select(FeeRate).where(FeeRate.fee_code == FEE_CODES[0])
+        )
+        assert rate is not None
+        setattr(rate, field, value)
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_RATE_SOURCE_CONFLICT",
+            409,
+        )
+
+
+def test_preview_requires_actionable_grant_notice_document_semantics(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        _case, document, task, _evidence, _book = _seed(
+            transaction, label="WRONG-DOCUMENT"
+        )
+        wrong_template = transaction.scalar(
+            select(DocTemplate).where(DocTemplate.code != "GRANT_NOTICE")
+        )
+        assert wrong_template is not None
+        document.doc_template_id = wrong_template.id
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_TASK_CONFLICT",
+            409,
+        )
+
+        document = transaction.get(Document, document.id)
+        document.doc_template_id = transaction.scalar(
+            select(DocTemplate.id).where(DocTemplate.code == "GRANT_NOTICE")
+        )
+        task.deadline_source = None
+        transaction.commit()
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_TASK_CONFLICT",
+            409,
+        )
+
+
 def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
     session_factory: sessionmaker, runtime_bundle: Path
 ) -> None:
@@ -402,6 +480,12 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
             row["official_full_amount"] for row in review_payload["after_lines"]
         } == {"50.00", "900.00"}
         assert review_payload["grant_fee_task_id"] == task.id
+        assert review.activity_type == (
+            "GRANT_REGISTRATION_OFFICIAL_FEE_REVIEW_CONFIRMED"
+        )
+        assert review_payload["schema"] == (
+            "FPMS_GRANT_REGISTRATION_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
+        )
         assert recognition is not None
         assert recognition.sequence < review.sequence
         assert instruction.source_activity_id == recognition.id
@@ -419,6 +503,13 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         assert replay == replace(first, reused=True)
         assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
 
+        with pytest.raises(BusinessError) as caught:
+            grant_fee_service.validated_grant_year_official_fee_review_for_draft(
+                transaction,
+                grant_fee_task_id=task.id,
+            )
+        assert caught.value.code == "GRANT_OFFICIAL_FEE_REVIEW_STATE_CONFLICT"
+
         second_command = replace(
             command,
             idempotency_key="demo-v6-gov-confirm-02",
@@ -433,6 +524,42 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         )
         transaction.rollback()
         assert _counts(transaction) == (5, 0, 1, 2, 2, 1, 2, 0, 0)
+
+
+def test_corrupt_source_payload_serialization_fails_closed_as_409(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, evidence, _book = _seed(
+            transaction, label="BAD-JSON"
+        )
+        preview = demo_official_fee.preview_grant_official_fees(
+            transaction, grant_fee_task_id=task.id
+        )
+        result = demo_official_fee.confirm_grant_official_fees(
+            _command(task, evidence, preview), transaction
+        )
+        transaction.commit()
+        review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        source = transaction.get(CaseActivityEvent, review.source_activity_id)
+
+        def corrupt_dump(*_args, **_kwargs):
+            raise ValueError("non-finite payload")
+
+        monkeypatch.setattr(grant_fee_service.json, "dumps", corrupt_dump)
+        with pytest.raises(BusinessError) as caught:
+            grant_fee_service._demo_grant_official_source_context(
+                transaction,
+                task=task,
+                activity=source,
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+        )
 
 
 def test_confirmation_drift_rolls_back_the_entire_composite(

@@ -142,6 +142,12 @@ class CreateServiceReceivableObligationResult:
 _INSTRUCTION_ACTIVITY_TYPE = "FEE_CLIENT_INSTRUCTION_RECORDED"
 _GRANT_REVIEW_ACTIVITY_TYPE = "GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED"
 _GRANT_REVIEW_PAYLOAD_SCHEMA = "FPMS_GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
+_GRANT_REGISTRATION_REVIEW_ACTIVITY_TYPE = (
+    "GRANT_REGISTRATION_OFFICIAL_FEE_REVIEW_CONFIRMED"
+)
+_GRANT_REGISTRATION_REVIEW_PAYLOAD_SCHEMA = (
+    "FPMS_GRANT_REGISTRATION_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
+)
 _GRANT_REVIEW_BASIS = "AUTHORIZED_OPERATOR_MANUAL_ENTRY"
 _GRANT_REVIEW_PAYLOAD_KEYS = {
     "schema",
@@ -988,7 +994,11 @@ def get_fee_obligation(
                         (CaseActivityEvent.lane == ActivityLane.FEE.value)
                         & (
                             CaseActivityEvent.activity_type.in_(
-                                (_ACTIVITY_TYPE, _GRANT_REVIEW_ACTIVITY_TYPE)
+                                (
+                                    _ACTIVITY_TYPE,
+                                    _GRANT_REVIEW_ACTIVITY_TYPE,
+                                    _GRANT_REGISTRATION_REVIEW_ACTIVITY_TYPE,
+                                )
                             )
                         )
                     ),
@@ -1298,11 +1308,20 @@ def _detail_recognition_lines(
     recognized_lines = obligation_payload.get("lines")
     if type(recognized_lines) is not list or len(recognized_lines) != len(lines):
         _stored_state_invalid()
+    if header["obligation_type"] == "GRANT_YEAR_ANNUITY":
+        review_activity_type = _GRANT_REVIEW_ACTIVITY_TYPE
+        review_schema = _GRANT_REVIEW_PAYLOAD_SCHEMA
+    elif header["obligation_type"] == "GRANT_REGISTRATION_OFFICIAL_FEES":
+        review_activity_type = _GRANT_REGISTRATION_REVIEW_ACTIVITY_TYPE
+        review_schema = _GRANT_REGISTRATION_REVIEW_PAYLOAD_SCHEMA
+    else:
+        review_activity_type = None
+        review_schema = None
     reviews: list[tuple[Mapping[str, object], dict[str, object]]] = []
     for row in rows:
         if (
             row["lane"] != ActivityLane.FEE.value
-            or row["activity_type"] != _GRANT_REVIEW_ACTIVITY_TYPE
+            or row["activity_type"] != review_activity_type
         ):
             continue
         try:
@@ -1339,7 +1358,7 @@ def _detail_recognition_lines(
         _stored_state_invalid()
     if (
         set(review_payload) != _GRANT_REVIEW_PAYLOAD_KEYS
-        or review_payload["schema"] != _GRANT_REVIEW_PAYLOAD_SCHEMA
+        or review_payload["schema"] != review_schema
         or review_payload["review_basis"] != _GRANT_REVIEW_BASIS
         or review_payload["case_id"] != header["case_id"]
         or review_payload["obligation_id"] != header["id"]

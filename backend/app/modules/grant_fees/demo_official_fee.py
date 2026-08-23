@@ -23,7 +23,9 @@ from app.modules.cases.lifecycle_contracts import (
     OfficialProcedureStage,
 )
 from app.modules.cases.models import Case, CaseActivityEvent
-from app.modules.documents.models import DocumentEvidenceVersion
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.fees.demo_service import _bundle
 from app.modules.fees.models import FeeObligation, FeeRate, OfficialRateBook, T_GrantFeeTask
 from app.modules.fees.obligation_contracts import (
@@ -53,6 +55,7 @@ from app.modules.grant_fees.service import (
 
 _SOURCE_EVENT = "DEMO_GRANT_OFFICIAL_FEE_CONFIRMED"
 _SOURCE_SCHEMA = "FPMS_DEMO_GRANT_OFFICIAL_FEE_CONFIRMED_V1"
+_RATE_ROW_ATTESTATION_PREFIX = "FPMS_DEMO_RATE_ROW_SHA256:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +141,54 @@ def _confirmation_conflict() -> None:
     _fail("DEMO_GOV_CONFIRMATION_CONFLICT", "官费人工确认与当前预览不一致", status_code=409)
 
 
+def _rate_row_attestation(row: FeeRate, book: OfficialRateBook) -> str:
+    payload = {
+        "schema": "FPMS_DEMO_RATE_ROW_ATTESTATION_V1",
+        "book_id": book.id,
+        "book_version": book.version_code,
+        "book_sha256": book.source_snapshot_hash,
+        "fee_code": row.fee_code,
+        "fee_name": row.fee_name,
+        "fee_type": row.fee_type,
+        "currency": row.currency,
+        "default_amount": (
+            None if row.default_amount is None else format(row.default_amount, ".2f")
+        ),
+        "enabled": row.enabled,
+        "rate_group": row.rate_group,
+        "country_code": row.country_code,
+        "case_type": row.case_type,
+        "patent_category": row.patent_category,
+        "fee_domain": row.fee_domain,
+        "fee_section": row.fee_section,
+        "fee_category": row.fee_category,
+        "fee_subtype": row.fee_subtype,
+        "reduction_scope": row.reduction_scope,
+        "calc_mode": row.calc_mode,
+        "calc_params": row.calc_params,
+        "allow_reduction": row.allow_reduction,
+        "effective_from": (
+            None if row.effective_from is None else row.effective_from.isoformat()
+        ),
+        "effective_to": None if row.effective_to is None else row.effective_to.isoformat(),
+        "source_doc": row.source_doc,
+        "source_url": row.source_url,
+        "source_version": row.source_version,
+        "source_status": row.source_status,
+        "official_rate_book_id": row.official_rate_book_id,
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return _RATE_ROW_ATTESTATION_PREFIX + hashlib.sha256(
+        canonical.encode("utf-8")
+    ).hexdigest()
+
+
 def _projection(case: Case) -> LifecycleProjection:
     try:
         return LifecycleProjection(
@@ -178,6 +229,28 @@ def _task_evidence(
         or task.source_document_id is None
         or task.currency != "CNY"
         or type(task.due_date) is not date
+        or type(task.deadline_source) is not str
+        or not task.deadline_source.strip()
+        or len(task.deadline_source) > 32
+        or type(task.deadline_confirmed_at) is not datetime
+        or task.deadline_confirmed_at.tzinfo is not None
+    ):
+        _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务状态不支持官费预览", status_code=409)
+    document = transaction.get(Document, task.source_document_id)
+    if document is None:
+        _fail("DEMO_GOV_EVIDENCE_NOT_FOUND", "授权通知证据不存在", status_code=404)
+    template = transaction.get(DocTemplate, document.doc_template_id)
+    try:
+        semantics = resolve_document_semantics(template)
+    except BusinessError:
+        _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务状态不支持官费预览", status_code=409)
+    if (
+        document.case_id != task.case_id
+        or document.direction != DocumentDirection.IN.value
+        or document.doc_type != DocumentDocType.OFFICIAL_IN.value
+        or semantics.execution_behavior != "GRANT_NOTICE"
+        or semantics.lifecycle_event_type != "GRANT_REGISTRATION_NOTICE_RECORDED"
+        or semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED"
     ):
         _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务状态不支持官费预览", status_code=409)
     all_versions = tuple(
@@ -335,6 +408,7 @@ def preview_grant_official_fees(
             or row.source_doc != book.source_reference
             or row.source_version != book.source_version
             or row.source_status != "ACTIVE"
+            or row.source_policy != _rate_row_attestation(row, book)
         ):
             _source_conflict()
         lines.append(
