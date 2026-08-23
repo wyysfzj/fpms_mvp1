@@ -39,6 +39,7 @@ export const FEE_DRAFT_STATUS_TEXT: Record<string, string> = {
 }
 
 export const FEE_DRAFT_TYPE_TEXT: Record<string, string> = {
+  GENERIC: '普通费用草稿',
   APPLY_FEE: '申请费',
   OA_FEE: '审查意见费',
   GRANT_FEE: '授权费',

@@ -238,6 +238,27 @@ test('未提供义务标识时不猜测义务并保留未关联草稿创建', as
     expect(obligationGetCount).toBe(0)
 })
 
+test('GENERIC 费用草稿详情显示普通费用草稿', async ({ page }) => {
+    await mockFeeDraftApi(page, async (route, apiPath) => {
+        if (route.request().method() === 'GET' && apiPath === '/fees/drafts/draft-v8-generic') {
+            return fulfillJson(route, {
+                ...createdDraft({ case_id: 'case-v8-draft', currency: 'CNY' }),
+                id: 'draft-v8-generic',
+                draft_type: 'GENERIC',
+            })
+        }
+        return fulfillJson(route, { detail: '未处理的普通费用草稿模拟请求' }, 404)
+    })
+
+    await page.addInitScript(() => {
+        window.localStorage.setItem('fpms_token', 'v8-fee-draft-obligation-token')
+    })
+    await page.goto('/fees/drafts/draft-v8-generic', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByText('类型: 普通费用草稿', { exact: true })).toBeVisible()
+    await expect(page.getByText('类型: 未知草单类型', { exact: true })).toHaveCount(0)
+})
+
 async function mockFeeDraftApi(
     page: Page,
     handler: (route: Route, apiPath: string) => Promise<void>,
