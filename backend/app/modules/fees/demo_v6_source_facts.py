@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
 from app.modules.cases.models import CaseActivityEvent
-from app.modules.fees.demo_service import _service_source_rows
+from app.modules.fees.demo_service import (
+    _service_source_rows,
+    _validated_service_adjustment_activity,
+)
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
@@ -130,7 +133,17 @@ def _service_facts(
     adjustment_payload = None
     if current_source.activity_type == "DEMO_SERVICE_DRAFT_ADJUSTED":
         adjustment = current_source
-        adjustment_payload = _payload(adjustment)
+        try:
+            adjustment_payload, validated_adjustment = (
+                _validated_service_adjustment_activity(transaction, adjustment)
+            )
+        except BusinessError:
+            _invalid()
+        if (
+            validated_adjustment.draft_id != draft.id
+            or validated_adjustment.superseding_obligation_id != header.id
+        ):
+            _invalid()
         source_id = adjustment_payload.get("source_activity_id")
         if type(source_id) is not str:
             _invalid()
@@ -165,6 +178,10 @@ def _service_facts(
         adjusted_by_code = {
             row.get("fee_code"): row for row in after_rows if type(row) is dict
         }
+        if len(adjusted_by_code) != len(after_rows) or set(adjusted_by_code) != set(
+            source_by_code
+        ):
+            _invalid()
     facts: list[DemoV6DraftSourceFactLine] = []
     for item, link, line in rows:
         source = source_by_code.get(line.fee_code)
@@ -183,6 +200,14 @@ def _service_facts(
             item.fee_type != "SERVICE"
             or item.fee_code != line.fee_code
             or item.amount != expected
+            or (item.quantity is None) != (item.unit_price is None)
+            or (
+                item.quantity is not None
+                and (
+                    item.quantity != Decimal(quantity)
+                    or item.unit_price != unit_price
+                )
+            )
             or line.payable_amount != expected
             or type(source.get("source_ref")) is not str
             or type(source.get("source_version")) is not str

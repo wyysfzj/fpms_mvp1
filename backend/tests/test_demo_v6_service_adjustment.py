@@ -567,3 +567,107 @@ def test_adjustment_replay_rejects_canonical_durable_graph_drift(
         headers=auth_headers,
     )
     assert replay.status_code == 409
+
+
+def test_adjustment_replay_rejects_rewritten_before_snapshot(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, _obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item_id = item.id
+    body = {
+        "item_id": item_id,
+        "expected_quantity": 1,
+        "new_quantity": 2,
+        "reason": "客户确认增加一份附加文件处理",
+        "idempotency_key": "v6-service-adjustment-before-drift",
+    }
+    first = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    with session_factory() as transaction:
+        activity = transaction.get(
+            CaseActivityEvent,
+            first.json()["adjustment_activity_id"],
+        )
+        payload = json.loads(activity.payload_json)
+        payload["before_lines"][0]["amount"] = "1199.00"
+        payload["before_total"] = "1499.00"
+        payload["before_digest"] = demo_service._snapshot_digest(
+            payload["before_lines"]
+        )
+        activity.payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.commit()
+    replay = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert replay.status_code == 409
+
+
+def test_adjustment_replay_rejects_deleted_current_link(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, _obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item_id = item.id
+    body = {
+        "item_id": item_id,
+        "expected_quantity": 1,
+        "new_quantity": 2,
+        "reason": "客户确认增加一份附加文件处理",
+        "idempotency_key": "v6-service-adjustment-link-drift",
+    }
+    first = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    with session_factory() as transaction:
+        link = transaction.scalar(
+            select(FeeObligationDraftItemLink).where(
+                FeeObligationDraftItemLink.fee_item_id == item_id
+            )
+        )
+        transaction.delete(link)
+        transaction.commit()
+    replay = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert replay.status_code == 409

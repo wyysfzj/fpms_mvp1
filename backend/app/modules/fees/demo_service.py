@@ -631,7 +631,30 @@ def _service_adjustment_replay(
             .order_by(FeeItem.fee_code, FeeItem.id)
         )
     )
+    links = tuple(
+        transaction.scalars(
+            select(FeeObligationDraftItemLink).where(
+                FeeObligationDraftItemLink.fee_item_id.in_(
+                    tuple(item.id for item in items)
+                )
+            )
+        )
+    )
     original = transaction.get(FeeObligation, original_id)
+    original_lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine)
+            .where(FeeObligationLine.obligation_id == original_id)
+            .order_by(FeeObligationLine.fee_code, FeeObligationLine.id)
+        )
+    )
+    replacement_lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine)
+            .where(FeeObligationLine.obligation_id == child.id)
+            .order_by(FeeObligationLine.fee_code, FeeObligationLine.id)
+        )
+    )
     before_rows = payload.get("before_lines")
     after_rows = payload.get("after_lines")
     if (
@@ -672,18 +695,11 @@ def _service_adjustment_replay(
         or after_total != recomputed_after_total
     ):
         _adjustment_conflict("服务费草单调整记录无效")
-    target_rows = [row for row in after_rows if row.get("fee_item_id") == command.item_id]
-    try:
-        target_amount = Decimal(str(target_rows[0]["amount"]))
-    except (IndexError, InvalidOperation, KeyError, TypeError, ValueError):
-        _adjustment_conflict("服务费草单调整记录无效")
-    if len(target_rows) != 1:
-        _adjustment_conflict("服务费草单调整记录无效")
     source_id = payload.get("source_activity_id")
     original_instruction_id = payload.get("original_instruction_activity_id")
     if type(source_id) is not str or type(original_instruction_id) is not str:
         _adjustment_conflict("服务费草单调整记录无效")
-    _service_source_rows(
+    _source, source_rows = _service_source_rows(
         transaction,
         source_id,
         case_id=activity.case_id,
@@ -696,80 +712,161 @@ def _service_adjustment_replay(
         _adjustment_conflict("服务费草单调整记录无效")
     original_instruction_payload = _stored_adjustment_payload(original_instruction)
     instruction_payload = _stored_adjustment_payload(instruction)
+    original_recognition = transaction.get(
+        CaseActivityEvent,
+        original_instruction.source_activity_id,
+    )
+    replacement_recognition = transaction.get(
+        CaseActivityEvent,
+        instruction.source_activity_id,
+    )
+    if original_recognition is None or replacement_recognition is None:
+        _adjustment_conflict("服务费草单调整谱系无效")
+    original_recognition_payload = _stored_adjustment_payload(original_recognition)
+    replacement_recognition_payload = _stored_adjustment_payload(
+        replacement_recognition
+    )
     if (
         activity.source_activity_id != original_instruction_id
+        or activity.case_id != draft.case_id
         or original_instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+        or original_instruction.case_id != activity.case_id
         or original_instruction_payload.get("obligation_id") != original_id
         or original_instruction_payload.get("instruction") != "PAY"
+        or original_recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
+        or original_recognition.case_id != activity.case_id
+        or original_recognition.source_activity_id != source_id
+        or original_recognition_payload.get("obligation_id") != original_id
         or instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+        or instruction.case_id != activity.case_id
+        or instruction.supersedes_event_id is not None
         or instruction_payload.get("obligation_id") != child.id
         or instruction_payload.get("instruction") != "PAY"
         or instruction_payload.get("actor_id") != command.actor_id
+        or replacement_recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
+        or replacement_recognition.case_id != activity.case_id
+        or replacement_recognition.source_activity_id != activity.id
+        or replacement_recognition_payload.get("obligation_id") != child.id
     ):
         _adjustment_conflict("服务费草单调整谱系无效")
     item_by_id = {item.id: item for item in items}
-    before_by_item = {row.get("fee_item_id"): row for row in before_rows}
+    item_by_code = {item.fee_code: item for item in items}
+    source_by_code = {row.get("item_code"): row for row in source_rows}
+    original_by_code = {line.fee_code: line for line in original_lines}
+    replacement_by_code = {line.fee_code: line for line in replacement_lines}
     if (
-        {row.get("fee_item_id") for row in after_rows} != set(item_by_id)
-        or set(before_by_item) != set(item_by_id)
-        or {row.get("fee_code") for row in after_rows}
-        != {item.fee_code for item in items}
+        not items
+        or len(item_by_id) != len(items)
+        or len(item_by_code) != len(items)
+        or len(source_by_code) != len(source_rows)
+        or len(original_by_code) != len(original_lines)
+        or len(replacement_by_code) != len(replacement_lines)
+        or set(item_by_code) != set(source_by_code)
+        or set(item_by_code) != set(original_by_code)
+        or set(item_by_code) != set(replacement_by_code)
+        or command.item_id not in item_by_id
     ):
         _adjustment_conflict("服务费草单调整结果漂移")
-    for row in after_rows:
-        item = item_by_id.get(row.get("fee_item_id"))
-        before_row = before_by_item.get(row.get("fee_item_id"))
+    expected_before: list[dict[str, object]] = []
+    expected_after: list[dict[str, object]] = []
+    for code in sorted(source_by_code):
+        source_row = source_by_code[code]
+        item = item_by_code[code]
+        original_line = original_by_code[code]
+        replacement_line = replacement_by_code[code]
         try:
-            row_amount = Decimal(str(row["amount"]))
-            row_unit_price = Decimal(str(row["unit_price"]))
+            source_quantity = source_row["quantity"]
+            source_unit_price = Decimal(str(source_row["unit_price"]))
         except (InvalidOperation, KeyError, TypeError, ValueError):
             _adjustment_conflict("服务费草单调整记录无效")
+        if type(source_quantity) is not int or source_quantity <= 0:
+            _adjustment_conflict("服务费草单调整记录无效")
+        after_quantity = (
+            command.new_quantity if item.id == command.item_id else source_quantity
+        )
+        before_amount = source_unit_price * source_quantity
+        after_amount = source_unit_price * after_quantity
         if (
-            item is None
-            or before_row is None
-            or item.fee_code != row.get("fee_code")
-            or item.fee_name != row.get("fee_name")
-            or item.amount != row_amount
-            or any(
-                before_row.get(field) != row.get(field)
-                for field in (
-                    "fee_code",
-                    "fee_name",
-                    "fee_item_id",
-                    "unit_price",
-                    "source_sha256",
-                )
-            )
+            original_line.case_id != activity.case_id
+            or original_line.obligation_id != original_id
+            or original_line.source_activity_id != source_id
+            or original_line.payable_amount != before_amount
+            or original_line.source_amount != before_amount
+            or replacement_line.case_id != activity.case_id
+            or replacement_line.obligation_id != child.id
+            or replacement_line.source_activity_id != activity.id
+            or replacement_line.fee_name != original_line.fee_name
+            or replacement_line.payable_amount != after_amount
+            or replacement_line.source_amount != after_amount
+            or replacement_line.source_date != original_line.source_date
+            or item.fee_type != FeeDomain.SERVICE.value
+            or item.fee_name != original_line.fee_name
+            or item.amount != after_amount
+            or (item.quantity is None) != (item.unit_price is None)
             or (
-                row.get("fee_item_id") == command.item_id
+                item.quantity is not None
                 and (
-                    before_row.get("quantity") != command.expected_quantity
-                    or row.get("quantity") != command.new_quantity
-                    or item.unit_price != row_unit_price
+                    item.quantity != Decimal(after_quantity)
+                    or item.unit_price != source_unit_price
                 )
             )
-            or (
-                row.get("fee_item_id") != command.item_id
-                and before_row.get("quantity") != row.get("quantity")
-            )
+            or (item.id == command.item_id and item.quantity is None)
         ):
             _adjustment_conflict("服务费草单调整结果漂移")
+        before = {
+            "fee_code": code,
+            "fee_name": original_line.fee_name,
+            "fee_item_id": item.id,
+            "quantity": source_quantity,
+            "unit_price": format(source_unit_price, ".2f"),
+            "amount": format(before_amount, ".2f"),
+            "source_sha256": source_row.get("source_sha256"),
+        }
+        expected_before.append(before)
+        expected_after.append(
+            {
+                **before,
+                "quantity": after_quantity,
+                "amount": format(after_amount, ".2f"),
+            }
+        )
+    target = item_by_id[command.item_id]
+    target_source = source_by_code[target.fee_code]
+    if (
+        before_rows != expected_before
+        or after_rows != expected_after
+        or target_source.get("adjustable") is not True
+        or target_source.get("final_quantity") != command.new_quantity
+    ):
+        _adjustment_conflict("服务费草单调整结果漂移")
+    link_by_item = {link.fee_item_id: link for link in links}
+    if (
+        len(links) != len(items)
+        or len(link_by_item) != len(items)
+        or {link.obligation_line_id for link in links}
+        != {line.id for line in replacement_lines}
+        or any(
+            link_by_item[item.id].obligation_line_id
+            != replacement_by_code[item.fee_code].id
+            for item in items
+        )
+    ):
+        _adjustment_conflict("服务费草单调整关联漂移")
     if (
         draft.status not in {"OPEN", "LOCKED"}
         or original is None
+        or original.obligation_status != FeeObligationStatus.SUPERSEDED.value
+        or original.client_instruction_status != FeeClientInstructionStatus.PAY.value
+        or original.draft_status != FeeObligationDraftStatus.NOT_CREATED.value
         or child.obligation_status != FeeObligationStatus.RECOGNIZED.value
         or child.client_instruction_status != FeeClientInstructionStatus.PAY.value
         or child.draft_status != FeeObligationDraftStatus.CREATED.value
-        or original.draft_status != FeeObligationDraftStatus.NOT_CREATED.value
+        or child.supersedes_obligation_id != original_id
+        or child.source_activity_id != activity.id
+        or draft.total_gov != Decimal("0.00")
+        or draft.total_misc != Decimal("0.00")
         or after_total != draft.total_service
-        or any(
-            item.id == command.item_id
-            and (
-                item.quantity != Decimal(command.new_quantity)
-                or item.amount != target_amount
-            )
-            for item in items
-        )
+        or after_total != draft.amount
     ):
         _adjustment_conflict("服务费草单调整结果漂移")
     get_fee_obligation(original_id, transaction)
@@ -786,6 +883,39 @@ def _service_adjustment_replay(
         idempotency_key=command.idempotency_key,
         reused=True,
     )
+
+
+def _validated_service_adjustment_activity(
+    transaction: Session,
+    activity: CaseActivityEvent,
+) -> tuple[dict[str, object], DemoServiceAdjustmentResult]:
+    payload = _stored_adjustment_payload(activity)
+    prefix = "demo-service-adjustment:"
+    values = (
+        payload.get("draft_id"),
+        payload.get("item_id"),
+        payload.get("reason"),
+        payload.get("actor_id"),
+    )
+    if (
+        any(type(value) is not str or not value for value in values)
+        or type(payload.get("expected_quantity")) is not int
+        or type(payload.get("new_quantity")) is not int
+        or not activity.idempotency_key.startswith(prefix)
+        or not activity.idempotency_key[len(prefix) :]
+    ):
+        _adjustment_conflict("服务费草单调整记录无效")
+    command = DemoServiceAdjustmentCommand(
+        draft_id=str(payload["draft_id"]),
+        item_id=str(payload["item_id"]),
+        expected_quantity=int(payload["expected_quantity"]),
+        new_quantity=int(payload["new_quantity"]),
+        reason=str(payload["reason"]),
+        actor_id=str(payload["actor_id"]),
+        idempotency_key=activity.idempotency_key[len(prefix) :],
+        adjusted_at=activity.effective_at,
+    )
+    return payload, _service_adjustment_replay(command, transaction, activity)
 
 
 def adjust_demo_service_draft(

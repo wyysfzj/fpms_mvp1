@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import runpy
 from pathlib import Path
 
@@ -227,3 +228,68 @@ def test_source_facts_reject_corrupt_service_lineage(
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "DEMO_V6_DRAFT_SOURCE_FACTS_INVALID"
+
+
+def test_adjusted_source_facts_reject_payload_and_item_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    helpers = runpy.run_path(
+        str(Path(__file__).with_name("test_demo_v6_service_adjustment.py"))
+    )
+    _case_id, _obligation_id, draft_id = helpers["_create_open_service_draft"](
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item_id = item.id
+    adjusted = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json={
+            "item_id": item_id,
+            "expected_quantity": 1,
+            "new_quantity": 2,
+            "reason": "客户确认增加一份附加文件处理",
+            "idempotency_key": "v6-source-facts-drift",
+        },
+        headers=auth_headers,
+    )
+    assert adjusted.status_code == 201
+    with session_factory() as transaction:
+        activity = transaction.get(
+            CaseActivityEvent,
+            adjusted.json()["adjustment_activity_id"],
+        )
+        original_payload = activity.payload_json
+        payload = json.loads(original_payload)
+        payload["before_digest"] = "0" * 64
+        activity.payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.commit()
+    path = f"/api/v1/fees/drafts/{draft_id}/source-facts"
+    assert client.get(path, headers=auth_headers).status_code == 409
+
+    with session_factory() as transaction:
+        activity = transaction.get(
+            CaseActivityEvent,
+            adjusted.json()["adjustment_activity_id"],
+        )
+        activity.payload_json = original_payload
+        item = transaction.get(FeeItem, item_id)
+        item.quantity = 4
+        item.unit_price = 150
+        item.amount = 600
+        transaction.commit()
+    assert client.get(path, headers=auth_headers).status_code == 409
