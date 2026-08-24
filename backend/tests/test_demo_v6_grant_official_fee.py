@@ -43,15 +43,33 @@ FEE_CODES = (
     "CNIPA-GRANT-ANNOUNCEMENT",
 )
 SOURCE_SNAPSHOT = json.dumps(
-    {"fixture": "demo-v6", "source": "CNIPA"},
+    {
+        "schema_version": "CNIPA_RATE_SOURCE_V1",
+        "sources": [
+            {
+                "content_sha256": hashlib.sha256(
+                    b"synthetic-cnipa-official-fee-source-fixture-v1"
+                ).hexdigest(),
+                "document_no": None,
+                "published_on": "2026-03-30",
+                "retrieved_at": "2026-08-25T00:00:00Z",
+                "title": "Synthetic CNIPA official fee source fixture",
+                "url": (
+                    "https://www.cnipa.gov.cn/art/2026/3/30/"
+                    "art_1518_205552.html"
+                ),
+            }
+        ],
+    },
     ensure_ascii=False,
     sort_keys=True,
     separators=(",", ":"),
+    allow_nan=False,
 )
 BOOK_HASH = hashlib.sha256(SOURCE_SNAPSHOT.encode("utf-8")).hexdigest()
 CONFIRMED_AT = datetime(2026, 8, 23, 10, 0)
 NOTICE_RECORDED_AT = datetime(2026, 7, 27, 10, 0)
-BOOK_REFERENCE = "https://www.cnipa.gov.cn/official-fees"
+BOOK_REFERENCE = "https://www.cnipa.gov.cn/art/2026/3/30/art_1518_205552.html"
 BOOK_VERSION = "2026.03.30"
 
 
@@ -92,7 +110,7 @@ def _selected_rate_rows(book_id: str) -> tuple[FeeRate, FeeRate]:
             code=FEE_CODES[1],
             name="授权公告印刷费",
             amount="50.00",
-            effective_from=date(2026, 4, 15),
+            effective_from=date(2026, 3, 30),
             book_id=book_id,
         ),
     )
@@ -102,8 +120,8 @@ def _selected_rate_rows(book_id: str) -> tuple[FeeRate, FeeRate]:
 def runtime_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
     bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](tmp_path)
-    manifest["official_fee_selector"]["rate_book_sha256"] = BOOK_HASH
-    manifest["official_fee_selector"]["fee_row_sha256s"] = {
+    assert manifest["official_fee_selector"]["rate_book_sha256"] == BOOK_HASH
+    assert manifest["official_fee_selector"]["fee_row_sha256s"] == {
         row.fee_code: demo_official_fee._rate_row_sha256(row)
         for row in _selected_rate_rows("runtime-selector")
     }
@@ -155,6 +173,7 @@ def _seed_rate_book(transaction: Session) -> OfficialRateBook:
 
 def _seed(transaction: Session, *, label: str = "V6", dispatch_notice: bool = True):
     case, document, task, evidence = _grant_fixture(transaction, label=label)
+    task.due_date = date(2026, 11, 24)
     book = _seed_rate_book(transaction)
     if dispatch_notice:
         grant_fee_service.dispatch_grant_registration_notice(
@@ -284,6 +303,32 @@ def test_preview_rejects_a_dirty_session_without_flushing_it(
             409,
         )
         assert _exact_state(transaction) == before
+
+
+def test_preview_rejects_task_due_date_drift(
+    session_factory: sessionmaker, runtime_bundle: Path
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label="DUE-DATE-DRIFT"
+        )
+        assert task.due_date == date(2026, 11, 24)
+        task.due_date = date(2026, 11, 25)
+        transaction.commit()
+        before = _exact_state(transaction)
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_RATE_SOURCE_CONFLICT",
+            409,
+        )
+        assert _exact_state(transaction) == before
+        assert transaction.get(T_GrantFeeTask, task.id).due_date == date(2026, 11, 25)
+        assert not (transaction.new or transaction.dirty or transaction.deleted)
 
 
 def test_preview_rejects_superseded_task(
@@ -591,7 +636,7 @@ def test_confirmation_atomically_creates_reviewed_obligation_and_gov_only_draft(
         assert {item.fee_code for item in items} == set(FEE_CODES)
         assert {line.fee_code: line.source_date for line in lines} == {
             FEE_CODES[0]: date(2026, 3, 30),
-            FEE_CODES[1]: date(2026, 4, 15),
+            FEE_CODES[1]: date(2026, 3, 30),
         }
         assert transaction.scalar(select(func.count()).select_from(PayList)) == 0
         assert transaction.scalar(select(func.count()).select_from(GovPayment)) == 0

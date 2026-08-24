@@ -5,12 +5,19 @@ import json
 import os
 import runpy
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from app.core.demo_bundle import DemoBundleError
+from app.modules.auth.models import T_User
 from app.modules.documents.official_notice_catalog import OFFICIAL_NOTICE_CATALOG
+from app.modules.fees.models import OfficialRateBook
+from app.modules.fees.official_rate_book import (
+    activate_official_rate_book as activate_rate_book,
+)
 
 try:
     from scripts import run_local_demo_abc, validate_demo_bundle
@@ -22,6 +29,11 @@ except ImportError:
 def _bundle(tmp_path: Path):
     helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_abc_runtime_bundle.py")))
     return helpers["_valid_bundle"](tmp_path)
+
+
+def _v6_bundle(tmp_path: Path):
+    helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_abc_runtime_bundle.py")))
+    return helpers, helpers["_valid_v6_bundle"](tmp_path)
 
 
 def _configure(monkeypatch: pytest.MonkeyPatch, root: Path, digest: str, run_id: str) -> None:
@@ -164,6 +176,178 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
     assert '"candidate_commit":' in metadata
     assert '"candidate_tree":' in metadata
     assert '"customer_activation_eligible": false' in metadata
+
+
+def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    helpers, (root, manifest, digest) = _v6_bundle(tmp_path / "input")
+    _configure(monkeypatch, root, digest, "v6-official-source")
+    monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    activation_observations: list[tuple[str, str]] = []
+
+    def activation_spy(command, transaction):
+        candidate = transaction.get(OfficialRateBook, command.rate_book_id)
+        reviewer = transaction.scalar(
+            select(T_User).where(T_User.username == "demo_evidence_reviewer")
+        )
+        assert candidate is not None
+        assert reviewer is not None
+        assert (candidate.approval_status, candidate.activation_status) == (
+            "PENDING",
+            "INACTIVE",
+        )
+        assert command.approved_by == command.activated_by == reviewer.id
+        assert command.approved_at == command.activated_at
+        assert command.approved_at is not None
+        assert command.approved_at.tzinfo is None
+        assert command.expected_current_rate_book_id is None
+        activation_observations.append((candidate.id, reviewer.id))
+        return activate_rate_book(command, transaction)
+
+    monkeypatch.setattr(
+        run_local_demo_abc,
+        "activate_official_rate_book",
+        activation_spy,
+        raising=False,
+    )
+
+    result = run_local_demo_abc.bootstrap_demo_run()
+
+    assert len(activation_observations) == 1
+    source = manifest["official_fee_source"]
+    expected_book = source["rate_book"]
+    expected_selector = manifest["official_fee_selector"]
+    with sqlite3.connect(result.database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        reviewer_id = connection.execute(
+            "SELECT id FROM t_user WHERE username = ?",
+            ("demo_evidence_reviewer",),
+        ).fetchone()[0]
+        books = connection.execute(
+            "SELECT id, book_code, version_code, source_authority, source_reference, "
+            "source_version, source_published_on, source_snapshot, source_snapshot_hash, "
+            "effective_from, effective_to, approval_status, approved_by, approved_at, "
+            "activation_status, activated_by, activated_at, current_identity_key "
+            "FROM t_fee_rate_book"
+        ).fetchall()
+        assert len(books) == 1
+        book = books[0]
+        for field in (
+            "book_code",
+            "version_code",
+            "source_authority",
+            "source_reference",
+            "source_version",
+            "source_published_on",
+            "source_snapshot",
+            "source_snapshot_hash",
+            "effective_from",
+            "effective_to",
+        ):
+            assert book[field] == expected_book[field]
+        assert hashlib.sha256(book["source_snapshot"].encode("utf-8")).hexdigest() == (
+            book["source_snapshot_hash"]
+        )
+        assert book["approval_status"] == "APPROVED"
+        assert book["approved_by"] == book["activated_by"] == reviewer_id
+        assert book["approved_at"] == book["activated_at"]
+        assert book["approved_at"] is not None
+        assert book["activation_status"] == "ACTIVE"
+        assert book["current_identity_key"] == (
+            f"CNIPA|{expected_book['book_code']}"
+        )
+        rows = connection.execute(
+            "SELECT fee_code, fee_name, fee_type, currency, default_amount, enabled, "
+            "rate_group, country_code, case_type, patent_category, fee_domain, "
+            "fee_section, fee_category, fee_subtype, reduction_scope, calc_mode, "
+            "calc_params, allow_reduction, effective_from, effective_to, source_doc, "
+            "source_url, source_policy, source_version, source_status "
+            "FROM t_fee_rate ORDER BY rowid"
+        ).fetchall()
+        assert len(rows) == 2
+        keys = tuple(source["rows"][0])
+        actual_rows = []
+        for stored in rows:
+            values = list(stored)
+            values[4] = format(Decimal(str(values[4])), ".2f")
+            values[5] = bool(values[5])
+            values[17] = bool(values[17])
+            actual_rows.append(dict(zip(keys, values, strict=True)))
+        assert tuple(row["fee_code"] for row in actual_rows) == tuple(
+            expected_selector["fee_codes"]
+        )
+        assert tuple(
+            helpers["_official_fee_row_sha256"](row) for row in actual_rows
+        ) == tuple(
+            expected_selector["fee_row_sha256s"][fee_code]
+            for fee_code in expected_selector["fee_codes"]
+        )
+
+
+def test_v6_bootstrap_failure_rolls_back_disposes_and_targets_exact_run_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    materialize = getattr(
+        run_local_demo_abc, "_materialize_official_fee_source", None
+    )
+    assert callable(materialize), (
+        "planned seam is missing: _materialize_official_fee_source("
+        "db, bundle, reviewer_username, activated_at)"
+    )
+    _helpers, (root, _manifest, digest) = _v6_bundle(tmp_path / "input")
+    _configure(monkeypatch, root, digest, "v6-materialization-failure")
+    monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    exact_run_root = tmp_path / "fpms-demo-abc-v6-materialization-failure"
+    rmtree_targets: list[Path] = []
+    disposed: list[bool] = []
+    real_sqlite_engine = run_local_demo_abc._sqlite_engine
+
+    def tracked_sqlite_engine(database_url: str):
+        engine = real_sqlite_engine(database_url)
+        real_dispose = engine.dispose
+
+        def tracked_dispose() -> None:
+            disposed.append(True)
+            real_dispose()
+
+        monkeypatch.setattr(engine, "dispose", tracked_dispose)
+        return engine
+
+    def fail_after_materialization(
+        db, bundle, reviewer_username: str, activated_at
+    ) -> None:
+        materialize(db, bundle, reviewer_username, activated_at)
+        raise RuntimeError("injected post-materialization bootstrap failure")
+
+    monkeypatch.setattr(run_local_demo_abc, "_sqlite_engine", tracked_sqlite_engine)
+    monkeypatch.setattr(
+        run_local_demo_abc,
+        "_materialize_official_fee_source",
+        fail_after_materialization,
+    )
+    monkeypatch.setattr(
+        run_local_demo_abc.shutil,
+        "rmtree",
+        lambda target: rmtree_targets.append(Path(target)),
+    )
+
+    with pytest.raises(
+        RuntimeError, match="injected post-materialization bootstrap failure"
+    ):
+        run_local_demo_abc.bootstrap_demo_run()
+
+    assert rmtree_targets == [exact_run_root]
+    assert disposed
+    database_path = exact_run_root / "fpms-demo.db"
+    assert database_path.is_file()
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM t_fee_rate_book"
+        ).fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM t_fee_rate").fetchone()[0] == 0
 
 
 def test_port_probe_enables_address_reuse_before_bind(monkeypatch):

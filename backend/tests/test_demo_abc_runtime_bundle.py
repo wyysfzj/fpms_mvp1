@@ -83,10 +83,133 @@ INTEGRATED_EVIDENCE_TITLES = [
     "办理登记手续通知书",
     "办理登记手续更正通知书",
 ]
+OFFICIAL_FEE_REFERENCE = (
+    "https://www.cnipa.gov.cn/art/2026/3/30/art_1518_205552.html"
+)
+OFFICIAL_FEE_BOOK_CODE = "CNIPA-GRANT-DEMO-V6"
+OFFICIAL_FEE_BOOK_VERSION = "2026.03.30"
+OFFICIAL_FEE_DUE_DATE = "2026-11-24"
 
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _official_fee_row_sha256(row: dict[str, object]) -> str:
+    payload = {"schema": "FPMS_DEMO_RATE_ROW_DIGEST_V1", **row}
+    return _sha256(_canonical_json(payload).encode("utf-8"))
+
+
+def _official_fee_source() -> dict[str, object]:
+    source_snapshot = _canonical_json(
+        {
+            "schema_version": "CNIPA_RATE_SOURCE_V1",
+            "sources": [
+                {
+                    "content_sha256": _sha256(
+                        b"synthetic-cnipa-official-fee-source-fixture-v1"
+                    ),
+                    "document_no": None,
+                    "published_on": "2026-03-30",
+                    "retrieved_at": "2026-08-25T00:00:00Z",
+                    "title": "Synthetic CNIPA official fee source fixture",
+                    "url": OFFICIAL_FEE_REFERENCE,
+                }
+            ],
+        }
+    )
+    rows = [
+        {
+            "fee_code": "CNIPA-GRANT-REGISTRATION",
+            "fee_name": "授权登记费",
+            "fee_type": "GOV",
+            "currency": "CNY",
+            "default_amount": "900.00",
+            "enabled": True,
+            "rate_group": None,
+            "country_code": None,
+            "case_type": None,
+            "patent_category": None,
+            "fee_domain": None,
+            "fee_section": None,
+            "fee_category": None,
+            "fee_subtype": None,
+            "reduction_scope": None,
+            "calc_mode": "FIXED",
+            "calc_params": None,
+            "allow_reduction": False,
+            "effective_from": "2026-03-30",
+            "effective_to": None,
+            "source_doc": OFFICIAL_FEE_REFERENCE,
+            "source_url": OFFICIAL_FEE_REFERENCE,
+            "source_policy": OFFICIAL_FEE_BOOK_CODE,
+            "source_version": OFFICIAL_FEE_BOOK_VERSION,
+            "source_status": "ACTIVE",
+        },
+        {
+            "fee_code": "CNIPA-GRANT-ANNOUNCEMENT",
+            "fee_name": "授权公告印刷费",
+            "fee_type": "GOV",
+            "currency": "CNY",
+            "default_amount": "50.00",
+            "enabled": True,
+            "rate_group": None,
+            "country_code": None,
+            "case_type": None,
+            "patent_category": None,
+            "fee_domain": None,
+            "fee_section": None,
+            "fee_category": None,
+            "fee_subtype": None,
+            "reduction_scope": None,
+            "calc_mode": "FIXED",
+            "calc_params": None,
+            "allow_reduction": False,
+            "effective_from": "2026-03-30",
+            "effective_to": None,
+            "source_doc": OFFICIAL_FEE_REFERENCE,
+            "source_url": OFFICIAL_FEE_REFERENCE,
+            "source_policy": OFFICIAL_FEE_BOOK_CODE,
+            "source_version": OFFICIAL_FEE_BOOK_VERSION,
+            "source_status": "ACTIVE",
+        },
+    ]
+    return {
+        "rate_book": {
+            "book_code": OFFICIAL_FEE_BOOK_CODE,
+            "version_code": OFFICIAL_FEE_BOOK_VERSION,
+            "source_authority": "CNIPA",
+            "source_reference": OFFICIAL_FEE_REFERENCE,
+            "source_version": OFFICIAL_FEE_BOOK_VERSION,
+            "source_published_on": "2026-03-30",
+            "source_snapshot": source_snapshot,
+            "source_snapshot_hash": _sha256(source_snapshot.encode("utf-8")),
+            "effective_from": "2026-03-30",
+            "effective_to": None,
+        },
+        "rows": rows,
+    }
+
+
+def _refresh_official_fee_selector_digests(manifest: dict[str, object]) -> None:
+    source = manifest["official_fee_source"]
+    book = source["rate_book"]
+    rows = source["rows"]
+    selector = manifest["official_fee_selector"]
+    selector["rate_book_sha256"] = book["source_snapshot_hash"]
+    selector["fee_row_sha256s"] = {
+        row["fee_code"]: _official_fee_row_sha256(row) for row in rows
+    }
 
 
 def _write_docx(
@@ -282,7 +405,9 @@ def _integrated_metadata_for(role: str, ordinal: int) -> dict[str, object]:
     elif role in {"GRANT_NOTICE_ORIGINAL", "GRANT_NOTICE_REPLACEMENT"}:
         replacement = role == "GRANT_NOTICE_REPLACEMENT"
         metadata.update(
-            official_due_date="2026-11-24" if replacement else "2026-11-23",
+            official_due_date=(
+                OFFICIAL_FEE_DUE_DATE if replacement else "2026-11-23"
+            ),
             official_due_date_source="IMPORTED_OFFICIAL_NOTICE",
             official_due_date_status="CONFIRMED",
             source_template_code=(
@@ -575,14 +700,13 @@ def _valid_v6_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
     }
     manifest["official_fee_selector"] = {
         "source_authority": "CNIPA",
-        "rate_book_version": "2026.03.30",
-        "rate_book_sha256": "e" * 64,
+        "rate_book_version": OFFICIAL_FEE_BOOK_VERSION,
+        "rate_book_sha256": "",
         "fee_codes": ["CNIPA-GRANT-REGISTRATION", "CNIPA-GRANT-ANNOUNCEMENT"],
-        "fee_row_sha256s": {
-            "CNIPA-GRANT-REGISTRATION": "f" * 64,
-            "CNIPA-GRANT-ANNOUNCEMENT": "a" * 64,
-        },
+        "fee_row_sha256s": {},
     }
+    manifest["official_fee_source"] = _official_fee_source()
+    _refresh_official_fee_selector_digests(manifest)
     manifest["first_receipt_amount"] = "1000.00"
     manifest["rates"] = [
         {
@@ -615,6 +739,75 @@ def _valid_v6_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         },
     ]
     return bundle_root, manifest, _write_manifest(bundle_root, manifest)
+
+
+def _replace_source_snapshot(
+    manifest: dict[str, object], snapshot: str, *, canonical_hash: bool = True
+) -> None:
+    book = manifest["official_fee_source"]["rate_book"]
+    book["source_snapshot"] = snapshot
+    if canonical_hash:
+        book["source_snapshot_hash"] = _sha256(snapshot.encode("utf-8"))
+    _refresh_official_fee_selector_digests(manifest)
+
+
+def _add_snapshot_source(manifest: dict[str, object]) -> None:
+    book = manifest["official_fee_source"]["rate_book"]
+    snapshot = json.loads(book["source_snapshot"])
+    snapshot["sources"].append(
+        {
+            **snapshot["sources"][0],
+            "content_sha256": _sha256(b"second-synthetic-cnipa-source"),
+            "title": "Unexpected second synthetic source",
+        }
+    )
+    _replace_source_snapshot(manifest, _canonical_json(snapshot))
+
+
+def _make_source_snapshot_noncanonical(manifest: dict[str, object]) -> None:
+    book = manifest["official_fee_source"]["rate_book"]
+    _replace_source_snapshot(manifest, f"{book['source_snapshot']}\n")
+
+
+def _make_source_snapshot_hash_invalid(manifest: dict[str, object]) -> None:
+    book = manifest["official_fee_source"]["rate_book"]
+    book["source_snapshot_hash"] = _sha256(b"not-the-source-snapshot")
+    _refresh_official_fee_selector_digests(manifest)
+
+
+def _make_source_reference_untrusted(manifest: dict[str, object]) -> None:
+    untrusted = "https://example.invalid/synthetic-cnipa-source"
+    source = manifest["official_fee_source"]
+    book = source["rate_book"]
+    snapshot = json.loads(book["source_snapshot"])
+    snapshot["sources"][0]["url"] = untrusted
+    book["source_reference"] = untrusted
+    for row in source["rows"]:
+        row["source_doc"] = untrusted
+        row["source_url"] = untrusted
+    _replace_source_snapshot(manifest, _canonical_json(snapshot))
+
+
+def _mutate_official_fee_row(
+    manifest: dict[str, object], **changes: object
+) -> None:
+    manifest["official_fee_source"]["rows"][0].update(changes)
+    _refresh_official_fee_selector_digests(manifest)
+
+
+def _add_unselected_official_fee_row(manifest: dict[str, object]) -> None:
+    rows = manifest["official_fee_source"]["rows"]
+    extra = dict(rows[0])
+    extra["fee_code"] = "CNIPA-UNSELECTED-SYNTHETIC"
+    rows.append(extra)
+
+
+def _reverse_official_fee_rows(manifest: dict[str, object]) -> None:
+    manifest["official_fee_source"]["rows"].reverse()
+
+
+def _set_book_interval_before_due_date(manifest: dict[str, object]) -> None:
+    manifest["official_fee_source"]["rate_book"]["effective_to"] = "2026-11-23"
 
 
 def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -942,6 +1135,142 @@ def test_authority_record_is_independently_pinned_and_exact(tmp_path: Path, monk
         _load_bundle(root, digest)
 
 
+def test_v6_official_fee_source_is_immutable_and_due_date_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, manifest, digest = _valid_v6_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    snapshot = _load_bundle(root, digest)
+
+    source = snapshot.official_fee_source
+    assert source is not None
+    assert snapshot.official_fee_due_date == date.fromisoformat(OFFICIAL_FEE_DUE_DATE)
+    assert source.rate_book.source_snapshot == manifest["official_fee_source"][
+        "rate_book"
+    ]["source_snapshot"]
+    assert source.rate_book.source_snapshot_hash == manifest["official_fee_selector"][
+        "rate_book_sha256"
+    ]
+    assert tuple(row.fee_code for row in source.rows) == tuple(
+        manifest["official_fee_selector"]["fee_codes"]
+    )
+    row_digests = tuple(
+        _official_fee_row_sha256(row)
+        for row in manifest["official_fee_source"]["rows"]
+    )
+    assert row_digests == tuple(
+        manifest["official_fee_selector"]["fee_row_sha256s"][fee_code]
+        for fee_code in manifest["official_fee_selector"]["fee_codes"]
+    )
+    authority = json.loads((root / "authority.json").read_text(encoding="utf-8"))
+    assert authority["source_digests"][3]["sha256"] == (
+        source.rate_book.source_snapshot_hash
+    )
+    assert tuple(row["sha256"] for row in authority["source_digests"][4:]) == (
+        row_digests
+    )
+    with pytest.raises(AttributeError):
+        source.rows[0].fee_code = "MUTATED"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param(
+            lambda manifest: manifest.pop("official_fee_source"),
+            id="missing-source",
+        ),
+        pytest.param(_add_snapshot_source, id="extra-source"),
+        pytest.param(_make_source_snapshot_noncanonical, id="noncanonical-snapshot"),
+        pytest.param(_make_source_snapshot_hash_invalid, id="snapshot-hash"),
+        pytest.param(_make_source_reference_untrusted, id="untrusted-reference"),
+        pytest.param(
+            lambda manifest: manifest["official_fee_selector"].update(
+                rate_book_sha256=_sha256(b"selector-book-drift")
+            ),
+            id="selector-book-digest",
+        ),
+        pytest.param(
+            lambda manifest: manifest["official_fee_selector"][
+                "fee_row_sha256s"
+            ].update(
+                {
+                    "CNIPA-GRANT-REGISTRATION": _sha256(
+                        b"selector-row-drift"
+                    )
+                }
+            ),
+            id="selector-row-digest",
+        ),
+        pytest.param(_add_unselected_official_fee_row, id="row-set"),
+        pytest.param(_reverse_official_fee_rows, id="row-order"),
+        pytest.param(
+            lambda manifest: manifest["official_fee_source"]["rate_book"].update(
+                source_authority="NOT-CNIPA"
+            ),
+            id="source-authority",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, source_version="2026.03.30-DRIFT"
+            ),
+            id="source-version",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, source_doc="https://www.cnipa.gov.cn/art/reference-drift.html"
+            ),
+            id="source-reference",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(manifest, fee_type="SERVICE"),
+            id="non-gov",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(manifest, currency="USD"),
+            id="non-cny",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, default_amount="0.00"
+            ),
+            id="nonpositive",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(manifest, calc_mode="FORMULA"),
+            id="non-fixed",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, allow_reduction=True
+            ),
+            id="reducible",
+        ),
+        pytest.param(_set_book_interval_before_due_date, id="book-interval"),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, effective_to="2026-11-23"
+            ),
+            id="row-interval",
+        ),
+    ],
+)
+def test_v6_official_fee_source_rejects_contract_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation,
+) -> None:
+    root, manifest, digest = _valid_v6_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+    _load_bundle(root, digest)
+
+    mutation(manifest)
+
+    with pytest.raises(DemoBundleError):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+
 def test_v6_bundle_returns_exact_immutable_descriptors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -993,8 +1322,18 @@ def test_v6_bundle_returns_exact_immutable_descriptors(
         "CNIPA-GRANT-ANNOUNCEMENT",
     )
     assert snapshot.official_fee_selector.fee_row_sha256s == (
-        ("CNIPA-GRANT-REGISTRATION", "f" * 64),
-        ("CNIPA-GRANT-ANNOUNCEMENT", "a" * 64),
+        (
+            "CNIPA-GRANT-REGISTRATION",
+            manifest["official_fee_selector"]["fee_row_sha256s"][
+                "CNIPA-GRANT-REGISTRATION"
+            ],
+        ),
+        (
+            "CNIPA-GRANT-ANNOUNCEMENT",
+            manifest["official_fee_selector"]["fee_row_sha256s"][
+                "CNIPA-GRANT-ANNOUNCEMENT"
+            ],
+        ),
     )
     assert snapshot.readiness == "TECHNICAL_REHEARSAL_INPUT_READY"
     assert manifest["contract"]["ref"] == V6_CONTRACT_REF
