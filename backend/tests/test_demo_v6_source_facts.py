@@ -12,6 +12,7 @@ from app.modules.fees.models import (
     FeeObligation,
     FeeObligationDraftItemLink,
     FeeObligationLine,
+    FeeRate,
 )
 
 
@@ -53,6 +54,10 @@ def test_service_draft_source_facts_are_authoritative_and_multiline(
         "300.00",
     ]
     assert [row["adjustable"] for row in payload["lines"]] == [False, True]
+    assert {row["source_authority"] for row in payload["lines"]} == {
+        "SYNTHETIC_TEST_ONLY"
+    }
+    assert {row["effective_date"] for row in payload["lines"]} == {None}
     assert all(len(row["source_sha256"]) == 64 for row in payload["lines"])
 
     with session_factory() as transaction:
@@ -171,6 +176,20 @@ def test_gov_draft_source_facts_use_active_rate_binding(
             "2026-03-30",
             "2026-04-15",
         }
+        assert {row["source_sha256"] for row in payload["lines"]} == {
+            helpers["demo_official_fee"]._rate_row_sha256(row)
+            for row in helpers["_selected_rate_rows"]("expected-source-facts")
+        }
+        with session_factory() as transaction:
+            rate = transaction.scalar(
+                select(FeeRate).where(FeeRate.fee_code == helpers["FEE_CODES"][0])
+            )
+            rate.enabled = False
+            transaction.commit()
+        drifted = client.get(
+            f"/api/v1/fees/drafts/{draft_id}/source-facts", headers=auth_headers
+        )
+        assert drifted.status_code == 409
     finally:
         try:
             next(runtime)

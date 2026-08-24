@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import json
 import runpy
+from datetime import datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import func, select
+from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError
 
 from app.api import deps
 from app.core.errors import BusinessError
+from app.modules.auth.models import T_User
 from app.modules.cases.models import CaseActivityEvent
 from app.modules.fees import demo_service
 from app.modules.fees.models import (
@@ -116,6 +122,23 @@ def test_adjustable_service_item_creates_one_superseding_revision(
         replacement = transaction.get(
             FeeObligation, payload["superseding_obligation_id"]
         )
+        instruction_event = transaction.get(
+            CaseActivityEvent, payload["instruction_activity_id"]
+        )
+        replacement_recognition = transaction.get(
+            CaseActivityEvent, instruction_event.source_activity_id
+        )
+        adjustment_event = transaction.get(
+            CaseActivityEvent, replacement_recognition.source_activity_id
+        )
+        original_instruction = transaction.get(
+            CaseActivityEvent, adjustment_event.source_activity_id
+        )
+        assert adjustment_event.id == payload["adjustment_activity_id"]
+        assert json.loads(original_instruction.payload_json)["obligation_id"] == (
+            original_obligation_id
+        )
+        assert json.loads(original_instruction.payload_json)["instruction"] == "PAY"
         assert (
             original.obligation_status,
             original.client_instruction_status,
@@ -230,6 +253,11 @@ def test_adjustment_rejects_fixed_locked_and_invalid_http_boundaries(
         "/api/v1/fees/drafts/00000000-0000-0000-0000-000000000000/"
         "demo-service-adjustment",
         json=body,
+        headers=auth_headers,
+    ).status_code == 404
+    assert client.post(
+        path,
+        json={**body, "item_id": "00000000-0000-0000-0000-000000000000"},
         headers=auth_headers,
     ).status_code == 404
     assert client.post(
@@ -357,3 +385,185 @@ def test_adjustment_rejects_partial_relink_state_without_new_writes(
         assert transaction.scalar(
             select(func.count()).select_from(FeeObligation)
         ) == before_obligations
+
+
+def test_adjustment_rejects_compensating_current_item_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, _obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item.quantity = 2
+        item.unit_price = 150
+        item.amount = 300
+        transaction.commit()
+        item_id = item.id
+    response = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json={
+            "item_id": item_id,
+            "expected_quantity": 1,
+            "new_quantity": 2,
+            "reason": "客户确认增加一份附加文件处理",
+            "idempotency_key": "v6-service-adjustment-drift",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+def test_adjustment_rejects_canonical_source_authority_rewrite(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        obligation = transaction.get(FeeObligation, obligation_id)
+        source = transaction.get(CaseActivityEvent, obligation.source_activity_id)
+        payload = json.loads(source.payload_json)
+        payload["items"][1]["final_quantity"] = 3
+        source.payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        transaction.commit()
+        item_id = item.id
+    response = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json={
+            "item_id": item_id,
+            "expected_quantity": 1,
+            "new_quantity": 3,
+            "reason": "客户确认增加两份附加文件处理",
+            "idempotency_key": "v6-service-adjustment-source-drift",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+def test_adjustment_maps_sqlite_write_lock_to_409(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, _obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        actor = transaction.scalar(select(T_User).order_by(T_User.id))
+        item_id = item.id
+        actor_id = actor.id
+
+    original = Connection.exec_driver_sql
+
+    def locked(connection, statement, *args, **kwargs):
+        if statement == "BEGIN IMMEDIATE":
+            raise OperationalError(statement, {}, RuntimeError("database is locked"))
+        return original(connection, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Connection, "exec_driver_sql", locked)
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as caught:
+            demo_service.adjust_demo_service_draft(
+                demo_service.DemoServiceAdjustmentCommand(
+                    draft_id=draft_id,
+                    item_id=item_id,
+                    expected_quantity=1,
+                    new_quantity=2,
+                    reason="客户确认增加一份附加文件处理",
+                    actor_id=actor_id,
+                    idempotency_key="v6-service-adjustment-locked-db",
+                    adjusted_at=datetime(2026, 8, 24, 9, 0),
+                ),
+                transaction,
+            )
+    assert (caught.value.code, caught.value.status_code) == (
+        "DEMO_SERVICE_ADJUSTMENT_CONFLICT",
+        409,
+    )
+
+
+def test_adjustment_replay_rejects_canonical_durable_graph_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, _obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item_id = item.id
+    body = {
+        "item_id": item_id,
+        "expected_quantity": 1,
+        "new_quantity": 2,
+        "reason": "客户确认增加一份附加文件处理",
+        "idempotency_key": "v6-service-adjustment-replay-drift",
+    }
+    first = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    with session_factory() as transaction:
+        activity = transaction.get(
+            CaseActivityEvent,
+            first.json()["adjustment_activity_id"],
+        )
+        payload = json.loads(activity.payload_json)
+        payload["after_digest"] = "0" * 64
+        activity.payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.commit()
+    replay = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert replay.status_code == 409

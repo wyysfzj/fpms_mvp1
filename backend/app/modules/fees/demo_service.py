@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.demo_bundle import DemoBundleError, DemoBundleSnapshot, load_demo_bundle
@@ -27,7 +28,11 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleProjection,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.cases.models import (
+    Case,
+    CaseActivityEvent,
+    CaseActivityEventEvidence,
+)
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
@@ -55,6 +60,7 @@ from app.modules.fees.obligation_service import (
     recognize_obligation,
     record_client_instruction,
 )
+from app.modules.fees.service import get_fee_draft, list_fee_items
 from app.modules.masterdata.clients.models import Client, ClientContact
 from app.modules.official_workflows.models import OfficialWorkPackage
 from app.modules.tasks.models import Task
@@ -219,6 +225,39 @@ def _demo_service_items(snapshot: DemoBundleSnapshot) -> DemoServiceItems:
     )
 
 
+def _service_source_payload(
+    snapshot: DemoBundleSnapshot,
+    selection: DemoServiceItems,
+) -> dict[str, object]:
+    return {
+        "schema": _SOURCE_SCHEMA,
+        "bundle_id": selection.bundle_id,
+        "bundle_version": selection.bundle_version,
+        "manifest_sha256": selection.manifest_sha256,
+        "authority_sha256": snapshot.authority_sha256,
+        "authority_classification": snapshot.authority_classification,
+        "approved_by": snapshot.approved_by,
+        "approved_at": snapshot.approved_at,
+        "items": [
+            {
+                "item_code": item.item_code,
+                "name_zh_cn": item.name_zh_cn,
+                "currency": item.currency,
+                "unit_price": format(item.unit_price, ".2f"),
+                "quantity": item.quantity,
+                "final_quantity": item.final_quantity,
+                "adjustable": item.adjustable,
+                "amount": format(item.amount, ".2f"),
+                "source_ref": item.source_ref,
+                "source_version": item.source_version,
+                "source_sha256": item.source_sha256,
+                "disclaimer_zh_cn": item.disclaimer_zh_cn,
+            }
+            for item in selection.items
+        ],
+    }
+
+
 def get_demo_service_item() -> DemoServiceItems:
     return _demo_service_items(_bundle())
 
@@ -294,7 +333,10 @@ def create_demo_service_obligation(
     idempotency_key: str,
     recognized_at: datetime,
 ) -> DemoServiceObligationResult:
-    selection = get_demo_service_item()
+    snapshot = _bundle()
+    if snapshot.schema_version != _INTEGRATED_SCHEMA:
+        raise _config_required("当前输入不是集成演示方案 A 的运行包")
+    selection = _demo_service_items(snapshot)
     values = (
         (case_id, 36, "case_id"),
         (actor_id, 36, "actor_id"),
@@ -361,29 +403,7 @@ def create_demo_service_obligation(
                 idempotency_key=source_key,
                 source_activity_id=None,
                 supersedes_event_id=None,
-                payload={
-                    "schema": _SOURCE_SCHEMA,
-                    "bundle_id": selection.bundle_id,
-                    "bundle_version": selection.bundle_version,
-                    "manifest_sha256": selection.manifest_sha256,
-                    "items": [
-                        {
-                            "item_code": item.item_code,
-                            "name_zh_cn": item.name_zh_cn,
-                            "currency": item.currency,
-                            "unit_price": format(item.unit_price, ".2f"),
-                            "quantity": item.quantity,
-                            "final_quantity": item.final_quantity,
-                            "adjustable": item.adjustable,
-                            "amount": format(item.amount, ".2f"),
-                            "source_ref": item.source_ref,
-                            "source_version": item.source_version,
-                            "source_sha256": item.source_sha256,
-                            "disclaimer_zh_cn": item.disclaimer_zh_cn,
-                        }
-                        for item in selection.items
-                    ],
-                },
+                payload=_service_source_payload(snapshot, selection),
                 confirmation_status=ConfirmationStatus.CONFIRMED,
             ),
             transaction,
@@ -486,16 +506,36 @@ def _snapshot_digest(rows: list[dict[str, object]]) -> str:
 def _service_source_rows(
     transaction: Session,
     source_activity_id: str,
+    *,
+    case_id: str,
 ) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
     source = transaction.get(CaseActivityEvent, source_activity_id)
-    if source is None or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED":
+    if (
+        source is None
+        or source.case_id != case_id
+        or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED"
+        or source.lane != ActivityLane.FEE.value
+        or source.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or source.source_activity_id is not None
+        or source.supersedes_event_id is not None
+    ):
         _adjustment_conflict("服务费来源记录不存在")
     payload = _stored_adjustment_payload(source)
     rows = payload.get("items")
+    snapshot = _bundle()
+    if snapshot.schema_version != _INTEGRATED_SCHEMA:
+        _adjustment_conflict("服务费运行输入无效")
+    selection = _demo_service_items(snapshot)
+    evidence = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == source.id
+            )
+        )
+    )
+    expected_object_id = str(UUID(snapshot.manifest_sha256[:32]))
     if (
-        payload.get("schema") != _SOURCE_SCHEMA
-        or type(payload.get("manifest_sha256")) is not str
-        or len(str(payload.get("manifest_sha256"))) != 64
+        payload != _service_source_payload(snapshot, selection)
         or type(rows) is not list
         or len(rows) < 2
         or any(type(row) is not dict for row in rows)
@@ -508,6 +548,12 @@ def _service_source_rows(
             for row in rows
         )
         or len({row.get("item_code") for row in rows}) != len(rows)
+        or len(evidence) != 1
+        or evidence[0].case_id != case_id
+        or evidence[0].evidence_kind != "DEMO_SERVICE_BUNDLE"
+        or evidence[0].object_type != "DemoBundle"
+        or evidence[0].object_id != expected_object_id
+        or evidence[0].content_hash != snapshot.manifest_sha256
     ):
         _adjustment_conflict("服务费来源记录无效")
     return source, tuple(rows)
@@ -520,13 +566,40 @@ def _service_adjustment_replay(
 ) -> DemoServiceAdjustmentResult:
     payload = _stored_adjustment_payload(activity)
     if (
-        payload.get("schema") != "FPMS_DEMO_SERVICE_DRAFT_ADJUSTED_V1"
+        set(payload)
+        != {
+            "schema",
+            "draft_id",
+            "item_id",
+            "expected_quantity",
+            "new_quantity",
+            "reason",
+            "actor_id",
+            "original_obligation_id",
+            "original_instruction_activity_id",
+            "source_activity_id",
+            "before_lines",
+            "after_lines",
+            "before_digest",
+            "after_digest",
+            "before_total",
+            "after_total",
+        }
+        or payload.get("schema") != "FPMS_DEMO_SERVICE_DRAFT_ADJUSTED_V1"
         or payload.get("draft_id") != command.draft_id
         or payload.get("item_id") != command.item_id
         or payload.get("expected_quantity") != command.expected_quantity
         or payload.get("new_quantity") != command.new_quantity
         or payload.get("reason") != command.reason
         or payload.get("actor_id") != command.actor_id
+        or activity.activity_type != "DEMO_SERVICE_DRAFT_ADJUSTED"
+        or activity.lane != ActivityLane.FEE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.actor_id != command.actor_id
+        or activity.reviewer_id is not None
+        or activity.supersedes_event_id is not None
+        or activity.idempotency_key
+        != f"demo-service-adjustment:{command.idempotency_key}"
     ):
         _adjustment_conflict("服务费草单调整幂等输入冲突")
     original_id = payload.get("original_obligation_id")
@@ -559,13 +632,45 @@ def _service_adjustment_replay(
         )
     )
     original = transaction.get(FeeObligation, original_id)
+    before_rows = payload.get("before_lines")
+    after_rows = payload.get("after_lines")
+    if (
+        type(before_rows) is not list
+        or type(after_rows) is not list
+        or len(before_rows) != len(after_rows)
+        or any(type(row) is not dict for row in before_rows + after_rows)
+        or any(
+            set(row)
+            != {
+                "fee_code",
+                "fee_name",
+                "fee_item_id",
+                "quantity",
+                "unit_price",
+                "amount",
+                "source_sha256",
+            }
+            for row in before_rows + after_rows
+        )
+    ):
+        _adjustment_conflict("服务费草单调整记录无效")
     try:
         before_total = Decimal(str(payload["before_total"]))
         after_total = Decimal(str(payload["after_total"]))
+        recomputed_before_total = sum(
+            (Decimal(str(row["amount"])) for row in before_rows), Decimal("0.00")
+        )
+        recomputed_after_total = sum(
+            (Decimal(str(row["amount"])) for row in after_rows), Decimal("0.00")
+        )
     except (InvalidOperation, KeyError, TypeError, ValueError):
         _adjustment_conflict("服务费草单调整记录无效")
-    after_rows = payload.get("after_lines")
-    if type(after_rows) is not list or any(type(row) is not dict for row in after_rows):
+    if (
+        payload.get("before_digest") != _snapshot_digest(before_rows)
+        or payload.get("after_digest") != _snapshot_digest(after_rows)
+        or before_total != recomputed_before_total
+        or after_total != recomputed_after_total
+    ):
         _adjustment_conflict("服务费草单调整记录无效")
     target_rows = [row for row in after_rows if row.get("fee_item_id") == command.item_id]
     try:
@@ -574,6 +679,81 @@ def _service_adjustment_replay(
         _adjustment_conflict("服务费草单调整记录无效")
     if len(target_rows) != 1:
         _adjustment_conflict("服务费草单调整记录无效")
+    source_id = payload.get("source_activity_id")
+    original_instruction_id = payload.get("original_instruction_activity_id")
+    if type(source_id) is not str or type(original_instruction_id) is not str:
+        _adjustment_conflict("服务费草单调整记录无效")
+    _service_source_rows(
+        transaction,
+        source_id,
+        case_id=activity.case_id,
+    )
+    original_instruction = transaction.get(
+        CaseActivityEvent,
+        original_instruction_id,
+    )
+    if original_instruction is None:
+        _adjustment_conflict("服务费草单调整记录无效")
+    original_instruction_payload = _stored_adjustment_payload(original_instruction)
+    instruction_payload = _stored_adjustment_payload(instruction)
+    if (
+        activity.source_activity_id != original_instruction_id
+        or original_instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+        or original_instruction_payload.get("obligation_id") != original_id
+        or original_instruction_payload.get("instruction") != "PAY"
+        or instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+        or instruction_payload.get("obligation_id") != child.id
+        or instruction_payload.get("instruction") != "PAY"
+        or instruction_payload.get("actor_id") != command.actor_id
+    ):
+        _adjustment_conflict("服务费草单调整谱系无效")
+    item_by_id = {item.id: item for item in items}
+    before_by_item = {row.get("fee_item_id"): row for row in before_rows}
+    if (
+        {row.get("fee_item_id") for row in after_rows} != set(item_by_id)
+        or set(before_by_item) != set(item_by_id)
+        or {row.get("fee_code") for row in after_rows}
+        != {item.fee_code for item in items}
+    ):
+        _adjustment_conflict("服务费草单调整结果漂移")
+    for row in after_rows:
+        item = item_by_id.get(row.get("fee_item_id"))
+        before_row = before_by_item.get(row.get("fee_item_id"))
+        try:
+            row_amount = Decimal(str(row["amount"]))
+            row_unit_price = Decimal(str(row["unit_price"]))
+        except (InvalidOperation, KeyError, TypeError, ValueError):
+            _adjustment_conflict("服务费草单调整记录无效")
+        if (
+            item is None
+            or before_row is None
+            or item.fee_code != row.get("fee_code")
+            or item.fee_name != row.get("fee_name")
+            or item.amount != row_amount
+            or any(
+                before_row.get(field) != row.get(field)
+                for field in (
+                    "fee_code",
+                    "fee_name",
+                    "fee_item_id",
+                    "unit_price",
+                    "source_sha256",
+                )
+            )
+            or (
+                row.get("fee_item_id") == command.item_id
+                and (
+                    before_row.get("quantity") != command.expected_quantity
+                    or row.get("quantity") != command.new_quantity
+                    or item.unit_price != row_unit_price
+                )
+            )
+            or (
+                row.get("fee_item_id") != command.item_id
+                and before_row.get("quantity") != row.get("quantity")
+            )
+        ):
+            _adjustment_conflict("服务费草单调整结果漂移")
     if (
         draft.status not in {"OPEN", "LOCKED"}
         or original is None
@@ -648,9 +828,20 @@ def adjust_demo_service_draft(
         connection.dialect.name == "sqlite"
         and not connection.connection.driver_connection.in_transaction
     ):
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        except OperationalError as exc:
+            raise BusinessError(
+                code="DEMO_SERVICE_ADJUSTMENT_CONFLICT",
+                message="服务费草单正在被其他操作修改",
+                status_code=409,
+            ) from exc
 
-    draft = transaction.get(FeeDraft, command.draft_id)
+    draft = transaction.scalar(
+        select(FeeDraft)
+        .where(FeeDraft.id == command.draft_id)
+        .with_for_update()
+    )
     if draft is None:
         raise BusinessError(
             code="FEE_DRAFT_NOT_FOUND",
@@ -680,6 +871,7 @@ def adjust_demo_service_draft(
             select(FeeItem)
             .where(FeeItem.draft_id == draft.id)
             .order_by(FeeItem.fee_code, FeeItem.id)
+            .with_for_update()
         )
     )
     if len(items) < 2 or any(item.fee_type != FeeDomain.SERVICE.value for item in items):
@@ -688,20 +880,24 @@ def adjust_demo_service_draft(
         transaction.scalars(
             select(FeeObligationDraftItemLink).where(
                 FeeObligationDraftItemLink.fee_item_id.in_(tuple(item.id for item in items))
-            )
+            ).with_for_update()
         )
     )
     lines = tuple(
         transaction.scalars(
             select(FeeObligationLine).where(
                 FeeObligationLine.id.in_(tuple(link.obligation_line_id for link in links))
-            )
+            ).with_for_update()
         )
     )
     obligation_ids = {line.obligation_id for line in lines}
     if len(links) != len(items) or len(lines) != len(items) or len(obligation_ids) != 1:
         _adjustment_conflict("服务费草单关联不完整")
-    original = transaction.get(FeeObligation, obligation_ids.pop())
+    original = transaction.scalar(
+        select(FeeObligation)
+        .where(FeeObligation.id == obligation_ids.pop())
+        .with_for_update()
+    )
     if original is None:
         _adjustment_conflict("服务费义务不存在")
     get_fee_obligation(original.id, transaction)
@@ -722,19 +918,27 @@ def adjust_demo_service_draft(
     ) is not None:
         _adjustment_conflict("服务费草单只允许调整一次")
 
-    source, source_rows = _service_source_rows(transaction, original.source_activity_id)
+    source, source_rows = _service_source_rows(
+        transaction,
+        original.source_activity_id,
+        case_id=original.case_id,
+    )
     source_by_code = {str(row.get("item_code")): row for row in source_rows}
     item_by_code = {str(item.fee_code): item for item in items}
     line_by_code = {line.fee_code: line for line in lines}
     if set(source_by_code) != set(item_by_code) or set(item_by_code) != set(line_by_code):
         _adjustment_conflict("服务费来源与草单明细不一致")
     selected = next((item for item in items if item.id == command.item_id), None)
+    if selected is None:
+        raise BusinessError(
+            code="FEE_ITEM_NOT_FOUND",
+            message="费用明细不存在",
+            status_code=404,
+        )
     selected_source = None if selected is None else source_by_code.get(str(selected.fee_code))
     if (
-        selected is None
-        or selected_source is None
+        selected_source is None
         or selected_source.get("adjustable") is not True
-        or selected_source.get("quantity") != command.expected_quantity
         or selected_source.get("final_quantity") != command.new_quantity
     ):
         _adjustment_conflict("服务费项目或目标数量不符合已授权配置")
@@ -779,8 +983,16 @@ def adjust_demo_service_draft(
         if type(quantity) is not int or quantity <= 0:
             _adjustment_conflict("服务费来源数量无效")
         amount = unit_price * quantity
-        if item.amount != amount or line.payable_amount != amount:
+        if (
+            item.amount != amount
+            or line.payable_amount != amount
+            or (item.quantity is not None and item.quantity != Decimal(quantity))
+            or (item.unit_price is not None and item.unit_price != unit_price)
+            or (item.quantity is None) != (item.unit_price is None)
+        ):
             _adjustment_conflict("服务费来源金额与草单不一致")
+        if item.id == command.item_id and quantity != command.expected_quantity:
+            _adjustment_conflict("服务费项目当前数量已变化")
         before = {
             "fee_code": code,
             "fee_name": line.fee_name,
@@ -834,7 +1046,7 @@ def adjust_demo_service_draft(
                 actor_id=command.actor_id,
                 reviewer_id=None,
                 idempotency_key=f"demo-service-adjustment:{command.idempotency_key}",
-                source_activity_id=source.id,
+                source_activity_id=prior_instruction.id,
                 supersedes_event_id=None,
                 payload=payload,
                 confirmation_status=ConfirmationStatus.CONFIRMED,
@@ -896,26 +1108,69 @@ def adjust_demo_service_draft(
             )
         }
         link_by_item = {link.fee_item_id: link for link in links}
-        for item in items:
-            source_row = source_by_code[str(item.fee_code)]
-            quantity = (
-                command.new_quantity
-                if item.id == command.item_id
-                else int(source_row["quantity"])
+        target_source = source_by_code[str(selected.fee_code)]
+        target_unit_price = Decimal(str(target_source["unit_price"]))
+        target_changed = transaction.execute(
+            update(FeeItem)
+            .where(
+                FeeItem.id == selected.id,
+                FeeItem.draft_id == draft.id,
+                FeeItem.amount == selected.amount,
+                (
+                    FeeItem.quantity.is_(None)
+                    if selected.quantity is None
+                    else FeeItem.quantity == selected.quantity
+                ),
+                (
+                    FeeItem.unit_price.is_(None)
+                    if selected.unit_price is None
+                    else FeeItem.unit_price == selected.unit_price
+                ),
             )
-            unit_price = Decimal(str(source_row["unit_price"]))
-            if item.id == command.item_id:
-                item.quantity = Decimal(quantity)
-                item.unit_price = unit_price
-                item.amount = unit_price * quantity
-                item.updated_by = command.actor_id
-            link_by_item[item.id].obligation_line_id = replacement_lines[
-                str(item.fee_code)
-            ].id
-            link_by_item[item.id].updated_by = command.actor_id
-        draft.total_service = after_total
-        draft.amount = after_total
-        draft.updated_by = command.actor_id
+            .values(
+                quantity=Decimal(command.new_quantity),
+                unit_price=target_unit_price,
+                amount=target_unit_price * command.new_quantity,
+                updated_by=command.actor_id,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if target_changed.rowcount != 1:
+            _adjustment_conflict("服务费草单明细并发变化")
+        for item in items:
+            link = link_by_item[item.id]
+            relinked = transaction.execute(
+                update(FeeObligationDraftItemLink)
+                .where(
+                    FeeObligationDraftItemLink.id == link.id,
+                    FeeObligationDraftItemLink.fee_item_id == item.id,
+                    FeeObligationDraftItemLink.obligation_line_id
+                    == link.obligation_line_id,
+                )
+                .values(
+                    obligation_line_id=replacement_lines[str(item.fee_code)].id,
+                    updated_by=command.actor_id,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if relinked.rowcount != 1:
+                _adjustment_conflict("服务费草单关联并发变化")
+        draft_cas = transaction.execute(
+            update(FeeDraft)
+            .where(
+                FeeDraft.id == draft.id,
+                FeeDraft.status == "OPEN",
+                FeeDraft.total_gov == Decimal("0.00"),
+                FeeDraft.total_service == before_total,
+                FeeDraft.amount == before_total,
+            )
+            .values(
+                total_service=after_total,
+                amount=after_total,
+                updated_by=command.actor_id,
+            )
+            .execution_options(synchronize_session=False)
+        )
         original_cas = transaction.execute(
             update(FeeObligation)
             .where(
@@ -946,12 +1201,27 @@ def adjust_demo_service_draft(
             .values(draft_status=FeeObligationDraftStatus.CREATED.value)
             .execution_options(synchronize_session=False)
         )
-        if original_cas.rowcount != 1 or replacement_cas.rowcount != 1:
+        if (
+            draft_cas.rowcount != 1
+            or original_cas.rowcount != 1
+            or replacement_cas.rowcount != 1
+        ):
             _adjustment_conflict("服务费草单调整状态并发变化")
         transaction.flush()
         transaction.expire_all()
         get_fee_obligation(original.id, transaction)
         get_fee_obligation(replacement.obligation.id, transaction)
+        validated_draft = get_fee_draft(transaction, draft_id=draft.id)
+        validated_items = list_fee_items(transaction, draft_id=draft.id)
+        if (
+            validated_draft.status != "OPEN"
+            or validated_draft.total_service != after_total
+            or validated_draft.amount != after_total
+            or {item.id for item in validated_items} != {item.id for item in items}
+            or sum((item.amount for item in validated_items), Decimal("0.00"))
+            != after_total
+        ):
+            _adjustment_conflict("服务费草单调整结果无效")
     return DemoServiceAdjustmentResult(
         draft_id=draft.id,
         original_obligation_id=original.id,

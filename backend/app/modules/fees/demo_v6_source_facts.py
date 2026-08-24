@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date
@@ -11,16 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
 from app.modules.cases.models import CaseActivityEvent
+from app.modules.fees.demo_service import _service_source_rows
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
     FeeObligation,
     FeeObligationDraftItemLink,
     FeeObligationLine,
-    FeeRate,
-    OfficialRateBook,
 )
 from app.modules.fees.obligation_service import get_fee_obligation
+from app.modules.grant_fees.demo_official_fee import preview_grant_official_fees
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,13 +135,20 @@ def _service_facts(
         if type(source_id) is not str:
             _invalid()
         current_source = transaction.get(CaseActivityEvent, source_id)
-    if current_source is None or current_source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED":
+    if current_source is None:
         _invalid()
-    source_payload = _payload(current_source)
-    source_rows = source_payload.get("items")
-    if source_payload.get("schema") != "FPMS_DEMO_SERVICE_PRICE_ITEMS_SELECTED_V2" or type(
-        source_rows
-    ) is not list:
+    try:
+        current_source, validated_rows = _service_source_rows(
+            transaction,
+            current_source.id,
+            case_id=header.case_id,
+        )
+    except BusinessError:
+        _invalid()
+    source_rows = list(validated_rows)
+    validated_payload = _payload(current_source)
+    source_authority = validated_payload.get("authority_classification")
+    if type(source_authority) is not str:
         _invalid()
     source_by_code = {
         row.get("item_code"): row for row in source_rows if type(row) is dict
@@ -193,10 +199,10 @@ def _service_facts(
                 quantity=quantity,
                 unit_price=unit_price,
                 amount=expected,
-                source_authority="RUNTIME_BUNDLE",
+                source_authority=source_authority,
                 source_ref=str(source.get("source_ref")),
                 source_version=str(source.get("source_version")),
-                effective_date=line.source_date,
+                effective_date=None,
                 source_sha256=str(source.get("source_sha256")),
                 activation_status="DIGEST_BOUND",
                 adjustable=source.get("adjustable") is True,
@@ -237,41 +243,30 @@ def _gov_facts(
     ) is not list:
         _invalid()
     by_code = {row.get("fee_code"): row for row in source_lines if type(row) is dict}
-    books = tuple(
-        transaction.scalars(
-            select(OfficialRateBook).where(
-                OfficialRateBook.version_code == payload.get("rate_book_version"),
-                OfficialRateBook.source_snapshot_hash == payload.get("rate_book_sha256"),
-                OfficialRateBook.approval_status == "APPROVED",
-                OfficialRateBook.activation_status == "ACTIVE",
-            )
-        )
-    )
-    if (
-        len(books) != 1
-        or hashlib.sha256(books[0].source_snapshot.encode("utf-8")).hexdigest()
-        != books[0].source_snapshot_hash
-    ):
+    task_id = payload.get("grant_fee_task_id")
+    if type(task_id) is not str:
         _invalid()
-    book = books[0]
-    rates = tuple(
-        transaction.scalars(
-            select(FeeRate).where(
-                FeeRate.official_rate_book_id == book.id,
-                FeeRate.fee_code.in_(tuple(by_code)),
-            )
+    try:
+        preview = preview_grant_official_fees(
+            transaction,
+            grant_fee_task_id=task_id,
         )
-    )
-    rate_by_code = {rate.fee_code: rate for rate in rates}
-    if set(rate_by_code) != set(by_code) or set(by_code) != {
-        line.fee_code for _item, _link, line in rows
-    }:
+    except BusinessError:
+        _invalid()
+    preview_by_code = {line.fee_code: line for line in preview.lines}
+    if (
+        payload.get("preview_digest") != preview.preview_digest
+        or payload.get("rate_book_version") != preview.rate_book_version
+        or payload.get("rate_book_sha256") != preview.rate_book_sha256
+        or set(preview_by_code) != set(by_code)
+        or set(by_code) != {line.fee_code for _item, _link, line in rows}
+    ):
         _invalid()
     facts: list[DemoV6DraftSourceFactLine] = []
     for item, link, line in rows:
         source_line = by_code.get(line.fee_code)
-        rate = rate_by_code.get(line.fee_code)
-        if type(source_line) is not dict or rate is None:
+        preview_line = preview_by_code.get(line.fee_code)
+        if type(source_line) is not dict or preview_line is None:
             _invalid()
         quantity = source_line.get("quantity")
         if type(quantity) is not int or quantity <= 0:
@@ -286,8 +281,9 @@ def _gov_facts(
             or item.fee_code != line.fee_code
             or item.amount != amount
             or line.payable_amount != amount
-            or rate.default_amount != unit_price
-            or rate.source_status != "ACTIVE"
+            or preview_line.quantity != quantity
+            or preview_line.payable_amount != amount
+            or preview_line.unit_price != unit_price
         ):
             _invalid()
         facts.append(
@@ -299,11 +295,11 @@ def _gov_facts(
                 quantity=quantity,
                 unit_price=unit_price,
                 amount=amount,
-                source_authority=book.source_authority,
-                source_ref=book.source_reference,
-                source_version=book.source_version,
-                effective_date=rate.effective_from,
-                source_sha256=book.source_snapshot_hash,
+                source_authority=preview.source_authority,
+                source_ref=preview_line.source_reference,
+                source_version=preview_line.source_version,
+                effective_date=preview_line.effective_from,
+                source_sha256=preview_line.rate_row_sha256,
                 activation_status="APPROVED_ACTIVE",
                 adjustable=False,
                 adjustment_activity_id=None,
