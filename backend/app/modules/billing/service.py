@@ -10,7 +10,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -257,6 +257,24 @@ def abandon_demo_finance_command(
     if command is not None:
         db.delete(command)
         db.commit()
+
+
+def _begin_demo_finance_write(db: Session) -> None:
+    connection = db.connection()
+    if (
+        connection.dialect.name != "sqlite"
+        or connection.connection.driver_connection.in_transaction
+    ):
+        return
+    try:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    except OperationalError:
+        db.rollback()
+        raise_business_error(
+            "DEMO_FINANCE_WRITE_BUSY",
+            "财务操作暂时繁忙，请重试",
+            status_code=409,
+        )
 
 
 def _run_commission_hook_non_blocking(db: Session, bill: Bill) -> None:
@@ -2383,12 +2401,7 @@ def create_demo_bank_receipt(
     actor_id: str,
 ) -> DemoBankReceiptResult:
     _demo_finance_scope_or_fail()
-    connection = db.connection()
-    if (
-        connection.dialect.name == "sqlite"
-        and not connection.connection.driver_connection.in_transaction
-    ):
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    _begin_demo_finance_write(db)
     bill = db.scalar(select(Bill).where(Bill.id == data.target_bill_id))
     if bill is None:
         raise_business_error(
@@ -2626,12 +2639,7 @@ def create_demo_full_offset(
     actor_id: str,
 ) -> DemoFullOffsetResult:
     _demo_finance_scope_or_fail()
-    connection = db.connection()
-    if (
-        connection.dialect.name == "sqlite"
-        and not connection.connection.driver_connection.in_transaction
-    ):
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    _begin_demo_finance_write(db)
     bill = db.get(Bill, data.bill_id)
     if bill is None:
         raise_business_error("DEMO_OFFSET_BILL_NOT_FOUND", "目标账单不存在", status_code=404)
@@ -2894,6 +2902,14 @@ def reconcile_demo_full_offset(
         if bill is not None
         else ()
     )
+    if not offsets and not any(
+        row.payment_line_id == request.payment_line_id for row in active_offsets
+    ):
+        raise_business_error(
+            "DEMO_OFFSET_DOMAIN_RESULT_NOT_FOUND",
+            "核销命令尚未形成可恢复的业务结果",
+            status_code=404,
+        )
     active_offset_total = sum(
         (row.offset_amt for row in active_offsets),
         Decimal("0"),

@@ -240,3 +240,40 @@ def test_demo_gov_payment_http_and_scope_boundaries(
         "/api/v1/gov-payments/idempotency/absent",
         headers=auth_headers,
     ).status_code == 404
+
+
+@pytest.mark.parametrize("damaged_snapshot", ["not-json", "{}"])
+def test_completed_demo_gov_payment_rejects_damaged_result_snapshot(
+    client,
+    auth_headers,
+    session_factory,
+    runtime_bundle,
+    damaged_snapshot,
+) -> None:
+    pay_list_id, items = _gov_pay_list(session_factory, runtime_bundle)
+    body = _command(pay_list_id, items[0], "demo-v6-gov-payment-damaged")
+    path = "/api/v1/gov-payments/demo-command"
+    created = client.post(path, json=body, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    with session_factory() as transaction:
+        command = transaction.scalar(
+            select(DemoFinanceCommand).where(
+                DemoFinanceCommand.operation == "GOV_PAYMENT",
+                DemoFinanceCommand.idempotency_key == body["idempotency_key"],
+            )
+        )
+        command.result_snapshot = damaged_snapshot
+        transaction.commit()
+
+    for response in (
+        client.get(
+            f"/api/v1/gov-payments/idempotency/{body['idempotency_key']}",
+            headers=auth_headers,
+        ),
+        client.post(path, json=body, headers=auth_headers),
+    ):
+        assert response.status_code == 409, response.text
+        assert (
+            response.json()["error"]["code"]
+            == "DEMO_GOV_PAYMENT_STORED_STATE_INVALID"
+        )

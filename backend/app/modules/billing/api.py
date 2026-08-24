@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -529,10 +530,17 @@ def _reconciled_demo_gov_payment_response(
         actor_id=actor_id,
     )
     current = _demo_gov_payment_command_response(db, result)
-    stored = _stored_demo_command_response(
-        DemoGovPaymentResponse,
-        command.result_snapshot,
-    )
+    try:
+        stored = _stored_demo_command_response(
+            DemoGovPaymentResponse,
+            command.result_snapshot,
+        )
+    except ValidationError:
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_STORED_STATE_INVALID",
+            "官费登记存量状态无效",
+            status_code=409,
+        )
     if current != stored:
         raise_business_error(
             "DEMO_GOV_PAYMENT_STORED_STATE_INVALID",
@@ -728,23 +736,24 @@ def create_local_demo_bank_receipt(
                 db, payload.idempotency_key, actor_id=actor_id
             )
         except BusinessError as exc:
-            if exc.status_code == 404:
-                return _pending_demo_command(payload.idempotency_key)
-            raise
-        response = _demo_bank_receipt_command_response(db, result)
-        _complete_demo_command(
-            db,
-            command_id=reservation.command_id,
-            actor_id=actor_id,
-            response=response,
-        )
-        return response
+            if exc.status_code != 404:
+                raise
+        else:
+            response = _demo_bank_receipt_command_response(db, result)
+            _complete_demo_command(
+                db,
+                command_id=reservation.command_id,
+                actor_id=actor_id,
+                response=response,
+            )
+            return response
     try:
         result = create_demo_bank_receipt(db, payload, actor_id=actor_id)
-    except BusinessError:
-        abandon_demo_finance_command(
-            db, command_id=reservation.command_id, actor_id=actor_id
-        )
+    except BusinessError as exc:
+        if exc.code != "DEMO_FINANCE_WRITE_BUSY":
+            abandon_demo_finance_command(
+                db, command_id=reservation.command_id, actor_id=actor_id
+            )
         raise
     response = _demo_bank_receipt_command_response(db, result)
     _complete_demo_command(
@@ -846,23 +855,24 @@ def create_local_demo_full_offset(
                 db, payload.idempotency_key, actor_id=actor_id
             )
         except BusinessError as exc:
-            if exc.status_code == 404:
-                return _pending_demo_command(payload.idempotency_key)
-            raise
-        response = _demo_full_offset_command_response(db, result)
-        _complete_demo_command(
-            db,
-            command_id=reservation.command_id,
-            actor_id=actor_id,
-            response=response,
-        )
-        return response
+            if exc.status_code != 404:
+                raise
+        else:
+            response = _demo_full_offset_command_response(db, result)
+            _complete_demo_command(
+                db,
+                command_id=reservation.command_id,
+                actor_id=actor_id,
+                response=response,
+            )
+            return response
     try:
         result = create_demo_full_offset(db, payload, actor_id=actor_id)
-    except BusinessError:
-        abandon_demo_finance_command(
-            db, command_id=reservation.command_id, actor_id=actor_id
-        )
+    except BusinessError as exc:
+        if exc.code != "DEMO_FINANCE_WRITE_BUSY":
+            abandon_demo_finance_command(
+                db, command_id=reservation.command_id, actor_id=actor_id
+            )
         raise
     response = _demo_full_offset_command_response(db, result)
     _complete_demo_command(

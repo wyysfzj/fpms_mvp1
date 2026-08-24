@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from app.modules.billing.models import (
     Bill,
@@ -20,7 +20,7 @@ from app.modules.billing.models import (
     Payment,
     PaymentLine,
 )
-from app.modules.billing.schemas import DemoBankReceiptRequest
+from app.modules.billing.schemas import DemoBankReceiptRequest, DemoFullOffsetRequest
 from app.modules.billing.service import (
     create_demo_bank_receipt,
     reserve_demo_finance_command,
@@ -482,6 +482,130 @@ def test_demo_offset_postcondition_failure_rolls_back_domain_writes(
         assert bill.balance == 1800
         assert line.allocated_amt == 0
         assert line.balance_amt == 1200
+
+
+def test_demo_payment_and_offset_lock_conflicts_are_retryable_without_domain_writes(
+    client,
+    auth_headers,
+    session_factory,
+    engine,
+    tmp_path,
+    monkeypatch,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    payment_body = {
+        "target_bill_id": bill_id,
+        "amount": "1200.00",
+        "pay_no": "DEMO-PAY-LOCK",
+        "pay_date": "2026-08-16",
+        "currency": "CNY",
+        "pay_method": "BANK_TRANSFER",
+        "bank_ref_no": "DEMO-BANK-LOCK",
+        "idempotency_key": "demo-payment-lock",
+    }
+    with session_factory() as transaction:
+        actor_id = transaction.scalar(
+            select(DemoFinanceCommand.created_by).where(
+                DemoFinanceCommand.operation == "BILL"
+            )
+        )
+        reserve_demo_finance_command(
+            transaction,
+            operation="PAYMENT",
+            idempotency_key=payment_body["idempotency_key"],
+            actor_id=actor_id,
+            payload=DemoBankReceiptRequest.model_validate(payment_body).model_dump(
+                mode="json"
+            ),
+        )
+
+    def fast_lock_failure(dbapi_connection, *_args):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA busy_timeout=1")
+        cursor.close()
+
+    event.listen(engine, "checkout", fast_lock_failure)
+    try:
+        with engine.connect() as locker:
+            locker.exec_driver_sql("BEGIN IMMEDIATE")
+            locked_payment = client.post(
+                "/api/v1/payments/demo-bank-receipts",
+                json=payment_body,
+                headers=auth_headers,
+            )
+            locker.rollback()
+    finally:
+        event.remove(engine, "checkout", fast_lock_failure)
+    assert locked_payment.status_code == 409, locked_payment.text
+    assert locked_payment.json()["error"]["code"] == "DEMO_FINANCE_WRITE_BUSY"
+    with session_factory() as transaction:
+        assert transaction.scalar(select(func.count()).select_from(Payment)) == 0
+        assert transaction.scalar(select(func.count()).select_from(PaymentLine)) == 0
+        command = transaction.scalar(
+            select(DemoFinanceCommand).where(
+                DemoFinanceCommand.operation == "PAYMENT",
+                DemoFinanceCommand.idempotency_key == payment_body["idempotency_key"],
+            )
+        )
+        assert command.state == "IN_PROGRESS"
+
+    retried_payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json=payment_body,
+        headers=auth_headers,
+    )
+    assert retried_payment.status_code == 201, retried_payment.text
+    line_id = retried_payment.json()["line"]["id"]
+    offset_body = {
+        "payment_line_id": line_id,
+        "bill_id": bill_id,
+        "offset_amt": "1200.00",
+        "offset_date": "2026-08-16",
+        "idempotency_key": "demo-offset-lock",
+    }
+    with session_factory() as transaction:
+        reserve_demo_finance_command(
+            transaction,
+            operation="OFFSET",
+            idempotency_key=offset_body["idempotency_key"],
+            actor_id=actor_id,
+            payload=DemoFullOffsetRequest.model_validate(offset_body).model_dump(
+                mode="json"
+            ),
+        )
+
+    event.listen(engine, "checkout", fast_lock_failure)
+    try:
+        with engine.connect() as locker:
+            locker.exec_driver_sql("BEGIN IMMEDIATE")
+            locked_offset = client.post(
+                "/api/v1/offsets/demo-full",
+                json=offset_body,
+                headers=auth_headers,
+            )
+            locker.rollback()
+    finally:
+        event.remove(engine, "checkout", fast_lock_failure)
+    assert locked_offset.status_code == 409, locked_offset.text
+    assert locked_offset.json()["error"]["code"] == "DEMO_FINANCE_WRITE_BUSY"
+    with session_factory() as transaction:
+        assert transaction.scalar(select(func.count()).select_from(Offset)) == 0
+        bill = transaction.get(Bill, bill_id)
+        line = transaction.get(PaymentLine, line_id)
+        assert bill.status == "UNSETTLED"
+        assert bill.balance == 1800
+        assert line.allocated_amt == 0
+        assert line.balance_amt == 1200
+
+    retried_offset = client.post(
+        "/api/v1/offsets/demo-full",
+        json=offset_body,
+        headers=auth_headers,
+    )
+    assert retried_offset.status_code == 201, retried_offset.text
+    assert retried_offset.json()["bill"]["status"] == "PARTIALLY_SETTLED"
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
     client,
