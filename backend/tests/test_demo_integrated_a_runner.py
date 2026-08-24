@@ -329,6 +329,12 @@ def test_v6_runner_reuses_only_the_legacy_lifecycle_prefix():
     assert "await reviewerContext.close()\n    return" in source
 
 
+def test_replacement_grant_notice_is_typed_as_an_official_incoming_document():
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
+
+    assert "doc_type: 'OFFICIAL_IN'" in source
+
+
 def test_demo_inputs_parser_accepts_the_v6_multi_item_preflight_shape():
     source = (
         ROOT / "frontend/src/modules/demo/demo.contract.ts"

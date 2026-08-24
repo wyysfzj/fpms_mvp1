@@ -1299,6 +1299,7 @@ class IntegratedJourneyDriver {
       reason: '更新来源替换原授权登记通知',
       document: {
         doc_template_id: this.grantTemplateId,
+        doc_type: 'OFFICIAL_IN',
         doc_date: sourceDocumentDate,
         title: `办理登记手续更正通知书-${this.caseNo}`,
         ref_no: `BDJ-${this.caseNo}-02`,
