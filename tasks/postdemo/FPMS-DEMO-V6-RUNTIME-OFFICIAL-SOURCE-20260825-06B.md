@@ -106,6 +106,10 @@ consumer and calculation path.
 
 - Exact scope/diff check and one canonical V6 rehearsal from stages 01–11. If the rehearsal fails,
   preserve evidence and do not broaden this task.
+
+  ```bash
+  backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py --profile TECHNICAL_REHEARSAL --runs 2 --headless --artifact artifacts/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-20260825-06B/rehearsal
+  ```
 - Independent HIGH review of the exact frozen implementation with one final `Verdict: APPROVED`,
   `P0: 0`, `P1: 0`, and `P2: 0`.
 - Task gate and atomic evidence validation after the approved review.

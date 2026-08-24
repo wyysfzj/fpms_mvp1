@@ -18,8 +18,9 @@ All SQLite writes and canonical rehearsal execution are serialized.
 
 - `backend/app/core/demo_bundle.py`: immutable runtime source types, strict V2 parsing, due-date and
   selector cross-binding, and the one canonical fee-row digest helper.
-- `backend/app/modules/grant_fees/demo_official_fee.py`: import the core digest helper; preview query,
-  validation, amounts, status codes, and writes remain unchanged.
+- `backend/app/modules/grant_fees/demo_official_fee.py`: import the core digest helper and fail before
+  amount lookup when the stored task due date differs from the bundle's frozen replacement-notice
+  due date; all other preview query, amount, status, and write behavior remains unchanged.
 - `backend/scripts/run_local_demo_abc.py`: V6-only rate-book materialization/activation and complete
   unserved-run cleanup on bootstrap failure.
 - `backend/tests/test_demo_abc_runtime_bundle.py`: canonical structurally valid synthetic V6 source,
@@ -38,8 +39,13 @@ All SQLite writes and canonical rehearsal execution are serialized.
 
 - [ ] **Step 1: Initialize atomic evidence with the exact task and nine non-artifact allowlist paths.**
 
-Run `evidence_gate.py init` before any product/test edit. Expected: task snapshot created and initial
-worktree recorded clean.
+Run before any product/test edit:
+
+```bash
+python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py init FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-20260825-06B --task-file tasks/postdemo/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-20260825-06B.md --allowlist tasks/postdemo/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-20260825-06B.md --allowlist docs/superpowers/specs/2026-08-25-fpms-demo-v6-runtime-official-source-design.md --allowlist docs/superpowers/plans/2026-08-25-fpms-demo-v6-runtime-official-source.md --allowlist backend/app/core/demo_bundle.py --allowlist backend/app/modules/grant_fees/demo_official_fee.py --allowlist backend/scripts/run_local_demo_abc.py --allowlist backend/tests/test_demo_abc_runtime_bundle.py --allowlist backend/tests/test_demo_abc_local_runner.py --allowlist backend/tests/test_demo_v6_grant_official_fee.py
+```
+
+Expected: task snapshot created and initial worktree recorded clean.
 
 - [ ] **Step 2: Add a canonical synthetic source fixture.**
 
@@ -61,14 +67,24 @@ grant due date. Each must fail with `DemoBundleError` before database access.
 Create a V6-specific bundle helper. Assert fresh bootstrap produces exactly one approved/active
 book and two selected rows; local reviewer IDs and identical non-null approval/activation times;
 current identity and digests match the immutable bundle. Inject an activation/materialization
-failure and assert the unserved run root no longer exists.
+failure and assert the unserved run root no longer exists. Wrap the activation service with a spy
+that observes a `PENDING/INACTIVE` candidate, exact reviewer ID, and identical command timestamps.
+For the failure path, suppress only physical `rmtree` after recording its exact target so the test
+can reopen the disposed SQLite database and prove book/row counts rolled back to zero; separately
+assert engine `dispose()` ran.
 
-- [ ] **Step 5: Run the exact RED tranche through evidence.**
+- [ ] **Step 5: Add the task-due-date RED case.**
+
+In `test_demo_v6_grant_official_fee.py`, keep a valid source/book but change only the persisted grant
+task `due_date` away from the bundle's frozen replacement-notice date. Calling preview must fail with
+the existing `DEMO_GOV_RATE_SOURCE_CONFLICT` 409 before returning amounts or writing business rows.
+
+- [ ] **Step 6: Run the exact RED tranche through evidence.**
 
 Run:
 
 ```bash
-backend/.venv/bin/python -m pytest -q backend/tests/test_demo_abc_runtime_bundle.py backend/tests/test_demo_abc_local_runner.py -k 'v6_official_fee_source or v6_bootstrap'
+backend/.venv/bin/python -m pytest -q backend/tests/test_demo_abc_runtime_bundle.py backend/tests/test_demo_abc_local_runner.py backend/tests/test_demo_v6_grant_official_fee.py -k 'v6_official_fee_source or v6_bootstrap or rejects_task_due_date_drift'
 ```
 
 Expected: FAIL only because `official_fee_source`, immutable source snapshot, and runner
@@ -95,7 +111,13 @@ Implement one public helper in `demo_bundle.py` that serializes
 preview's private helper to call/import it; do not change its payload, decisions, amounts, or error
 codes.
 
-- [ ] **Step 3: Strictly parse and cross-bind the V2 source.**
+- [ ] **Step 3: Bind preview to the frozen due date.**
+
+Immediately after loading the bundle snapshot and before rate-book selection, require
+`task.due_date == snapshot.official_fee_due_date`; otherwise use the existing source-conflict 409.
+This is a provenance equality check, not deadline generation or a new status.
+
+- [ ] **Step 4: Strictly parse and cross-bind the V2 source.**
 
 Add `official_fee_source` to exact V2 top keys. Validate exact keys/types/lengths, canonical source
 JSON and SHA-256, trusted `https://www.cnipa.gov.cn` URLs without query/fragment, source versions and
@@ -103,7 +125,7 @@ references, exact selector row identity/order/digests, fixed GOV/CNY positive tw
 inactive reduction, active row status, and coverage of replacement notice `official_due_date`.
 Return only frozen dataclasses.
 
-- [ ] **Step 4: Run loader GREEN and compatibility.**
+- [ ] **Step 5: Run loader/preview GREEN and compatibility.**
 
 Run focused bundle tests, then existing V1/Integrated V1 cases in the same file. Expected: PASS with
 no changed legacy snapshot values.
@@ -168,7 +190,13 @@ Expected: all PASS without modifying either test file.
 
 - [ ] **Step 4: Run scoped Ruff and exact diff check.**
 
-Use the task's six Python code/test paths. Expected: Ruff rc 0 and no whitespace errors.
+Use the task's six Python code/test paths. Then run:
+
+```bash
+git diff --check 1c75591e5072b545c062f78512cdb4e11f11d584..HEAD -- backend/app/core/demo_bundle.py backend/app/modules/grant_fees/demo_official_fee.py backend/scripts/run_local_demo_abc.py backend/tests/test_demo_abc_runtime_bundle.py backend/tests/test_demo_abc_local_runner.py backend/tests/test_demo_v6_grant_official_fee.py
+```
+
+Expected: Ruff rc 0 and exact diff check empty.
 
 ### Task 5: Canonical rehearsal, independent review, and close
 
@@ -180,23 +208,22 @@ Use the task's six Python code/test paths. Expected: Ruff rc 0 and no whitespace
 Commit only task/plan/spec and six code/test paths. Record HEAD/tree and baseline-subtracted patch
 SHA-256.
 
-- [ ] **Step 2: Run one canonical V6 rehearsal.**
+- [ ] **Step 2: Run two canonical V6 rehearsals from the exact controller invocation.**
 
-Resume the existing rehearsal command at its first incomplete ordinal, using a new artifact suffix.
-Expected: stage 01 through 11 PASS, with stage 07 reading the materialized book. Preserve failure
+```bash
+backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py --profile TECHNICAL_REHEARSAL --runs 2 --headless --artifact artifacts/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-20260825-06B/rehearsal
+```
+
+Expected: both ordinals reach stages 01 through 11 PASS; stage 07 reads the materialized book;
+run/database/business IDs differ while manifest/authority/book/row digests match. Preserve failure
 evidence and stop if any different closure appears.
 
-- [ ] **Step 3: Run a second fresh isolated rehearsal.**
-
-Run the same frozen candidate from another run root/SQLite. Expected: different run/database/business
-IDs, identical manifest/authority/book/row digests, and stage 01 through 11 PASS.
-
-- [ ] **Step 4: Obtain independent HIGH review.**
+- [ ] **Step 3: Obtain independent HIGH review.**
 
 Reviewer binds exact candidate, task/spec/plan hashes, patch hash, focused results, and both rehearsal
 receipts; must report one final `Verdict: APPROVED`, `P0: 0`, `P1: 0`, `P2: 0`.
 
-- [ ] **Step 5: Record scope, task gate, finalize, and validate evidence.**
+- [ ] **Step 4: Record scope, task gate, finalize, and validate evidence.**
 
 Only after independent approval, run canonical `scope`, `independent_review`, `task_gate`, and
 `atomic_evidence` steps, finalize PASS, and validate. Resume parent Task06 only after this task is
