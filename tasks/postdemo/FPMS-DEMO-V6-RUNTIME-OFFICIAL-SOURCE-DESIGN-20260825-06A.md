@@ -50,7 +50,7 @@ failure conditions, and the smallest implementation/test allowlist.
 2. Scoped document check:
 
    ```bash
-   git diff --check -- tasks/postdemo/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-DESIGN-20260825-06A.md docs/superpowers/specs/2026-08-25-fpms-demo-v6-runtime-official-source-design.md
+   git diff --check 9e739a76fe5e454440fc414ad84ad9cc783e0818^..HEAD -- tasks/postdemo/FPMS-DEMO-V6-RUNTIME-OFFICIAL-SOURCE-DESIGN-20260825-06A.md docs/superpowers/specs/2026-08-25-fpms-demo-v6-runtime-official-source-design.md
    ```
 
 3. Independent review of the committed design must report `APPROVED` with P0/P1/P2 = 0/0/0.
