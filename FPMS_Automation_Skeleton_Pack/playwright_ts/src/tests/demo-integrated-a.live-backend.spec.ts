@@ -85,6 +85,7 @@ const reviewerPassword = process.env.FPMS_REVIEWER_PASSWORD
 const expectedDisclaimer = process.env.FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN
 const integratedEvidenceJson = process.env.FPMS_DEMO_INTEGRATED_EVIDENCE_JSON
 const oaReplyOutputJson = process.env.FPMS_DEMO_INTEGRATED_OA_REPLY_OUTPUT_JSON
+const v6Tail = process.env.FPMS_DEMO_V6_TAIL === '1'
 const expectedScenario = {
   customerName: process.env.FPMS_DEMO_CUSTOMER_NAME,
   customerCodePrefix: process.env.FPMS_DEMO_CUSTOMER_CODE_PREFIX,
@@ -1425,6 +1426,20 @@ class IntegratedJourneyDriver {
     expect(paidState.status).toBe(200)
     expect(paidState.body.client_instruction).toBe('PAY')
 
+    if (v6Tail) {
+      const paidVisible = await this.visibleCaseSnapshot(this.caseId)
+      const tasks = paidVisible.grant_tasks as Json[]
+      const currentPayRows = tasks.filter((item) => item.task_id === newTaskId && item.client_instruction === 'PAY')
+      return {
+        blocked_mutations: ['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client'],
+        blocked_statuses: blockedObservations.map((item) => item.status),
+        blocked_observations: blockedObservations,
+        current_instruction: paidState.body.client_instruction,
+        current_instruction_count: currentPayRows.length,
+        official_fee_carriers: paidVisible.official_fee_carriers,
+      }
+    }
+
     const missingBeforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
     const missingBeforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
     const missingBeforeVisible = await this.visibleCaseSnapshot(this.caseId)
@@ -1776,9 +1791,14 @@ class IntegratedJourneyDriver {
     }
   }
   async preflight(): Promise<Json> {
-    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     const responsePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))
-    await this.operatorPage.getByTestId('demo-preflight').click()
+    if (v6Tail) {
+      await this.operatorPage.goto(`${baseUrl}/demo/inputs`, { waitUntil: 'domcontentloaded' })
+      await this.operatorPage.getByTestId('demo-inputs-preflight').click()
+    } else {
+      await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+      await this.operatorPage.getByTestId('demo-preflight').click()
+    }
     const item = await (await responsePromise).json() as Json
     const primaryItem = (item.items as Json[])[0]
     return {
@@ -1888,25 +1908,34 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     expect(snapshot.readiness).toBe('READY')
     expect(snapshot.classification).toBe('SYNTHETIC_TEST_ONLY')
     expect(snapshot.customer_activation_eligible).toBe(false)
-    await expect(page.getByText('演示输入已校验')).toBeVisible()
-    await expect(page.getByText(manifestSha256)).toBeVisible()
-    await expect(page.getByText('SYNTHETIC_TEST_ONLY')).toBeVisible()
-    await expect(page.getByText('模板代码', { exact: true })).toBeVisible()
-    await expect(page.getByText('模板文件 SHA-256', { exact: true })).toBeVisible()
-    await expect(page.getByText('费率来源', { exact: true })).toBeVisible()
-    await expect(page.getByText('费率来源 SHA-256', { exact: true })).toBeVisible()
-    await expect(page.getByText('官方费用：未配置（不计入总额）', { exact: true })).toBeVisible()
-    await expect(page.getByText(expectedScenario.serviceItemName!, { exact: true })).toBeVisible()
-    await expect(page.getByTestId('bundle-id')).toHaveText(expectedProvenance.bundle_id!)
-    await expect(page.getByTestId('bundle-version')).toHaveText(expectedProvenance.bundle_version!)
-    await expect(page.getByTestId('manifest-sha256')).toHaveText(expectedProvenance.manifest_sha256!)
-    await expect(page.getByTestId('template-code')).toHaveText(expectedProvenance.template_code!)
-    await expect(page.getByTestId('template-sha256')).toHaveText(expectedProvenance.template_sha256!)
-    await expect(page.getByTestId('rate-item-code')).toHaveText(expectedProvenance.rate_item_code!)
-    await expect(page.getByTestId('rate-source-ref')).toHaveText(expectedProvenance.rate_source_ref!)
-    await expect(page.getByTestId('rate-source-version')).toHaveText(expectedProvenance.rate_source_version!)
-    await expect(page.getByTestId('rate-source-sha256')).toHaveText(expectedProvenance.rate_source_sha256!)
-    await expect(page.getByTestId('demo-disclaimer')).toHaveText(expectedDisclaimer!)
+    if (v6Tail) {
+      await expect(page).toHaveURL(`${baseUrl}/demo/inputs`)
+      await expect(page.getByRole('heading', { name: '演示输入与空业务库' })).toBeVisible()
+      await expect(page.getByTestId('input-readiness')).toHaveText('READY')
+      await expect(page.getByTestId('input-classification')).toHaveText('SYNTHETIC_TEST_ONLY')
+      await expect(page.getByText(manifestSha256, { exact: true })).toBeVisible()
+      await expect(page.getByText(expectedScenario.serviceItemName!, { exact: false })).toBeVisible()
+    } else {
+      await expect(page.getByText('演示输入已校验')).toBeVisible()
+      await expect(page.getByText(manifestSha256)).toBeVisible()
+      await expect(page.getByText('SYNTHETIC_TEST_ONLY')).toBeVisible()
+      await expect(page.getByText('模板代码', { exact: true })).toBeVisible()
+      await expect(page.getByText('模板文件 SHA-256', { exact: true })).toBeVisible()
+      await expect(page.getByText('费率来源', { exact: true })).toBeVisible()
+      await expect(page.getByText('费率来源 SHA-256', { exact: true })).toBeVisible()
+      await expect(page.getByText('官方费用：未配置（不计入总额）', { exact: true })).toBeVisible()
+      await expect(page.getByText(expectedScenario.serviceItemName!, { exact: true })).toBeVisible()
+      await expect(page.getByTestId('bundle-id')).toHaveText(expectedProvenance.bundle_id!)
+      await expect(page.getByTestId('bundle-version')).toHaveText(expectedProvenance.bundle_version!)
+      await expect(page.getByTestId('manifest-sha256')).toHaveText(expectedProvenance.manifest_sha256!)
+      await expect(page.getByTestId('template-code')).toHaveText(expectedProvenance.template_code!)
+      await expect(page.getByTestId('template-sha256')).toHaveText(expectedProvenance.template_sha256!)
+      await expect(page.getByTestId('rate-item-code')).toHaveText(expectedProvenance.rate_item_code!)
+      await expect(page.getByTestId('rate-source-ref')).toHaveText(expectedProvenance.rate_source_ref!)
+      await expect(page.getByTestId('rate-source-version')).toHaveText(expectedProvenance.rate_source_version!)
+      await expect(page.getByTestId('rate-source-sha256')).toHaveText(expectedProvenance.rate_source_sha256!)
+      await expect(page.getByTestId('demo-disclaimer')).toHaveText(expectedDisclaimer!)
+    }
     task0Checkpoints.push({ checkpoint: 'IA-00', result: snapshot })
   })
 
@@ -1989,11 +2018,29 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[12], async () => {
     const x = await journey.exerciseGrantGatesAndPay(grantOriginalTaskId, grantReplacementTaskId)
-    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.blocked_observations).toHaveLength(4); for (const observation of x.blocked_observations as Json[]) expect(observation.after_snapshot).toEqual(observation.before_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.missing_authority_status).toBe(409); expect(x.missing_authority_code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED'); expect(x.missing_authority_before).toEqual(x.missing_authority_after); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client'])
+    expect(x.blocked_statuses).toEqual([409, 409, 409, 409])
+    expect(x.blocked_observations).toHaveLength(4)
+    for (const observation of x.blocked_observations as Json[]) expect(observation.after_snapshot).toEqual(observation.before_snapshot)
+    expect(x.current_instruction).toBe('PAY')
+    expect(x.current_instruction_count).toBe(1)
+    if (!v6Tail) {
+      expect(x.missing_authority_status).toBe(409)
+      expect(x.missing_authority_code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED')
+      expect(x.missing_authority_before).toEqual(x.missing_authority_after)
+    }
+    expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
     task7Checkpoints.push({ checkpoint: 'IA-12', result: x })
     await mkdir(evidenceDir!, { recursive: true })
     await writeFile(path.join(evidenceDir!, 'task7-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints], evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))
   })
+  if (v6Tail) {
+    const checkpoints = [...task0Checkpoints, ...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints]
+    await writeFile(path.join(evidenceDir!, 'task9-checkpoints.json'), JSON.stringify({ checkpoints, evidence_bindings: [...evidenceRoleMap.values()], final_summary: { case_id: caseId, grant_task_id: grantReplacementTaskId, checkpoints_passed: checkpoints.length } }, null, 2))
+    await writeFile(path.join(evidenceDir!, 'evidence-role-map.json'), JSON.stringify(assertCompleteEvidenceLedger(evidenceRoleMap), null, 2))
+    await reviewerContext.close()
+    return
+  }
   await test.step(checkpointContract[13], async () => {
     const x = await journey.createServiceDraft(caseId); draftId = x.draft_id
     expect(x.case_id).toBe(caseId); expect(x.provenance).toEqual(expectedProvenance); expect(x.disclaimer).toBe(expectedDisclaimer); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })

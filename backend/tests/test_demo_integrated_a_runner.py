@@ -314,6 +314,33 @@ def test_legacy_journey_reads_v6_service_provenance_from_the_first_item():
     assert "bundle_amount: created.total_amount" in source
 
 
+def test_v6_runner_reuses_only_the_legacy_lifecycle_prefix():
+    runner = RUNNER.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
+
+    assert 'FPMS_DEMO_V6_TAIL="1"' in runner
+    assert "const v6Tail = process.env.FPMS_DEMO_V6_TAIL === '1'" in source
+    assert "`${baseUrl}/demo/inputs`" in source
+    assert "getByTestId('demo-inputs-preflight')" in source
+    assert "if (!v6Tail) {" in source
+    assert "if (v6Tail) {" in source
+    assert "checkpoint: 'IA-12'" in source
+    assert "'task9-checkpoints.json'" in source
+    assert "await reviewerContext.close()\n    return" in source
+
+
+def test_demo_inputs_parser_accepts_the_v6_multi_item_preflight_shape():
+    source = (
+        ROOT / "frontend/src/modules/demo/demo.contract.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "Array.isArray(raw.items)" in source
+    assert "const primary = record(raw.items[0], 'service_item.items[0]')" in source
+    assert "amount: raw.total_amount" in source
+    assert "return row as unknown as DemoServiceItem" in source
+    assert "const normalized = parseDemoServiceItem(value)" in source
+
+
 def test_runner_binds_the_approved_realistic_customer_scenario():
     module = _module()
     source = LEGACY_SPEC.read_text(encoding="utf-8")
@@ -562,18 +589,21 @@ def _write_fake_run(root: Path, ordinal: int) -> None:
     run.mkdir(parents=True)
     checkpoints = [
         {"checkpoint": f"IA-{index:02d}", "result": {}}
-        for index in range(19)
+        for index in range(13)
     ]
     identities = {
         "client_id": f"client-{ordinal}",
         "contact_id": f"contact-{ordinal}",
         "case_id": f"case-{ordinal}",
         "package_id": f"package-{ordinal}",
-        "draft_id": f"draft-{ordinal}",
+        "grant_task_id": f"grant-task-{ordinal}",
+        "gov_draft_id": f"gov-draft-{ordinal}",
+        "service_draft_id": f"service-draft-{ordinal}",
         "bill_id": f"bill-{ordinal}",
-        "payment_id": f"payment-{ordinal}",
-        "payment_line_id": f"line-{ordinal}",
-        "offset_id": f"offset-{ordinal}",
+        "first_payment_id": f"payment-{ordinal}-1",
+        "second_payment_id": f"payment-{ordinal}-2",
+        "first_offset_id": f"offset-{ordinal}-1",
+        "second_offset_id": f"offset-{ordinal}-2",
     }
     checkpoints[1]["result"] = {
         "client_id": identities["client_id"],
@@ -581,36 +611,33 @@ def _write_fake_run(root: Path, ordinal: int) -> None:
     }
     checkpoints[2]["result"] = {"case_id": identities["case_id"]}
     checkpoints[4]["result"] = {"package_id": identities["package_id"]}
-    checkpoints[13]["result"] = {"draft_id": identities["draft_id"]}
-    checkpoints[14]["result"] = {"bill_id": identities["bill_id"]}
-    checkpoints[15]["result"] = {
-        "payment_id": identities["payment_id"],
-        "payment_line_id": identities["payment_line_id"],
-    }
-    checkpoints[16]["result"] = {"offset_id": identities["offset_id"]}
-    checkpoints[18]["result"] = {
-        "lifecycle_status": "GRANT_REGISTRATION_IN_PROGRESS",
-        "lifecycle_stage": "GRANT_REGISTRATION",
-        "application_status": "APPLICATION_PENDING",
-        "source_state": "CONFIRMED",
-        "legacy_display": "GRANT_PENDING",
-        "bill_status": "SETTLED",
-        "payment_status": "FULLY_ALLOCATED",
-        "bill_balance": "0.00",
-        "payment_unapplied": "0.00",
-        "currency": "CNY",
-        "checkpoints_passed": 19,
-    }
+    checkpoints[11]["result"] = {"replacement_task_id": identities["grant_task_id"]}
     (run / "task9-checkpoints.json").write_text(
         json.dumps({"checkpoints": checkpoints, "evidence_bindings": [{}] * 12}),
         encoding="utf-8",
     )
     (run / "evidence-role-map.json").write_text(json.dumps([{}] * 12), encoding="utf-8")
-    (run / "integrated-final.png").write_bytes(b"png")
+    (run / "v6-final.png").write_bytes(b"png")
     v6_stages = [
         {"stage": f"{index:02d}", "label": f"stage-{index}"}
         for index in range(1, 12)
     ]
+    v6_stages[6].update({"gov_draft_id": identities["gov_draft_id"]})
+    v6_stages[7].update({"service_draft_id": identities["service_draft_id"]})
+    v6_stages[9].update(
+        {
+            "bill_id": identities["bill_id"],
+            "first_payment_id": identities["first_payment_id"],
+            "second_payment_id": identities["second_payment_id"],
+            "first_offset_id": identities["first_offset_id"],
+            "second_offset_id": identities["second_offset_id"],
+            "partial_status": "PARTIALLY_SETTLED",
+            "partial_balance": "600.00",
+            "final_status": "SETTLED",
+            "final_balance": "0.00",
+            "amount_equation": "1200.00 + 600.00 = 1800.00",
+        }
+    )
     v6_stages[-1].update({"bill_status": "SETTLED", "bill_balance": "0.00"})
     (run / "v6-stages.json").write_text(
         json.dumps(
@@ -658,7 +685,7 @@ def test_runner_accepts_only_two_clean_runs_with_disjoint_business_identities(tm
 
     assert summary["status"] == "TECHNICAL_REHEARSAL_PASS"
     assert summary["runs"] == 2
-    assert summary["checkpoint_counts"] == [19, 19]
+    assert summary["checkpoint_counts"] == [13, 13]
     assert summary["v6_stage_counts"] == [11, 11]
     assert summary["evidence_binding_counts"] == [12, 12]
     assert summary["business_identity_sets_disjoint"] is True

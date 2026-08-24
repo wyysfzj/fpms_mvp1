@@ -218,7 +218,12 @@ export interface DemoBillCommandResponse {
 }
 
 export function parseDemoServiceItem(value: unknown): DemoServiceItem {
-  const row = record(value, 'service_item')
+  const raw = record(value, 'service_item')
+  let row = raw
+  if (Array.isArray(raw.items)) {
+    const primary = record(raw.items[0], 'service_item.items[0]')
+    row = { ...raw, ...primary, amount: raw.total_amount }
+  }
   literal(row.classification, ['DEMO_ONLY'], 'service_item.classification')
   string(row.bundle_id, 'service_item.bundle_id')
   string(row.bundle_version, 'service_item.bundle_version')
@@ -234,12 +239,12 @@ export function parseDemoServiceItem(value: unknown): DemoServiceItem {
   string(row.source_version, 'service_item.source_version')
   digest(row.source_sha256, 'service_item.source_sha256')
   string(row.disclaimer_zh_cn, 'service_item.disclaimer_zh_cn')
-  return value as DemoServiceItem
+  return row as unknown as DemoServiceItem
 }
 
 export function parseDemoPreflight(value: unknown): DemoPreflight {
-  parseDemoServiceItem(value)
-  const row = record(value, 'demo_preflight')
+  const normalized = parseDemoServiceItem(value)
+  const row = record(normalized, 'demo_preflight')
   literal(
     row.authority_classification,
     ['SYNTHETIC_TEST_ONLY', 'CUSTOMER_AUTHORIZED'],
@@ -268,17 +273,17 @@ export function parseDemoPreflight(value: unknown): DemoPreflight {
   ) {
     invalid('demo_preflight.customer_activation_eligible')
   }
-  return value as DemoPreflight
+  return normalized as DemoPreflight
 }
 
 export function parseDemoFeeObligationResponse(value: unknown): DemoFeeObligationResponse {
-  parseDemoServiceItem(value)
-  const row = record(value, 'obligation_response')
+  const normalized = parseDemoServiceItem(value)
+  const row = record(normalized, 'obligation_response')
   id(record(row.obligation, 'obligation_response.obligation').id, 'obligation_response.obligation.id')
   id(row.source_activity_id, 'obligation_response.source_activity_id')
   string(row.idempotency_key, 'obligation_response.idempotency_key')
   boolean(row.reused, 'obligation_response.reused')
-  return value as DemoFeeObligationResponse
+  return normalized as DemoFeeObligationResponse
 }
 
 export function parseDemoDraft(value: unknown): DemoDraft {

@@ -406,9 +406,9 @@ def _write_json(path: Path, value: Any) -> None:
 def _checkpoint_map(run_artifact: Path) -> dict[str, dict[str, Any]]:
     ledger = json.loads((run_artifact / "task9-checkpoints.json").read_text(encoding="utf-8"))
     checkpoints = ledger.get("checkpoints")
-    expected = [f"IA-{index:02d}" for index in range(19)]
+    expected = [f"IA-{index:02d}" for index in range(13)]
     if not isinstance(checkpoints, list) or [row.get("checkpoint") for row in checkpoints] != expected:
-        raise RuntimeError("integrated checkpoint ledger must contain IA-00 through IA-18 exactly once")
+        raise RuntimeError("V6 lifecycle prefix must contain IA-00 through IA-12 exactly once")
     bindings = ledger.get("evidence_bindings")
     if not isinstance(bindings, list) or len(bindings) != 12:
         raise RuntimeError("integrated checkpoint ledger must contain twelve evidence bindings")
@@ -422,22 +422,6 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
     for ordinal in range(1, runs + 1):
         run_artifact = artifact / f"run{ordinal}"
         checkpoints = _checkpoint_map(run_artifact)
-        final = checkpoints["IA-18"]
-        expected_final = {
-            "lifecycle_status": "GRANT_REGISTRATION_IN_PROGRESS",
-            "lifecycle_stage": "GRANT_REGISTRATION",
-            "application_status": "APPLICATION_PENDING",
-            "source_state": "CONFIRMED",
-            "legacy_display": "GRANT_PENDING",
-            "bill_status": "SETTLED",
-            "payment_status": "FULLY_ALLOCATED",
-            "bill_balance": "0.00",
-            "payment_unapplied": "0.00",
-            "currency": "CNY",
-            "checkpoints_passed": 19,
-        }
-        if any(final.get(key) != value for key, value in expected_final.items()):
-            raise RuntimeError(f"run {ordinal} final state does not match the frozen contract")
         cleanup = json.loads((run_artifact / "cleanup.json").read_text(encoding="utf-8"))
         if cleanup.get("run_root_removed") is not True:
             raise RuntimeError(f"run {ordinal} cleanup is incomplete")
@@ -445,7 +429,7 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
         command = json.loads((run_artifact / "command.json").read_text(encoding="utf-8"))
         if command.get("redacted") is not True or "environment_keys" not in command:
             raise RuntimeError(f"run {ordinal} command metadata is not redacted")
-        if (run_artifact / "integrated-final.png").stat().st_size == 0:
+        if (run_artifact / "v6-final.png").stat().st_size == 0:
             raise RuntimeError(f"run {ordinal} final screenshot is empty")
         v6_ledger = json.loads((run_artifact / "v6-stages.json").read_text(encoding="utf-8"))
         v6_stages = v6_ledger.get("stages")
@@ -453,8 +437,28 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
             raise RuntimeError(f"run {ordinal} V6 stage ledger is incomplete")
         if v6_ledger.get("network_errors") != [] or v6_ledger.get("console_errors") != []:
             raise RuntimeError(f"run {ordinal} contains browser errors")
+        stage_map = {row["stage"]: row for row in v6_stages}
+        finance = stage_map["10"]
         v6_final = v6_stages[-1]
-        if v6_final.get("bill_status") != "SETTLED" or v6_final.get("bill_balance") != "0.00":
+        expected_final = {
+            "partial_status": "PARTIALLY_SETTLED",
+            "partial_balance": "600.00",
+            "final_status": "SETTLED",
+            "final_balance": "0.00",
+            "amount_equation": "1200.00 + 600.00 = 1800.00",
+            "bill_status": "SETTLED",
+            "bill_balance": "0.00",
+        }
+        actual_final = {
+            "partial_status": finance.get("partial_status"),
+            "partial_balance": finance.get("partial_balance"),
+            "final_status": finance.get("final_status"),
+            "final_balance": finance.get("final_balance"),
+            "amount_equation": finance.get("amount_equation"),
+            "bill_status": v6_final.get("bill_status"),
+            "bill_balance": v6_final.get("bill_balance"),
+        }
+        if actual_final != expected_final:
             raise RuntimeError(f"run {ordinal} V6 final finance state is incomplete")
         role_map = json.loads((run_artifact / "evidence-role-map.json").read_text(encoding="utf-8"))
         if not isinstance(role_map, list) or len(role_map) != 12:
@@ -464,22 +468,25 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
             checkpoints["IA-01"]["contact_id"],
             checkpoints["IA-02"]["case_id"],
             checkpoints["IA-04"]["package_id"],
-            checkpoints["IA-13"]["draft_id"],
-            checkpoints["IA-14"]["bill_id"],
-            checkpoints["IA-15"]["payment_id"],
-            checkpoints["IA-15"]["payment_line_id"],
-            checkpoints["IA-16"]["offset_id"],
+            checkpoints["IA-11"]["replacement_task_id"],
+            stage_map["07"]["gov_draft_id"],
+            stage_map["08"]["service_draft_id"],
+            finance["bill_id"],
+            finance["first_payment_id"],
+            finance["second_payment_id"],
+            finance["first_offset_id"],
+            finance["second_offset_id"],
         }
-        if len(identities) != 9 or any(not value for value in identities):
+        if len(identities) != 12 or any(not value for value in identities):
             raise RuntimeError(f"run {ordinal} business identity set is incomplete")
         identity_sets.append(identities)
-        summaries.append(expected_final)
+        summaries.append(actual_final)
     if len(set(run_ids)) != runs or any(identity_sets[left] & identity_sets[right] for left in range(runs) for right in range(left + 1, runs)):
         raise RuntimeError("integrated runs must use distinct run and business identities")
     return {
         "status": "TECHNICAL_REHEARSAL_PASS",
         "runs": runs,
-        "checkpoint_counts": [19] * runs,
+        "checkpoint_counts": [13] * runs,
         "v6_stage_counts": [11] * runs,
         "evidence_binding_counts": [12] * runs,
         "run_ids": run_ids,
@@ -632,6 +639,7 @@ def _run_one(
             FPMS_DEMO_BANK_REF_PREFIX=REHEARSAL_SCENARIO["bank_ref_prefix"],
             FPMS_DEMO_CUSTOMER_STAGE_ORDER=",".join(LEGACY_CUSTOMER_STAGE_ORDER),
             FPMS_DEMO_V6_STAGE_ORDER=",".join(CUSTOMER_STAGE_ORDER),
+            FPMS_DEMO_V6_TAIL="1",
         )
         command = [
             "node",
