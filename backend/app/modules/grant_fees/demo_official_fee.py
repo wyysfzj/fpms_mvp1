@@ -176,9 +176,9 @@ def _projection(case: Case) -> LifecycleProjection:
         ) from exc
 
 
-def _task_evidence(
+def _task_state(
     transaction: Session, grant_fee_task_id: str
-) -> tuple[T_GrantFeeTask, Case, DocumentEvidenceVersion, CaseActivityEvent]:
+) -> tuple[T_GrantFeeTask, Case]:
     task = transaction.get(T_GrantFeeTask, grant_fee_task_id)
     if task is None:
         _fail("DEMO_GOV_TASK_NOT_FOUND", "授权费用任务不存在", status_code=404)
@@ -214,6 +214,20 @@ def _task_evidence(
         or semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED"
     ):
         _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务状态不支持官费预览", status_code=409)
+    return task, cast(Case, case)
+
+
+def _task_evidence(
+    transaction: Session,
+    grant_fee_task_id: str,
+    *,
+    task_state: tuple[T_GrantFeeTask, Case] | None = None,
+) -> tuple[T_GrantFeeTask, Case, DocumentEvidenceVersion, CaseActivityEvent]:
+    task, case = (
+        _task_state(transaction, grant_fee_task_id)
+        if task_state is None
+        else task_state
+    )
     all_versions = tuple(
         transaction.scalars(
             select(DocumentEvidenceVersion).where(
@@ -268,7 +282,7 @@ def _task_evidence(
         or notice_payload["reviewed_evidence_content_hash"] != evidence.content_hash
     ):
         _fail("DEMO_GOV_TASK_CONFLICT", "授权费用任务缺少已归档通知活动", status_code=409)
-    return task, cast(Case, case), evidence, notice
+    return task, case, evidence, notice
 
 
 def _canonical_preview_payload(
@@ -342,24 +356,8 @@ def preview_grant_official_fees(
             "官费预览要求干净事务",
             status_code=409,
         )
-    try:
-        with transaction.no_autoflush:
-            task, _case, evidence, notice = _task_evidence(
-                transaction, grant_fee_task_id
-            )
-    except BusinessError as exc:
-        if exc.code == "DEMO_GOV_TASK_CONFLICT":
-            task_candidate = transaction.get(T_GrantFeeTask, grant_fee_task_id)
-            if task_candidate is not None:
-                snapshot = _bundle()
-                if (
-                    snapshot.schema_version
-                    == "fpms.demo-input-bundle/integrated-a-v2"
-                    and snapshot.official_fee_due_date is not None
-                    and task_candidate.due_date != snapshot.official_fee_due_date
-                ):
-                    _source_conflict()
-        raise
+    with transaction.no_autoflush:
+        task, case = _task_state(transaction, grant_fee_task_id)
     snapshot = _bundle()
     selector = snapshot.official_fee_selector
     if (
@@ -370,6 +368,12 @@ def preview_grant_official_fees(
         _source_conflict()
     if task.due_date != snapshot.official_fee_due_date:
         _source_conflict()
+    with transaction.no_autoflush:
+        task, _case, evidence, notice = _task_evidence(
+            transaction,
+            grant_fee_task_id,
+            task_state=(task, case),
+        )
     books = tuple(
         transaction.scalars(
             select(OfficialRateBook).where(

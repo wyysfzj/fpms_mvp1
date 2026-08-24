@@ -5,11 +5,11 @@ import json
 import math
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
@@ -91,6 +91,34 @@ class DemoOfficialFeeRow:
     source_policy: str
     source_version: str
     source_status: str
+
+
+class DemoOfficialFeeDigestRow(Protocol):
+    fee_code: str
+    fee_name: str | None
+    fee_type: str
+    currency: str
+    default_amount: Decimal | None
+    enabled: bool
+    rate_group: str | None
+    country_code: str | None
+    case_type: str | None
+    patent_category: str | None
+    fee_domain: str | None
+    fee_section: str | None
+    fee_category: str | None
+    fee_subtype: str | None
+    reduction_scope: str | None
+    calc_mode: str | None
+    calc_params: str | None
+    allow_reduction: bool | None
+    effective_from: date | None
+    effective_to: date | None
+    source_doc: str | None
+    source_url: str | None
+    source_policy: str | None
+    source_version: str | None
+    source_status: str | None
 
 
 @dataclass(frozen=True)
@@ -251,60 +279,10 @@ _OFFICIAL_RATE_BOOK_KEYS = {
     "effective_from",
     "effective_to",
 }
-_OFFICIAL_FEE_ROW_KEYS = {
-    "fee_code",
-    "fee_name",
-    "fee_type",
-    "currency",
-    "default_amount",
-    "enabled",
-    "rate_group",
-    "country_code",
-    "case_type",
-    "patent_category",
-    "fee_domain",
-    "fee_section",
-    "fee_category",
-    "fee_subtype",
-    "reduction_scope",
-    "calc_mode",
-    "calc_params",
-    "allow_reduction",
-    "effective_from",
-    "effective_to",
-    "source_doc",
-    "source_url",
-    "source_policy",
-    "source_version",
-    "source_status",
-}
-_OFFICIAL_FEE_ROW_DIGEST_FIELDS = (
-    "fee_code",
-    "fee_name",
-    "fee_type",
-    "currency",
-    "default_amount",
-    "enabled",
-    "rate_group",
-    "country_code",
-    "case_type",
-    "patent_category",
-    "fee_domain",
-    "fee_section",
-    "fee_category",
-    "fee_subtype",
-    "reduction_scope",
-    "calc_mode",
-    "calc_params",
-    "allow_reduction",
-    "effective_from",
-    "effective_to",
-    "source_doc",
-    "source_url",
-    "source_policy",
-    "source_version",
-    "source_status",
+_OFFICIAL_FEE_ROW_DIGEST_FIELDS = tuple(
+    field.name for field in fields(DemoOfficialFeeRow)
 )
+_OFFICIAL_FEE_ROW_KEYS = set(_OFFICIAL_FEE_ROW_DIGEST_FIELDS)
 _SOURCE_SNAPSHOT_KEYS = {
     "content_sha256",
     "document_no",
@@ -405,7 +383,7 @@ def _utc_timestamp(value: Any, label: str) -> str:
     return value
 
 
-def demo_official_fee_row_sha256(row: Any) -> str:
+def demo_official_fee_row_sha256(row: DemoOfficialFeeDigestRow) -> str:
     default_amount = row.default_amount
     effective_from = row.effective_from
     effective_to = row.effective_to
