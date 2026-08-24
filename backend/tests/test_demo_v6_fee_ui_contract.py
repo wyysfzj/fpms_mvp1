@@ -72,6 +72,9 @@ def test_pending_official_evidence_is_not_presented_as_payment_success() -> None
     assert "getDemoGovPaymentCommand(payload.idempotency_key)" in client
     assert client.count("response = await post()") == 2
     assert "response.status === 202" in client
+    assert "catch (retryError)" in client
+    assert client.count("const finalRecovery = await getDemoGovPaymentCommand") == 2
+    assert "已停止重试" in client
     assert "isPendingOfficialEvidence" in pay_list
     assert "result.value.fact_status === 'REGISTERED_PENDING_OFFICIAL_EVIDENCE'" in registration
 

@@ -759,7 +759,14 @@ export async function createDemoGovPaymentCommand(
         retryRequired = true
     }
     if (retryRequired) {
-        response = await post()
+        try {
+            response = await post()
+        } catch (retryError) {
+            if (!isUnknownTransportError(retryError)) throw retryError
+            const finalRecovery = await getDemoGovPaymentCommand(payload.idempotency_key)
+            if (finalRecovery) return finalRecovery
+            throw new Error('官费登记结果仍未知；已停止重试，请稍后按同一操作恢复。')
+        }
         if (response.status === 202) {
             const finalRecovery = await getDemoGovPaymentCommand(payload.idempotency_key)
             if (finalRecovery) return finalRecovery
