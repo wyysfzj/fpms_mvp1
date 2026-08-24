@@ -69,6 +69,11 @@ def test_pending_official_evidence_is_not_presented_as_payment_success() -> None
     assert "已登记，待官方凭证核验" in pay_list
     assert "已登记，待官方凭证核验" in registration
     assert "official_receipt_no: null" in registration
+    assert "getDemoGovPaymentCommand(payload.idempotency_key)" in client
+    assert client.count("response = await post()") == 2
+    assert "response.status === 202" in client
+    assert "isPendingOfficialEvidence" in pay_list
+    assert "result.value.fact_status === 'REGISTERED_PENDING_OFFICIAL_EVIDENCE'" in registration
 
 
 def test_customer_finance_pages_distinguish_receipt_offset_and_settlement() -> None:

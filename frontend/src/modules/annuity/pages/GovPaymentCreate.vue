@@ -123,8 +123,8 @@
         <el-descriptions-item label="缴费记录">{{ formatGovPaymentDisplay(result.gov_payment.id) }}</el-descriptions-item>
         <el-descriptions-item label="费用项">{{ formatFeeItemContext(result.gov_payment.fee_item_id) }}</el-descriptions-item>
         <el-descriptions-item label="缴费状态">
-          <el-tag :type="govPaymentStatusTag(result.gov_payment.status)">
-            {{ govPaymentStatusText(result.gov_payment.status) }}
+          <el-tag :type="resultPendingOfficialEvidence ? 'warning' : govPaymentStatusTag(result.gov_payment.status)">
+            {{ resultPendingOfficialEvidence ? '已登记，待官方凭证核验' : govPaymentStatusText(result.gov_payment.status) }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
@@ -143,8 +143,8 @@
             {{ formatPayListDisplay(result.pay_list.pay_list_no) }}
           </el-descriptions-item>
           <el-descriptions-item label="清单状态">
-            <el-tag :type="payListStatusTag(result.pay_list.status)">
-              {{ payListStatusText(result.pay_list.status) }}
+            <el-tag :type="resultPendingOfficialEvidence ? 'warning' : payListStatusTag(result.pay_list.status)">
+              {{ resultPendingOfficialEvidence ? '已登记，待官方凭证核验' : payListStatusText(result.pay_list.status) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="客户">{{ formatClientDisplay(result.pay_list.client_id) }}</el-descriptions-item>
@@ -195,6 +195,11 @@ const saving = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const result = ref<GovPaymentRegisterResult | DemoGovPaymentCommandResult | null>(null)
+const resultPendingOfficialEvidence = computed(() => (
+  result.value !== null
+  && 'fact_status' in result.value
+  && result.value.fact_status === 'REGISTERED_PENDING_OFFICIAL_EVIDENCE'
+))
 const idempotencyKey = crypto.randomUUID()
 
 function parseQueryPositiveInt(value: unknown): number {

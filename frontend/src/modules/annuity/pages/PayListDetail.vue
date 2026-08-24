@@ -54,8 +54,8 @@
                 {{ formatPayListNo(detail.pay_list) }}
               </el-descriptions-item>
               <el-descriptions-item label="状态">
-                <el-tag :type="payListStatusTag(detail.pay_list.status)">
-                  {{ payListStatusText(detail.pay_list.status) }}
+                <el-tag :type="payListDisplayStatusTag">
+                  {{ payListDisplayStatusText }}
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="客户">
@@ -332,8 +332,8 @@
               </el-table-column>
               <el-table-column label="状态" width="110">
                 <template #default="{ row }">
-                  <el-tag :type="govPaymentStatusTag(row.status)">
-                    {{ govPaymentStatusText(row.status) }}
+                  <el-tag :type="govPaymentDisplayTag(row)">
+                    {{ govPaymentDisplayText(row) }}
                   </el-tag>
                 </template>
               </el-table-column>
@@ -741,6 +741,17 @@ const payListId = computed(() => {
 const feePackageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 
 const payList = computed(() => detail.value?.pay_list ?? null)
+const hasPendingOfficialEvidence = computed(() => (
+  detail.value?.payment.some(isPendingOfficialEvidence) ?? false
+))
+const payListDisplayStatusText = computed(() => (
+  hasPendingOfficialEvidence.value
+    ? '已登记，待官方凭证核验'
+    : payListStatusText(payList.value?.status)
+))
+const payListDisplayStatusTag = computed(() => (
+  hasPendingOfficialEvidence.value ? 'warning' : payListStatusTag(payList.value?.status)
+))
 
 const officialAcceptanceResult = computed(() => {
   const bound = boundOfficialAcceptanceResult.value
@@ -922,6 +933,23 @@ function govPaymentStatusText(status?: string): string {
     default:
       return '未知状态'
   }
+}
+
+function isPendingOfficialEvidence(row: GovPaymentInfo): boolean {
+  return row.official_receipt_no == null
+    && row.voucher_no == null
+    && row.invoice_no == null
+    && row.remark === '已登记，待官方凭证核验'
+}
+
+function govPaymentDisplayText(row: GovPaymentInfo): string {
+  return isPendingOfficialEvidence(row)
+    ? '已登记，待官方凭证核验'
+    : govPaymentStatusText(row.status)
+}
+
+function govPaymentDisplayTag(row: GovPaymentInfo): 'info' | 'warning' | 'success' {
+  return isPendingOfficialEvidence(row) ? 'warning' : govPaymentStatusTag(row.status)
 }
 
 function govPaymentStatusTag(status?: string): 'info' | 'warning' | 'success' {

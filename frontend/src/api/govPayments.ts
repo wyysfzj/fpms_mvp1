@@ -738,20 +738,57 @@ export async function addManualGovPayment(
 export async function createDemoGovPaymentCommand(
     payload: DemoGovPaymentCommandPayload,
 ): Promise<DemoGovPaymentCommandResult> {
-    const response = await http.post<DemoGovPaymentCommandResult>(
+    const post = () => http.post<DemoGovPaymentCommandResult>(
         '/gov-payments/demo-command',
         payload,
+        { validateStatus: status => status === 200 || status === 201 || status === 202 },
     )
+    let response: Awaited<ReturnType<typeof post>> | undefined
+    let retryRequired = false
+    try {
+        response = await post()
+    } catch (error) {
+        if (!isUnknownTransportError(error)) throw error
+        const recovered = await getDemoGovPaymentCommand(payload.idempotency_key)
+        if (recovered) return recovered
+        retryRequired = true
+    }
+    if (response?.status === 202) {
+        const recovered = await getDemoGovPaymentCommand(payload.idempotency_key)
+        if (recovered) return recovered
+        retryRequired = true
+    }
+    if (retryRequired) {
+        response = await post()
+        if (response.status === 202) {
+            const finalRecovery = await getDemoGovPaymentCommand(payload.idempotency_key)
+            if (finalRecovery) return finalRecovery
+            throw new Error('官费登记命令仍在处理中，请稍后按同一操作重试。')
+        }
+    }
+    if (!response) throw new Error('官费登记命令未返回结果。')
+    return mapDemoGovPaymentCommandResult(response.data)
+}
+
+function isUnknownTransportError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false
+    const candidate = error as { isAxiosError?: unknown; response?: unknown }
+    return candidate.isAxiosError === true && candidate.response === undefined
+}
+
+function mapDemoGovPaymentCommandResult(
+    result: DemoGovPaymentCommandResult,
+): DemoGovPaymentCommandResult {
     return {
-        ...response.data,
+        ...result,
         gov_payment: {
-            ...response.data.gov_payment,
-            paid_amount: asNumber(response.data.gov_payment.paid_amount),
-            planned_amt: asNumber(response.data.gov_payment.planned_amt),
+            ...result.gov_payment,
+            paid_amount: asNumber(result.gov_payment.paid_amount),
+            planned_amt: asNumber(result.gov_payment.planned_amt),
         },
         pay_list: {
-            ...response.data.pay_list,
-            total_amount: asNumber(response.data.pay_list.total_amount),
+            ...result.pay_list,
+            total_amount: asNumber(result.pay_list.total_amount),
         },
     }
 }
@@ -764,16 +801,5 @@ export async function getDemoGovPaymentCommand(
         { validateStatus: status => status === 200 || status === 202 || status === 404 },
     )
     if (response.status !== 200) return null
-    return {
-        ...response.data,
-        gov_payment: {
-            ...response.data.gov_payment,
-            paid_amount: asNumber(response.data.gov_payment.paid_amount),
-            planned_amt: asNumber(response.data.gov_payment.planned_amt),
-        },
-        pay_list: {
-            ...response.data.pay_list,
-            total_amount: asNumber(response.data.pay_list.total_amount),
-        },
-    }
+    return mapDemoGovPaymentCommandResult(response.data)
 }
