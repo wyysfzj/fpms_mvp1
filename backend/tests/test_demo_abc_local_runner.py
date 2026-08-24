@@ -5,8 +5,10 @@ import json
 import os
 import runpy
 import sqlite3
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
@@ -185,7 +187,7 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
     _configure(monkeypatch, root, digest, "v6-official-source")
     monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    activation_observations: list[tuple[str, str]] = []
+    activation_observations: list[tuple[str, str, datetime]] = []
 
     def activation_spy(command, transaction):
         candidate = transaction.get(OfficialRateBook, command.rate_book_id)
@@ -203,7 +205,9 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
         assert command.approved_at is not None
         assert command.approved_at.tzinfo is None
         assert command.expected_current_rate_book_id is None
-        activation_observations.append((candidate.id, reviewer.id))
+        activation_observations.append(
+            (candidate.id, reviewer.id, command.approved_at)
+        )
         return activate_rate_book(command, transaction)
 
     monkeypatch.setattr(
@@ -213,9 +217,12 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
         raising=False,
     )
 
+    before = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
     result = run_local_demo_abc.bootstrap_demo_run()
+    after = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
 
     assert len(activation_observations) == 1
+    assert before <= activation_observations[0][2] <= after
     source = manifest["official_fee_source"]
     expected_book = source["rate_book"]
     expected_selector = manifest["official_fee_selector"]
@@ -254,6 +261,9 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
         assert book["approved_by"] == book["activated_by"] == reviewer_id
         assert book["approved_at"] == book["activated_at"]
         assert book["approved_at"] is not None
+        stored_at = datetime.fromisoformat(book["approved_at"])
+        assert stored_at == activation_observations[0][2]
+        assert before <= stored_at <= after
         assert book["activation_status"] == "ACTIVE"
         assert book["current_identity_key"] == (
             f"CNIPA|{expected_book['book_code']}"
@@ -263,14 +273,16 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
             "rate_group, country_code, case_type, patent_category, fee_domain, "
             "fee_section, fee_category, fee_subtype, reduction_scope, calc_mode, "
             "calc_params, allow_reduction, effective_from, effective_to, source_doc, "
-            "source_url, source_policy, source_version, source_status "
+            "source_url, source_policy, source_version, source_status, "
+            "official_rate_book_id "
             "FROM t_fee_rate ORDER BY rowid"
         ).fetchall()
         assert len(rows) == 2
+        assert {row["official_rate_book_id"] for row in rows} == {book["id"]}
         keys = tuple(source["rows"][0])
         actual_rows = []
         for stored in rows:
-            values = list(stored)
+            values = list(stored)[:-1]
             values[4] = format(Decimal(str(values[4])), ".2f")
             values[5] = bool(values[5])
             values[17] = bool(values[17])
@@ -286,68 +298,95 @@ def test_v6_bootstrap_materializes_and_activates_exact_official_fee_source(
         )
 
 
-def test_v6_bootstrap_failure_rolls_back_disposes_and_targets_exact_run_root(
+def test_v6_bootstrap_activation_failure_removes_unserved_run_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    materialize = getattr(
-        run_local_demo_abc, "_materialize_official_fee_source", None
-    )
-    assert callable(materialize), (
-        "planned seam is missing: _materialize_official_fee_source("
-        "db, bundle, reviewer_username, activated_at)"
-    )
     _helpers, (root, _manifest, digest) = _v6_bundle(tmp_path / "input")
-    _configure(monkeypatch, root, digest, "v6-materialization-failure")
+    _configure(monkeypatch, root, digest, "v6-activation-failure")
     monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    exact_run_root = tmp_path / "fpms-demo-abc-v6-materialization-failure"
-    rmtree_targets: list[Path] = []
+    exact_run_root = tmp_path / "fpms-demo-abc-v6-activation-failure"
+
+    def fail_activation(_command, _transaction):
+        raise RuntimeError("injected official-rate-book activation failure")
+
+    monkeypatch.setattr(
+        run_local_demo_abc,
+        "activate_official_rate_book",
+        fail_activation,
+        raising=False,
+    )
+
+    with pytest.raises(
+        RuntimeError, match="injected official-rate-book activation failure"
+    ):
+        run_local_demo_abc.bootstrap_demo_run()
+
+    assert not exact_run_root.exists()
+
+
+def test_v6_bootstrap_cleanup_disposes_before_rollback_inspection_and_rmtree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _helpers, (root, _manifest, digest) = _v6_bundle(tmp_path / "input")
+    _configure(monkeypatch, root, digest, "v6-cleanup-order")
+    monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    exact_run_root = tmp_path / "fpms-demo-abc-v6-cleanup-order"
     disposed: list[bool] = []
+    cleanup_targets: list[Path] = []
     real_sqlite_engine = run_local_demo_abc._sqlite_engine
+    real_rmtree = run_local_demo_abc.shutil.rmtree
 
     def tracked_sqlite_engine(database_url: str):
         engine = real_sqlite_engine(database_url)
         real_dispose = engine.dispose
 
         def tracked_dispose() -> None:
-            disposed.append(True)
             real_dispose()
+            disposed.append(True)
 
         monkeypatch.setattr(engine, "dispose", tracked_dispose)
         return engine
 
-    def fail_after_materialization(
-        db, bundle, reviewer_username: str, activated_at
-    ) -> None:
-        materialize(db, bundle, reviewer_username, activated_at)
-        raise RuntimeError("injected post-materialization bootstrap failure")
+    def fail_activation(_command, _transaction):
+        raise RuntimeError("injected activation failure for cleanup observation")
+
+    def inspect_then_remove(target) -> None:
+        target = Path(target)
+        assert target == exact_run_root
+        assert disposed
+        with sqlite3.connect(target / "fpms-demo.db") as connection:
+            assert connection.execute(
+                "SELECT COUNT(*) FROM t_fee_rate_book"
+            ).fetchone()[0] == 0
+            assert connection.execute(
+                "SELECT COUNT(*) FROM t_fee_rate"
+            ).fetchone()[0] == 0
+        cleanup_targets.append(target)
+        real_rmtree(target)
 
     monkeypatch.setattr(run_local_demo_abc, "_sqlite_engine", tracked_sqlite_engine)
     monkeypatch.setattr(
         run_local_demo_abc,
-        "_materialize_official_fee_source",
-        fail_after_materialization,
+        "activate_official_rate_book",
+        fail_activation,
+        raising=False,
     )
     monkeypatch.setattr(
         run_local_demo_abc.shutil,
         "rmtree",
-        lambda target: rmtree_targets.append(Path(target)),
+        inspect_then_remove,
     )
 
     with pytest.raises(
-        RuntimeError, match="injected post-materialization bootstrap failure"
+        RuntimeError, match="injected activation failure for cleanup observation"
     ):
         run_local_demo_abc.bootstrap_demo_run()
 
-    assert rmtree_targets == [exact_run_root]
+    assert cleanup_targets == [exact_run_root]
     assert disposed
-    database_path = exact_run_root / "fpms-demo.db"
-    assert database_path.is_file()
-    with sqlite3.connect(database_path) as connection:
-        assert connection.execute(
-            "SELECT COUNT(*) FROM t_fee_rate_book"
-        ).fetchone()[0] == 0
-        assert connection.execute("SELECT COUNT(*) FROM t_fee_rate").fetchone()[0] == 0
+    assert not exact_run_root.exists()
 
 
 def test_port_probe_enables_address_reuse_before_bind(monkeypatch):

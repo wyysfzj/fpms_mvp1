@@ -1182,6 +1182,18 @@ def test_v6_official_fee_source_is_immutable_and_due_date_bound(
             id="missing-source",
         ),
         pytest.param(_add_snapshot_source, id="extra-source"),
+        pytest.param(
+            lambda manifest: manifest["official_fee_source"]["rate_book"].update(
+                unexpected=True
+            ),
+            id="unknown-nested-key",
+        ),
+        pytest.param(
+            lambda manifest: manifest["official_fee_source"]["rows"][0].pop(
+                "fee_name"
+            ),
+            id="missing-nested-key",
+        ),
         pytest.param(_make_source_snapshot_noncanonical, id="noncanonical-snapshot"),
         pytest.param(_make_source_snapshot_hash_invalid, id="snapshot-hash"),
         pytest.param(_make_source_reference_untrusted, id="untrusted-reference"),
@@ -1203,8 +1215,20 @@ def test_v6_official_fee_source_is_immutable_and_due_date_bound(
             ),
             id="selector-row-digest",
         ),
+        pytest.param(
+            lambda manifest: manifest["official_fee_selector"].update(
+                rate_book_version="2026.03.30-SELECTOR-DRIFT"
+            ),
+            id="selector-book-version",
+        ),
         pytest.param(_add_unselected_official_fee_row, id="row-set"),
         pytest.param(_reverse_official_fee_rows, id="row-order"),
+        pytest.param(
+            lambda manifest: manifest["official_fee_source"]["rows"][1].update(
+                fee_code="CNIPA-GRANT-REGISTRATION"
+            ),
+            id="duplicate-row-identity",
+        ),
         pytest.param(
             lambda manifest: manifest["official_fee_source"]["rate_book"].update(
                 source_authority="NOT-CNIPA"
@@ -1230,6 +1254,16 @@ def test_v6_official_fee_source_is_immutable_and_due_date_bound(
         pytest.param(
             lambda manifest: _mutate_official_fee_row(manifest, currency="USD"),
             id="non-cny",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(manifest, enabled=False),
+            id="disabled-row",
+        ),
+        pytest.param(
+            lambda manifest: _mutate_official_fee_row(
+                manifest, source_status="INACTIVE"
+            ),
+            id="inactive-source-row",
         ),
         pytest.param(
             lambda manifest: _mutate_official_fee_row(
