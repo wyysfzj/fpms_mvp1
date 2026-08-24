@@ -27,11 +27,12 @@ V6 的 `official_fee_selector` 只能选择并校验数据库中已经存在的�
 
 runtime 合同不接受 `approval_status`、`activation_status`、actor ID 或时间作为可覆盖输入。
 loader 通过全部 authority 门禁后，fresh-run 先以 `PENDING/INACTIVE` 创建 candidate，再调用现有
-`activate_official_rate_book` 完成系统内审批和激活，不直接写 active tuple。`approved_at` 使用
-authority record 已绑定的 aware 时间转换为 Asia/Shanghai naive wall time；启动时钟早于该时间则
-失败。`activated_at` 是实际 bootstrap action 的 Asia/Shanghai naive wall time；existing service
-负责 actor 有效性、可信 CNIPA URL、canonical snapshot、区间冲突和
-`current_identity_key=CNIPA|book_code`。
+`activate_official_rate_book` 完成系统内审批和激活，不直接写 active tuple。authority record 的
+时间只验证 bundle decision，不写入 rate-book actor tuple。费率簿的
+`approved_at/activated_at` 均使用调用 activation service 时同一个受控的实际 bootstrap
+Asia/Shanghai naive wall time，与本地 reviewer actor 表达同一次系统动作，不拼接 customer/synthetic
+approver 的身份或时间。existing service 负责 actor 有效性、可信 CNIPA URL、canonical snapshot、
+区间冲突和 `current_identity_key=CNIPA|book_code`。
 
 本地 reviewer 用户只是系统内 approval/activation FK actor，不被描述为外部官方发布者。来源权威
 仍由 `source_authority/source_reference/source_snapshot` 表达。本设计按用户 2026-08-25 的明确批准，
@@ -67,8 +68,8 @@ loader 必须在任何数据库写入之前验证：
 
 ## 3. Fresh-run 物化
 
-迁移、既有 60 行通知目录、OA 模板和两个 Demo 身份初始化后，在同一 fresh database bootstrap
-事务内执行一次专用物化函数：
+迁移、既有 60 行通知目录、OA 模板和两个 Demo 身份初始化后，执行一个专用 rate-book
+materialization transaction：
 
 1. 读取 loader 已冻结的 immutable snapshot，不重新解析原文件；
 2. 使用 snapshot 中的 exact source fields 创建一条 `PENDING/INACTIVE` `OfficialRateBook`
@@ -76,13 +77,15 @@ loader 必须在任何数据库写入之前验证：
 3. 使用 exact row fields 创建所选 `FeeRate`，并绑定新 book ID；
 4. 使用配置的 reviewer 用户和已定义时间调用现有 `activate_official_rate_book`；
 5. flush 后验证 active tuple/current identity，重新计算 book snapshot hash 与每个 row digest；任一
-   不一致回滚整个 bootstrap 事务；
+   不一致回滚该 transaction 中的 book、rows 和 activation；
 6. 创建授权任务时必须断言 task `due_date` 等于 loader 绑定的 replacement grant notice
    `official_due_date`；
 7. 提交后阶段 07 继续调用现有只读 preview，不接受 runner 传入金额。
 
 这是 isolated Demo run 的 runtime materialization，不是全局种子或生产激活。全新数据库以外如出现
 同 identity 的既有簿/行或任何冲突，立即失败，不做 upsert、覆盖或静默复用。
+此前已提交的目录和身份不属于该 transaction；任何后续 bootstrap failure 都必须在关闭数据库连接后
+删除尚未提供服务的整个 isolated run root，不能留下可误用的半成品 run。
 
 ## 4. 来源与客户边界
 
@@ -98,10 +101,11 @@ loader 必须在任何数据库写入之前验证：
 ## 5. 失败和停止条件
 
 下列任一条件在服务启动前停止：缺 source、未知/缺失字段、snapshot hash 错误、selector/source 不等、
-row digest 错误、非 GOV、非 CNY、金额非正、未覆盖 canonical task due date、来源版本冲突、
-authority decision 不匹配、approved time 在未来。
+row digest 错误、非 GOV、非 CNY、金额非正、未覆盖 canonical task due date、来源版本冲突或
+authority decision 不匹配。
 
-物化时若 actor 缺失、数据库非 fresh、唯一键冲突、写后摘要不同或事务异常，回滚并停止。不得降级到
+物化时若 actor 缺失、数据库非 fresh、唯一键冲突、写后摘要不同或事务异常，回滚 book/rows/activation、
+删除未服务的 isolated run root 并停止。不得降级到
 占位费率、硬编码金额、测试内隐式 seed、网络抓取、直接写 active tuple 或跳过阶段 07。
 
 ## 6. 最小实现边界
