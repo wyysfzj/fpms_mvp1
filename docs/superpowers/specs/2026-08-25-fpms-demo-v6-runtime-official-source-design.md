@@ -4,6 +4,10 @@
 状态：待独立审查与用户书面确认
 风险：HIGH（官费来源、runtime input、fresh-run 数据物化）
 
+执行分类：`shared_file_density=LOW`、`prereq_dependency_density=LOW`、
+`be_fe_coupling=NONE`、`evidence_cost=HIGH`、`chosen_runbook=P0-single-lane-story`。
+SQLite bootstrap、物化验证和 canonical rehearsal 全部串行。
+
 ## 1. 结论
 
 V6 的 `official_fee_selector` 只能选择并校验数据库中已经存在的官费行；全新 Demo 数据库却不含
