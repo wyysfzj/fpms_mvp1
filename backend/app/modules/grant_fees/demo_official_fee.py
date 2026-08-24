@@ -10,6 +10,7 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.demo_bundle import demo_official_fee_row_sha256
 from app.core.errors import BusinessError
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
@@ -146,46 +147,7 @@ def _confirmation_conflict() -> None:
 
 
 def _rate_row_sha256(row: FeeRate) -> str:
-    payload = {
-        "schema": "FPMS_DEMO_RATE_ROW_DIGEST_V1",
-        "fee_code": row.fee_code,
-        "fee_name": row.fee_name,
-        "fee_type": row.fee_type,
-        "currency": row.currency,
-        "default_amount": (
-            None if row.default_amount is None else format(row.default_amount, ".2f")
-        ),
-        "enabled": row.enabled,
-        "rate_group": row.rate_group,
-        "country_code": row.country_code,
-        "case_type": row.case_type,
-        "patent_category": row.patent_category,
-        "fee_domain": row.fee_domain,
-        "fee_section": row.fee_section,
-        "fee_category": row.fee_category,
-        "fee_subtype": row.fee_subtype,
-        "reduction_scope": row.reduction_scope,
-        "calc_mode": row.calc_mode,
-        "calc_params": row.calc_params,
-        "allow_reduction": row.allow_reduction,
-        "effective_from": (
-            None if row.effective_from is None else row.effective_from.isoformat()
-        ),
-        "effective_to": None if row.effective_to is None else row.effective_to.isoformat(),
-        "source_doc": row.source_doc,
-        "source_url": row.source_url,
-        "source_policy": row.source_policy,
-        "source_version": row.source_version,
-        "source_status": row.source_status,
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return demo_official_fee_row_sha256(row)
 
 
 def _projection(case: Case) -> LifecycleProjection:
@@ -380,13 +342,33 @@ def preview_grant_official_fees(
             "官费预览要求干净事务",
             status_code=409,
         )
-    with transaction.no_autoflush:
-        task, _case, evidence, notice = _task_evidence(
-            transaction, grant_fee_task_id
-        )
+    try:
+        with transaction.no_autoflush:
+            task, _case, evidence, notice = _task_evidence(
+                transaction, grant_fee_task_id
+            )
+    except BusinessError as exc:
+        if exc.code == "DEMO_GOV_TASK_CONFLICT":
+            task_candidate = transaction.get(T_GrantFeeTask, grant_fee_task_id)
+            if task_candidate is not None:
+                snapshot = _bundle()
+                if (
+                    snapshot.schema_version
+                    == "fpms.demo-input-bundle/integrated-a-v2"
+                    and snapshot.official_fee_due_date is not None
+                    and task_candidate.due_date != snapshot.official_fee_due_date
+                ):
+                    _source_conflict()
+        raise
     snapshot = _bundle()
     selector = snapshot.official_fee_selector
-    if snapshot.schema_version != "fpms.demo-input-bundle/integrated-a-v2" or selector is None:
+    if (
+        snapshot.schema_version != "fpms.demo-input-bundle/integrated-a-v2"
+        or selector is None
+        or snapshot.official_fee_due_date is None
+    ):
+        _source_conflict()
+    if task.due_date != snapshot.official_fee_due_date:
         _source_conflict()
     books = tuple(
         transaction.scalars(

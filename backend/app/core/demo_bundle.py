@@ -10,6 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
@@ -47,6 +48,55 @@ class DemoOfficialFeeSelector:
     rate_book_sha256: str
     fee_codes: tuple[str, ...]
     fee_row_sha256s: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class DemoOfficialRateBook:
+    book_code: str
+    version_code: str
+    source_authority: str
+    source_reference: str
+    source_version: str
+    source_published_on: date
+    source_snapshot: str
+    source_snapshot_hash: str
+    effective_from: date
+    effective_to: date | None
+
+
+@dataclass(frozen=True)
+class DemoOfficialFeeRow:
+    fee_code: str
+    fee_name: str
+    fee_type: str
+    currency: str
+    default_amount: Decimal
+    enabled: bool
+    rate_group: str | None
+    country_code: str | None
+    case_type: str | None
+    patent_category: str | None
+    fee_domain: str | None
+    fee_section: str | None
+    fee_category: str | None
+    fee_subtype: str | None
+    reduction_scope: str | None
+    calc_mode: str
+    calc_params: str | None
+    allow_reduction: bool | None
+    effective_from: date
+    effective_to: date | None
+    source_doc: str
+    source_url: str
+    source_policy: str
+    source_version: str
+    source_status: str
+
+
+@dataclass(frozen=True)
+class DemoOfficialFeeSource:
+    rate_book: DemoOfficialRateBook
+    rows: tuple[DemoOfficialFeeRow, ...]
 
 
 @dataclass(frozen=True)
@@ -94,6 +144,8 @@ class DemoBundleSnapshot:
     template: DemoTemplate
     service_rates: tuple[DemoServiceRate, ...]
     official_fee_selector: DemoOfficialFeeSelector | None
+    official_fee_source: DemoOfficialFeeSource | None
+    official_fee_due_date: date | None
     first_receipt_amount: Decimal | None
     readiness: str
     schema_version: str
@@ -159,7 +211,11 @@ _TOP_KEYS = {
     "evidence",
     "rates",
 }
-_V6_TOP_KEYS = _TOP_KEYS | {"official_fee_selector", "first_receipt_amount"}
+_V6_TOP_KEYS = _TOP_KEYS | {
+    "official_fee_selector",
+    "official_fee_source",
+    "first_receipt_amount",
+}
 _METADATA_KEYS = {
     "effective_at",
     "received_at",
@@ -183,6 +239,83 @@ _AUTHORITY_CLASSIFICATIONS = {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
 _PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示"
 _DOCX_MARKER = "DEMO_ONLY / 仅用于本地虚构演示"
 _WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_OFFICIAL_RATE_BOOK_KEYS = {
+    "book_code",
+    "version_code",
+    "source_authority",
+    "source_reference",
+    "source_version",
+    "source_published_on",
+    "source_snapshot",
+    "source_snapshot_hash",
+    "effective_from",
+    "effective_to",
+}
+_OFFICIAL_FEE_ROW_KEYS = {
+    "fee_code",
+    "fee_name",
+    "fee_type",
+    "currency",
+    "default_amount",
+    "enabled",
+    "rate_group",
+    "country_code",
+    "case_type",
+    "patent_category",
+    "fee_domain",
+    "fee_section",
+    "fee_category",
+    "fee_subtype",
+    "reduction_scope",
+    "calc_mode",
+    "calc_params",
+    "allow_reduction",
+    "effective_from",
+    "effective_to",
+    "source_doc",
+    "source_url",
+    "source_policy",
+    "source_version",
+    "source_status",
+}
+_OFFICIAL_FEE_ROW_DIGEST_FIELDS = (
+    "fee_code",
+    "fee_name",
+    "fee_type",
+    "currency",
+    "default_amount",
+    "enabled",
+    "rate_group",
+    "country_code",
+    "case_type",
+    "patent_category",
+    "fee_domain",
+    "fee_section",
+    "fee_category",
+    "fee_subtype",
+    "reduction_scope",
+    "calc_mode",
+    "calc_params",
+    "allow_reduction",
+    "effective_from",
+    "effective_to",
+    "source_doc",
+    "source_url",
+    "source_policy",
+    "source_version",
+    "source_status",
+)
+_SOURCE_SNAPSHOT_KEYS = {
+    "content_sha256",
+    "document_no",
+    "published_on",
+    "retrieved_at",
+    "title",
+    "url",
+}
+_UTC_TIMESTAMP_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z"
+)
 
 
 def _current_demo_date() -> date:
@@ -229,6 +362,78 @@ def _matches(value: Any, pattern: re.Pattern[str], label: str) -> str:
 def _exact(value: Any, expected: Any, label: str) -> None:
     if type(value) is not type(expected) or value != expected:
         raise _error(f"{label} must be {expected!r}")
+
+
+def _exact_string(value: Any, label: str, *, maximum: int) -> str:
+    text = _string(value, label, maximum=maximum)
+    if text != text.strip() or "\x00" in text:
+        raise _error(f"{label} must be an exact non-empty string")
+    return text
+
+
+def _optional_exact_string(value: Any, label: str, *, maximum: int) -> str | None:
+    if value is None:
+        return None
+    return _exact_string(value, label, maximum=maximum)
+
+
+def _trusted_cnipa_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        value.startswith("https://")
+        and parsed.scheme == "https"
+        and parsed.hostname == "www.cnipa.gov.cn"
+        and parsed.netloc == "www.cnipa.gov.cn"
+        and not parsed.query
+        and not parsed.fragment
+        and urlunsplit(parsed) == value
+    )
+
+
+def _utc_timestamp(value: Any, label: str) -> str:
+    if not isinstance(value, str) or _UTC_TIMESTAMP_RE.fullmatch(value) is None:
+        raise _error(f"{label} must be an ISO UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
+    except ValueError as exc:
+        raise _error(f"{label} must be an ISO UTC timestamp") from exc
+    if parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        raise _error(f"{label} must be an ISO UTC timestamp")
+    return value
+
+
+def demo_official_fee_row_sha256(row: Any) -> str:
+    default_amount = row.default_amount
+    effective_from = row.effective_from
+    effective_to = row.effective_to
+    payload = {
+        "schema": "FPMS_DEMO_RATE_ROW_DIGEST_V1",
+        **{
+            field: getattr(row, field)
+            for field in _OFFICIAL_FEE_ROW_DIGEST_FIELDS
+            if field not in {"default_amount", "effective_from", "effective_to"}
+        },
+        "default_amount": (
+            None
+            if default_amount is None
+            else format(default_amount, ".2f")
+        ),
+        "effective_from": (
+            None if effective_from is None else effective_from.isoformat()
+        ),
+        "effective_to": None if effective_to is None else effective_to.isoformat(),
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
@@ -898,6 +1103,284 @@ def _validate_metadata(
     )
 
 
+def _parse_official_fee_source(
+    value: Any,
+    *,
+    selector: DemoOfficialFeeSelector,
+    official_due_date: date,
+) -> DemoOfficialFeeSource:
+    source = _expect_keys(value, {"rate_book", "rows"}, "official_fee_source")
+    raw_book = _expect_keys(
+        source["rate_book"],
+        _OFFICIAL_RATE_BOOK_KEYS,
+        "official_fee_source.rate_book",
+    )
+    book_code = _matches(
+        raw_book["book_code"],
+        _FEE_CODE_RE,
+        "official_fee_source.rate_book.book_code",
+    )
+    version_code = _exact_string(
+        raw_book["version_code"],
+        "official_fee_source.rate_book.version_code",
+        maximum=128,
+    )
+    _exact(
+        raw_book["source_authority"],
+        "CNIPA",
+        "official_fee_source.rate_book.source_authority",
+    )
+    source_reference = _exact_string(
+        raw_book["source_reference"],
+        "official_fee_source.rate_book.source_reference",
+        maximum=512,
+    )
+    if not _trusted_cnipa_url(source_reference):
+        raise _error("official_fee_source.rate_book.source_reference is not trusted")
+    source_version = _exact_string(
+        raw_book["source_version"],
+        "official_fee_source.rate_book.source_version",
+        maximum=128,
+    )
+    if source_version != version_code:
+        raise _error("official fee source and rate-book versions do not match")
+    source_published_on = _iso_date(
+        raw_book["source_published_on"],
+        "official_fee_source.rate_book.source_published_on",
+    )
+    source_snapshot = _exact_string(
+        raw_book["source_snapshot"],
+        "official_fee_source.rate_book.source_snapshot",
+        maximum=1_000_000,
+    )
+    source_snapshot_hash = _matches(
+        raw_book["source_snapshot_hash"],
+        _HASH_RE,
+        "official_fee_source.rate_book.source_snapshot_hash",
+    )
+    try:
+        parsed_snapshot = json.loads(
+            source_snapshot,
+            object_pairs_hook=_object_without_duplicates,
+        )
+        canonical_snapshot = json.dumps(
+            parsed_snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise _error("official_fee_source.rate_book.source_snapshot is invalid") from exc
+    if canonical_snapshot != source_snapshot:
+        raise _error("official_fee_source.rate_book.source_snapshot is not canonical")
+    if hashlib.sha256(source_snapshot.encode("utf-8")).hexdigest() != source_snapshot_hash:
+        raise _error("official_fee_source.rate_book.source_snapshot_hash does not match")
+    snapshot = _expect_keys(
+        parsed_snapshot,
+        {"schema_version", "sources"},
+        "official_fee_source.rate_book.source_snapshot",
+    )
+    _exact(
+        snapshot["schema_version"],
+        "CNIPA_RATE_SOURCE_V1",
+        "official_fee_source.rate_book.source_snapshot.schema_version",
+    )
+    snapshot_sources = snapshot["sources"]
+    if not isinstance(snapshot_sources, list) or len(snapshot_sources) != 1:
+        raise _error("official fee source snapshot must contain exactly one source")
+    snapshot_source = _expect_keys(
+        snapshot_sources[0],
+        _SOURCE_SNAPSHOT_KEYS,
+        "official_fee_source.rate_book.source_snapshot.sources[0]",
+    )
+    _matches(
+        snapshot_source["content_sha256"],
+        _HASH_RE,
+        "official_fee_source.rate_book.source_snapshot.sources[0].content_sha256",
+    )
+    _optional_exact_string(
+        snapshot_source["document_no"],
+        "official_fee_source.rate_book.source_snapshot.sources[0].document_no",
+        maximum=256,
+    )
+    snapshot_published_on = _iso_date(
+        snapshot_source["published_on"],
+        "official_fee_source.rate_book.source_snapshot.sources[0].published_on",
+    )
+    _utc_timestamp(
+        snapshot_source["retrieved_at"],
+        "official_fee_source.rate_book.source_snapshot.sources[0].retrieved_at",
+    )
+    _exact_string(
+        snapshot_source["title"],
+        "official_fee_source.rate_book.source_snapshot.sources[0].title",
+        maximum=512,
+    )
+    snapshot_url = _exact_string(
+        snapshot_source["url"],
+        "official_fee_source.rate_book.source_snapshot.sources[0].url",
+        maximum=512,
+    )
+    if not _trusted_cnipa_url(snapshot_url):
+        raise _error("official fee source snapshot URL is not trusted")
+    if snapshot_url != source_reference or snapshot_published_on != source_published_on:
+        raise _error("official fee source reference or published date does not match")
+
+    effective_from = _iso_date(
+        raw_book["effective_from"],
+        "official_fee_source.rate_book.effective_from",
+    )
+    effective_to = (
+        None
+        if raw_book["effective_to"] is None
+        else _iso_date(
+            raw_book["effective_to"],
+            "official_fee_source.rate_book.effective_to",
+        )
+    )
+    if (
+        effective_to is not None
+        and effective_to < effective_from
+        or effective_from > official_due_date
+        or effective_to is not None
+        and effective_to < official_due_date
+    ):
+        raise _error("official fee rate-book interval does not cover the due date")
+    if (
+        selector.source_authority != "CNIPA"
+        or selector.rate_book_version != version_code
+        or selector.rate_book_sha256 != source_snapshot_hash
+    ):
+        raise _error("official fee selector does not match the rate book")
+    rate_book = DemoOfficialRateBook(
+        book_code=book_code,
+        version_code=version_code,
+        source_authority="CNIPA",
+        source_reference=source_reference,
+        source_version=source_version,
+        source_published_on=source_published_on,
+        source_snapshot=source_snapshot,
+        source_snapshot_hash=source_snapshot_hash,
+        effective_from=effective_from,
+        effective_to=effective_to,
+    )
+
+    raw_rows = source["rows"]
+    if not isinstance(raw_rows, list) or len(raw_rows) != len(selector.fee_codes):
+        raise _error("official fee source rows must exactly match the selector")
+    expected_row_hashes = dict(selector.fee_row_sha256s)
+    rows: list[DemoOfficialFeeRow] = []
+    for index, raw_value in enumerate(raw_rows):
+        label = f"official_fee_source.rows[{index}]"
+        raw_row = _expect_keys(raw_value, _OFFICIAL_FEE_ROW_KEYS, label)
+        fee_code = _matches(raw_row["fee_code"], _FEE_CODE_RE, f"{label}.fee_code")
+        _exact(fee_code, selector.fee_codes[index], f"{label}.fee_code")
+        amount_text = _matches(
+            raw_row["default_amount"], _AMOUNT_RE, f"{label}.default_amount"
+        )
+        if amount_text == "0.00" or len(amount_text.partition(".")[0]) > 16:
+            raise _error(f"{label}.default_amount must be a positive two-place amount")
+        _exact(raw_row["fee_type"], "GOV", f"{label}.fee_type")
+        _exact(raw_row["currency"], "CNY", f"{label}.currency")
+        _exact(raw_row["enabled"], True, f"{label}.enabled")
+        _exact(raw_row["calc_mode"], "FIXED", f"{label}.calc_mode")
+        _exact(raw_row["calc_params"], None, f"{label}.calc_params")
+        if raw_row["allow_reduction"] is not False and raw_row["allow_reduction"] is not None:
+            raise _error(f"{label}.allow_reduction must be false or null")
+        row_effective_from = _iso_date(
+            raw_row["effective_from"], f"{label}.effective_from"
+        )
+        row_effective_to = (
+            None
+            if raw_row["effective_to"] is None
+            else _iso_date(raw_row["effective_to"], f"{label}.effective_to")
+        )
+        if (
+            row_effective_to is not None
+            and row_effective_to < row_effective_from
+            or row_effective_from > official_due_date
+            or row_effective_to is not None
+            and row_effective_to < official_due_date
+        ):
+            raise _error(f"{label} interval does not cover the due date")
+        source_doc = _exact_string(
+            raw_row["source_doc"], f"{label}.source_doc", maximum=256
+        )
+        source_url = _exact_string(
+            raw_row["source_url"], f"{label}.source_url", maximum=512
+        )
+        source_policy = _exact_string(
+            raw_row["source_policy"], f"{label}.source_policy", maximum=256
+        )
+        row_source_version = _exact_string(
+            raw_row["source_version"], f"{label}.source_version", maximum=64
+        )
+        if (
+            source_doc != source_reference
+            or source_url != source_reference
+            or source_policy != book_code
+            or row_source_version != source_version
+        ):
+            raise _error(f"{label} source does not match the rate book")
+        _exact(raw_row["source_status"], "ACTIVE", f"{label}.source_status")
+        row = DemoOfficialFeeRow(
+            fee_code=fee_code,
+            fee_name=_exact_string(
+                raw_row["fee_name"], f"{label}.fee_name", maximum=256
+            ),
+            fee_type="GOV",
+            currency="CNY",
+            default_amount=Decimal(amount_text),
+            enabled=True,
+            rate_group=_optional_exact_string(
+                raw_row["rate_group"], f"{label}.rate_group", maximum=32
+            ),
+            country_code=_optional_exact_string(
+                raw_row["country_code"], f"{label}.country_code", maximum=10
+            ),
+            case_type=_optional_exact_string(
+                raw_row["case_type"], f"{label}.case_type", maximum=32
+            ),
+            patent_category=_optional_exact_string(
+                raw_row["patent_category"],
+                f"{label}.patent_category",
+                maximum=32,
+            ),
+            fee_domain=_optional_exact_string(
+                raw_row["fee_domain"], f"{label}.fee_domain", maximum=32
+            ),
+            fee_section=_optional_exact_string(
+                raw_row["fee_section"], f"{label}.fee_section", maximum=128
+            ),
+            fee_category=_optional_exact_string(
+                raw_row["fee_category"], f"{label}.fee_category", maximum=128
+            ),
+            fee_subtype=_optional_exact_string(
+                raw_row["fee_subtype"], f"{label}.fee_subtype", maximum=128
+            ),
+            reduction_scope=_optional_exact_string(
+                raw_row["reduction_scope"],
+                f"{label}.reduction_scope",
+                maximum=256,
+            ),
+            calc_mode="FIXED",
+            calc_params=None,
+            allow_reduction=raw_row["allow_reduction"],
+            effective_from=row_effective_from,
+            effective_to=row_effective_to,
+            source_doc=source_doc,
+            source_url=source_url,
+            source_policy=source_policy,
+            source_version=row_source_version,
+            source_status="ACTIVE",
+        )
+        if demo_official_fee_row_sha256(row) != expected_row_hashes[fee_code]:
+            raise _error(f"{label} digest does not match the selector")
+        rows.append(row)
+    return DemoOfficialFeeSource(rate_book=rate_book, rows=tuple(rows))
+
+
 def load_demo_bundle(
     bundle_root: Path,
     *,
@@ -1106,6 +1589,8 @@ def load_demo_bundle(
     rates = manifest["rates"]
     service_rates: list[DemoServiceRate] = []
     official_fee_selector: DemoOfficialFeeSelector | None = None
+    official_fee_source: DemoOfficialFeeSource | None = None
+    official_fee_due_date: date | None = None
     first_receipt_amount: Decimal | None = None
     if schema_version == "fpms.demo-input-bundle/integrated-a-v2":
         if not isinstance(rates, list) or len(rates) < 2:
@@ -1242,6 +1727,16 @@ def load_demo_bundle(
                 (fee_code, fee_row_sha256s[fee_code]) for fee_code in fee_codes
             ),
         )
+        replacement_index = evidence_roles.index("GRANT_NOTICE_REPLACEMENT")
+        official_fee_due_date = _iso_date(
+            evidence_metadata[replacement_index].official_due_date,
+            "evidence[GRANT_NOTICE_REPLACEMENT].official_due_date",
+        )
+        official_fee_source = _parse_official_fee_source(
+            manifest["official_fee_source"],
+            selector=official_fee_selector,
+            official_due_date=official_fee_due_date,
+        )
         receipt_text = _matches(
             manifest["first_receipt_amount"], _AMOUNT_RE, "first_receipt_amount"
         )
@@ -1357,6 +1852,8 @@ def load_demo_bundle(
         ),
         service_rates=tuple(service_rates),
         official_fee_selector=official_fee_selector,
+        official_fee_source=official_fee_source,
+        official_fee_due_date=official_fee_due_date,
         first_receipt_amount=first_receipt_amount,
         readiness=(
             "TECHNICAL_REHEARSAL_INPUT_READY"
