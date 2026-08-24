@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import runpy
+from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
@@ -606,6 +607,96 @@ def test_demo_payment_and_offset_lock_conflicts_are_retryable_without_domain_wri
     )
     assert retried_offset.status_code == 201, retried_offset.text
     assert retried_offset.json()["bill"]["status"] == "PARTIALLY_SETTLED"
+
+
+def test_demo_offset_rejects_payment_line_already_used_by_another_bill(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    payment_body = {
+        "target_bill_id": bill_id,
+        "amount": "1200.00",
+        "pay_no": "DEMO-PAY-CROSS-BILL",
+        "pay_date": "2026-08-16",
+        "currency": "CNY",
+        "pay_method": "BANK_TRANSFER",
+        "bank_ref_no": "DEMO-BANK-CROSS-BILL",
+        "idempotency_key": "demo-payment-cross-bill",
+    }
+    payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json=payment_body,
+        headers=auth_headers,
+    )
+    assert payment.status_code == 201, payment.text
+    line_id = payment.json()["line"]["id"]
+    offset_body = {
+        "payment_line_id": line_id,
+        "bill_id": bill_id,
+        "offset_amt": "1200.00",
+        "offset_date": "2026-08-16",
+        "idempotency_key": "demo-offset-cross-bill",
+    }
+    with session_factory() as transaction:
+        actor_id = transaction.scalar(
+            select(DemoFinanceCommand.created_by).where(
+                DemoFinanceCommand.operation == "BILL"
+            )
+        )
+        other_bill = Bill(
+            id=str(uuid4()),
+            bill_no="DEMO-AR-OTHER-BILL",
+            client_id=client_id,
+            currency="CNY",
+            direction="AR",
+            status="UNSETTLED",
+            total_service=1200,
+            amount=1200,
+            balance=1200,
+        )
+        transaction.add(other_bill)
+        transaction.flush()
+        transaction.add(
+            Offset(
+                id=str(uuid4()),
+                payment_line_id=line_id,
+                bill_id=other_bill.id,
+                offset_amt=1200,
+                offset_date=date(2026, 8, 15),
+                is_reversed=False,
+            )
+        )
+        transaction.commit()
+        reserve_demo_finance_command(
+            transaction,
+            operation="OFFSET",
+            idempotency_key=offset_body["idempotency_key"],
+            actor_id=actor_id,
+            payload=DemoFullOffsetRequest.model_validate(offset_body).model_dump(
+                mode="json"
+            ),
+        )
+
+    response = client.post(
+        "/api/v1/offsets/demo-full",
+        json=offset_body,
+        headers=auth_headers,
+    )
+    assert response.status_code == 409, response.text
+    with session_factory() as transaction:
+        assert transaction.scalar(select(func.count()).select_from(Offset)) == 1
+        bill = transaction.get(Bill, bill_id)
+        line = transaction.get(PaymentLine, line_id)
+        assert bill.status == "UNSETTLED"
+        assert bill.balance == 1800
+        assert line.allocated_amt == 0
+        assert line.balance_amt == 1200
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
     client,

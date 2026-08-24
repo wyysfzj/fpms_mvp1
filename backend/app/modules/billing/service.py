@@ -2664,7 +2664,6 @@ def create_demo_full_offset(
     line_offset = db.scalar(
         select(Offset.id).where(
             Offset.payment_line_id == line.id,
-            Offset.bill_id == data.bill_id,
             Offset.is_reversed.is_(False),
         )
     )
@@ -2902,13 +2901,31 @@ def reconcile_demo_full_offset(
         if bill is not None
         else ()
     )
-    if not offsets and not any(
-        row.payment_line_id == request.payment_line_id for row in active_offsets
-    ):
+    line_offsets = tuple(
+        db.scalars(
+            select(Offset).where(
+                Offset.payment_line_id == request.payment_line_id,
+                Offset.is_reversed.is_(False),
+            )
+        )
+    )
+    if not offsets:
+        if line_offsets:
+            raise_business_error(
+                "DEMO_OFFSET_STORED_STATE_INVALID",
+                "核销回款明细已被其他记录占用",
+                status_code=409,
+            )
         raise_business_error(
             "DEMO_OFFSET_DOMAIN_RESULT_NOT_FOUND",
             "核销命令尚未形成可恢复的业务结果",
             status_code=404,
+        )
+    if len(offsets) != 1 or len(line_offsets) != 1:
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销回款明细存在冲突记录",
+            status_code=409,
         )
     active_offset_total = sum(
         (row.offset_amt for row in active_offsets),
