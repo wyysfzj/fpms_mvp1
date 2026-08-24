@@ -475,6 +475,16 @@ def _adjustment_conflict(message: str = "服务费草单调整状态冲突") -> 
     )
 
 
+def _exact_adjustment_text(value: object, limit: int) -> bool:
+    return (
+        type(value) is str
+        and bool(value)
+        and value == value.strip()
+        and "\x00" not in value
+        and len(value) <= limit
+    )
+
+
 def _stored_adjustment_payload(activity: CaseActivityEvent) -> dict[str, object]:
     try:
         payload = json.loads(activity.payload_json)
@@ -580,8 +590,7 @@ def _valid_pay_activity(
         and payload.get("obligation_id") == obligation_id
         and payload.get("instruction") == "PAY"
         and payload.get("previous_instruction_status") == "PENDING"
-        and type(payload.get("actor_id")) is str
-        and bool(payload.get("actor_id"))
+        and _exact_adjustment_text(payload.get("actor_id"), 36)
         and activity.activity_type == "FEE_CLIENT_INSTRUCTION_RECORDED"
         and activity.case_id == case_id
         and activity.lane == ActivityLane.FEE.value
@@ -950,11 +959,7 @@ def _validated_service_adjustment_activity(
     )
     if (
         any(
-            type(value) is not str
-            or not value
-            or value != value.strip()
-            or "\x00" in value
-            or len(value) > limit
+            not _exact_adjustment_text(value, limit)
             for value, limit in zip(values, (36, 36, 256, 36), strict=True)
         )
         or type(payload.get("expected_quantity")) is not int
@@ -964,8 +969,7 @@ def _validated_service_adjustment_activity(
         or not any("\u4e00" <= char <= "\u9fff" for char in str(payload["reason"]))
         or activity.occurred_at != activity.effective_at
         or not activity.idempotency_key.startswith(prefix)
-        or not activity.idempotency_key[len(prefix) :]
-        or len(activity.idempotency_key[len(prefix) :]) > 96
+        or not _exact_adjustment_text(activity.idempotency_key[len(prefix) :], 96)
     ):
         _adjustment_conflict("服务费草单调整记录无效")
     command = DemoServiceAdjustmentCommand(
@@ -994,11 +998,7 @@ def adjust_demo_service_draft(
         or type(command.adjusted_at) is not datetime
         or command.adjusted_at.tzinfo is not None
         or any(
-            type(value) is not str
-            or not value
-            or value != value.strip()
-            or "\x00" in value
-            or len(value) > limit
+            not _exact_adjustment_text(value, limit)
             for value, limit in (
                 (command.draft_id, 36),
                 (command.item_id, 36),
@@ -1148,6 +1148,25 @@ def adjust_demo_service_draft(
             candidate_payload.get("obligation_id") == original.id
             and candidate_payload.get("instruction") == "PAY"
         ):
+            recognition = transaction.get(
+                CaseActivityEvent,
+                candidate.source_activity_id,
+            )
+            if (
+                not _valid_pay_activity(
+                    candidate,
+                    candidate_payload,
+                    case_id=original.case_id,
+                    obligation_id=original.id,
+                )
+                or recognition is None
+                or recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
+                or recognition.case_id != original.case_id
+                or recognition.source_activity_id != source.id
+                or _stored_adjustment_payload(recognition).get("obligation_id")
+                != original.id
+            ):
+                _adjustment_conflict("服务费收费指示谱系无效")
             if prior_instruction is not None:
                 _adjustment_conflict("服务费收费指示记录不唯一")
             prior_instruction = candidate
@@ -1177,7 +1196,9 @@ def adjust_demo_service_draft(
             _adjustment_conflict("服务费来源数量无效")
         amount = unit_price * quantity
         if (
-            item.amount != amount
+            row.get("name_zh_cn") != item.fee_name
+            or row.get("name_zh_cn") != line.fee_name
+            or item.amount != amount
             or line.payable_amount != amount
             or (item.quantity is not None and item.quantity != Decimal(quantity))
             or (item.unit_price is not None and item.unit_price != unit_price)

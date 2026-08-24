@@ -334,6 +334,70 @@ def test_adjustment_failure_rolls_back_every_partial_write(
         assert transaction.get(FeeDraft, draft_id).amount == before["amount"]
 
 
+def test_adjustment_rejects_invalid_original_pay_before_any_write(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, obligation_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        instruction = next(
+            activity
+            for activity in transaction.scalars(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.activity_type
+                    == "FEE_CLIENT_INSTRUCTION_RECORDED"
+                )
+            )
+            if json.loads(activity.payload_json).get("obligation_id") == obligation_id
+        )
+        instruction.lane = "CASE"
+        transaction.commit()
+        before = {
+            "activities": transaction.scalar(
+                select(func.count()).select_from(CaseActivityEvent)
+            ),
+            "obligations": transaction.scalar(
+                select(func.count()).select_from(FeeObligation)
+            ),
+            "draft_amount": transaction.get(FeeDraft, draft_id).amount,
+            "item_amount": transaction.get(FeeItem, item.id).amount,
+        }
+        item_id = item.id
+
+    response = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json={
+            "item_id": item_id,
+            "expected_quantity": 1,
+            "new_quantity": 2,
+            "reason": "客户确认增加一份附加文件处理",
+            "idempotency_key": "v6-service-adjustment-invalid-pay",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+    with session_factory() as transaction:
+        assert transaction.scalar(
+            select(func.count()).select_from(CaseActivityEvent)
+        ) == before["activities"]
+        assert transaction.scalar(
+            select(func.count()).select_from(FeeObligation)
+        ) == before["obligations"]
+        assert transaction.get(FeeDraft, draft_id).amount == before["draft_amount"]
+        assert transaction.get(FeeItem, item_id).amount == before["item_amount"]
+
+
 def test_adjustment_rejects_partial_relink_state_without_new_writes(
     client,
     auth_headers,
