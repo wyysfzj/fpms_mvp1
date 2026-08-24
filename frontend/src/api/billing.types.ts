@@ -4,7 +4,8 @@
 
 import type { Pagination } from './types'
 
-export type BillStatus = string
+export type BillSettlementStatus = 'UNSETTLED' | 'PARTIALLY_SETTLED' | 'SETTLED'
+export type BillStatus = BillSettlementStatus | string
 export type BillDirection = 'AR' | 'AP'
 export type BadDebtStatus = 'NONE' | 'OPEN' | 'CLOSED' | string
 export type BadDebtSubstatus =

@@ -70,9 +70,12 @@
                 :precision="2"
                 :step="10"
                 controls-position="right"
+                :disabled="demoCommandMode"
                 style="width: 100%"
               />
-              <div class="field-hint">可选；不填时由后端按费用项金额处理。</div>
+              <div class="field-hint">
+                {{ demoCommandMode ? '由本次官费计划锁定，不能手工修改。' : '可选；不填时由后端按费用项金额处理。' }}
+              </div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
@@ -81,12 +84,16 @@
               prop="official_receipt_no"
               :error="fieldErrors.get('official_receipt_no')?.join('，')"
             >
-              <el-input v-model.trim="form.official_receipt_no" placeholder="请输入收据号（可选）" />
+              <el-input
+                v-model.trim="form.official_receipt_no"
+                :disabled="demoCommandMode"
+                :placeholder="demoCommandMode ? '无，待官方凭证' : '请输入收据号（可选)'"
+              />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
             <el-form-item label="备注" prop="remark" :error="fieldErrors.get('remark')?.join('，')">
-              <el-input v-model.trim="form.remark" placeholder="可填写说明（可选）" />
+              <el-input v-model.trim="form.remark" :disabled="demoCommandMode" placeholder="可填写说明（可选）" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -102,6 +109,15 @@
 
     <div v-if="result" class="result-card">
       <h2 class="form-card-title">登记结果</h2>
+
+      <el-alert
+        v-if="demoCommandMode"
+        class="page-warning"
+        title="已登记，待官方凭证核验"
+        type="warning"
+        :closable="false"
+        description="本步骤只登记内部缴费事实；官方收据、凭证和发票仍为空。"
+      />
 
       <el-descriptions :column="3" border>
         <el-descriptions-item label="缴费记录">{{ formatGovPaymentDisplay(result.gov_payment.id) }}</el-descriptions-item>
@@ -150,8 +166,16 @@ import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { mapGovPaymentsError, registerGovPayment } from '../../../api/govPayments'
-import type { GovPaymentRegisterResult, GovPaymentsApiError } from '../../../api/govPayments.types'
+import {
+  createDemoGovPaymentCommand,
+  mapGovPaymentsError,
+  registerGovPayment,
+} from '../../../api/govPayments'
+import type {
+  DemoGovPaymentCommandResult,
+  GovPaymentRegisterResult,
+  GovPaymentsApiError,
+} from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 
 interface GovPaymentForm {
@@ -170,7 +194,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
-const result = ref<GovPaymentRegisterResult | null>(null)
+const result = ref<GovPaymentRegisterResult | DemoGovPaymentCommandResult | null>(null)
+const idempotencyKey = crypto.randomUUID()
 
 function parseQueryPositiveInt(value: unknown): number {
   if (typeof value !== 'string' && typeof value !== 'number') return 0
@@ -186,14 +211,16 @@ function parseQueryText(value: unknown): string {
 
 const queryPayListId = parseQueryPositiveInt(route.query.pay_list_id)
 const queryFeeItemId = parseQueryText(route.query.fee_item_id)
+const demoCommandMode = parseQueryText(route.query.demo_command) === '1'
+const queryPaidAmount = Number(parseQueryText(route.query.paid_amount))
 
 const form = reactive<GovPaymentForm>({
   pay_list_id: Number.isFinite(queryPayListId) && queryPayListId > 0 ? queryPayListId : 0,
   fee_item_id: queryFeeItemId,
   paid_date: new Date().toISOString().split('T')[0],
-  paid_amount: null,
+  paid_amount: Number.isFinite(queryPaidAmount) && queryPaidAmount > 0 ? queryPaidAmount : null,
   official_receipt_no: '',
-  remark: '',
+  remark: demoCommandMode ? '已登记，待官方凭证核验' : '',
 })
 
 const rules: FormRules<GovPaymentForm> = {
@@ -242,7 +269,7 @@ function govPaymentStatusText(status: string): string {
     case 'PAID':
       return '已缴费'
     case 'RECORDED':
-      return '已登记'
+      return '已登记，待官方凭证核验'
     case 'PLANNED':
       return '已计划'
     default:
@@ -261,7 +288,7 @@ function govPaymentStatusTag(status: string): 'success' | 'info' | 'warning' {
   }
 }
 
-function payListStatusText(status: string): string {
+function payListStatusText(status?: string): string {
   switch (status?.toUpperCase()) {
     case 'DRAFT':
       return '草稿'
@@ -274,7 +301,7 @@ function payListStatusText(status: string): string {
   }
 }
 
-function payListStatusTag(status: string): 'info' | 'warning' | 'success' {
+function payListStatusTag(status?: string): 'info' | 'warning' | 'success' {
   switch (status?.toUpperCase()) {
     case 'PAID':
       return 'success'
@@ -326,16 +353,32 @@ async function handleSubmit() {
   saving.value = true
   error.value = null
   try {
-    const response = await registerGovPayment({
-      pay_list_id: form.pay_list_id,
-      fee_item_id: form.fee_item_id,
-      paid_date: form.paid_date || undefined,
-      paid_amount: form.paid_amount ?? undefined,
-      official_receipt_no: form.official_receipt_no || undefined,
-      remark: form.remark || undefined,
-    })
+    const response = demoCommandMode
+      ? await createDemoGovPaymentCommand({
+          pay_list_id: form.pay_list_id,
+          fee_item_id: form.fee_item_id,
+          paid_date: form.paid_date,
+          paid_amount: form.paid_amount as number,
+          official_receipt_no: null,
+          voucher_no: null,
+          invoice_no: null,
+          remark: '已登记，待官方凭证核验',
+          idempotency_key: idempotencyKey,
+        })
+      : await registerGovPayment({
+          pay_list_id: form.pay_list_id,
+          fee_item_id: form.fee_item_id,
+          paid_date: form.paid_date || undefined,
+          paid_amount: form.paid_amount ?? undefined,
+          official_receipt_no: form.official_receipt_no || undefined,
+          remark: form.remark || undefined,
+        })
     result.value = response
-    ElMessage.success('官方缴费登记成功，清单状态已同步更新。')
+    ElMessage.success(
+      demoCommandMode
+        ? '缴费事实已登记，待官方凭证核验。'
+        : '官方缴费登记成功，清单状态已同步更新。',
+    )
   } catch (err) {
     const mapped = mapGovPaymentsError(err)
     error.value = mapped

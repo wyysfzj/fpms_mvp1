@@ -24,6 +24,8 @@ import type {
     GovPaymentsErrorCategory,
     PayListCreatePayload,
     PayListCreateResult,
+    DemoGovPaymentCommandPayload,
+    DemoGovPaymentCommandResult,
 } from './govPayments.types'
 import type { ApiError } from './types'
 
@@ -70,6 +72,10 @@ interface BackendGovPaymentRegisterResult {
         paid_amount: number | string | null
         official_receipt_no: string | null
         remark: string | null
+        planned_amt?: number | string | null
+        planned_currency?: string | null
+        voucher_no?: string | null
+        invoice_no?: string | null
     }
     pay_list: {
         id: number
@@ -130,6 +136,8 @@ interface BackendPayListDetailResult {
         currency: string
         paid_date: string | null
         paid_amount: number | string | null
+        planned_amt?: number | string | null
+        planned_currency?: string | null
         official_receipt_no: string | null
         remark: string | null
     }[]
@@ -561,6 +569,10 @@ export async function registerGovPayment(
         gov_payment: {
             ...response.data.gov_payment,
             paid_amount: asNumber(response.data.gov_payment.paid_amount),
+            planned_amt:
+                response.data.gov_payment.planned_amt == null
+                    ? null
+                    : asNumber(response.data.gov_payment.planned_amt),
         },
         pay_list: {
             ...response.data.pay_list,
@@ -591,11 +603,13 @@ export async function getPayListDetail(payListId: number): Promise<PayListDetail
     const payment = response.data.gov_payments.map((item) => ({
         ...item,
         paid_amount: asNumber(item.paid_amount),
+        planned_amt: item.planned_amt == null ? null : asNumber(item.planned_amt),
     }))
 
     return {
         pay_list: {
             ...response.data.pay_list,
+            planned_pay_date: response.data.pay_list.planned_pay_date ?? null,
             total_amount: asNumber(response.data.pay_list.total_amount),
         },
         gov_payments: payment,
@@ -717,6 +731,49 @@ export async function addManualGovPayment(
             ...response.data.pay_list,
             total_amount: asNumber(response.data.pay_list.total_amount),
             planned_pay_date: null,
+        },
+    }
+}
+
+export async function createDemoGovPaymentCommand(
+    payload: DemoGovPaymentCommandPayload,
+): Promise<DemoGovPaymentCommandResult> {
+    const response = await http.post<DemoGovPaymentCommandResult>(
+        '/gov-payments/demo-command',
+        payload,
+    )
+    return {
+        ...response.data,
+        gov_payment: {
+            ...response.data.gov_payment,
+            paid_amount: asNumber(response.data.gov_payment.paid_amount),
+            planned_amt: asNumber(response.data.gov_payment.planned_amt),
+        },
+        pay_list: {
+            ...response.data.pay_list,
+            total_amount: asNumber(response.data.pay_list.total_amount),
+        },
+    }
+}
+
+export async function getDemoGovPaymentCommand(
+    idempotencyKey: string,
+): Promise<DemoGovPaymentCommandResult | null> {
+    const response = await http.get<DemoGovPaymentCommandResult>(
+        `/gov-payments/idempotency/${encodeURIComponent(idempotencyKey)}`,
+        { validateStatus: status => status === 200 || status === 202 || status === 404 },
+    )
+    if (response.status !== 200) return null
+    return {
+        ...response.data,
+        gov_payment: {
+            ...response.data.gov_payment,
+            paid_amount: asNumber(response.data.gov_payment.paid_amount),
+            planned_amt: asNumber(response.data.gov_payment.planned_amt),
+        },
+        pay_list: {
+            ...response.data.pay_list,
+            total_amount: asNumber(response.data.pay_list.total_amount),
         },
     }
 }

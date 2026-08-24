@@ -73,6 +73,10 @@ export interface GovPaymentInfo {
     paid_amount: number
     official_receipt_no: string | null
     remark: string | null
+    planned_amt?: number | null
+    planned_currency?: string | null
+    voucher_no?: string | null
+    invoice_no?: string | null
     created_at?: string
     updated_at?: string
     created_by?: string | null
@@ -256,4 +260,34 @@ export type GovPaymentsErrorCategory =
 export interface GovPaymentsApiError extends ApiError {
     category: GovPaymentsErrorCategory
     field_errors?: Map<string, string[]>
+}
+
+export type DemoGovPaymentFactStatus = 'REGISTERED_PENDING_OFFICIAL_EVIDENCE'
+
+export interface DemoGovPaymentCommandPayload {
+    pay_list_id: number
+    fee_item_id: string
+    paid_date: string
+    paid_amount: number | string
+    official_receipt_no: null
+    voucher_no: null
+    invoice_no: null
+    remark: '已登记，待官方凭证核验'
+    idempotency_key: string
+}
+
+export interface DemoGovPaymentCommandResult {
+    gov_payment: GovPaymentInfo
+    pay_list: {
+        id: number
+        pay_list_no: string
+        total_amount: number
+        currency: string
+        client_id: string
+        status?: string
+        paid_date?: string | null
+    }
+    fact_status: DemoGovPaymentFactStatus
+    idempotency_key: string
+    reused: boolean
 }

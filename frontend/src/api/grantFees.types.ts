@@ -152,3 +152,63 @@ export interface GrantFeeTaskListParams {
     page?: number
     page_size?: number
 }
+
+export interface GrantOfficialFeePreviewLine {
+    fee_code: string
+    fee_name: string
+    quantity: number
+    unit_price: GrantFeeMoney
+    calculation_mode: string
+    candidate_amount: GrantFeeMoney
+    official_full_amount: GrantFeeMoney
+    payable_amount: GrantFeeMoney
+    currency: string
+    source_reference: string
+    source_version: string
+    source_sha256: string
+    rate_row_sha256: string
+    effective_from: string
+    effective_to: string | null
+}
+
+export interface GrantOfficialFeePreview {
+    grant_fee_task_id: string
+    case_id: string
+    source_document_id: string
+    reviewed_evidence_version_id: string
+    reviewed_evidence_content_hash: string
+    source_authority: string
+    rate_book_version: string
+    rate_book_sha256: string
+    effective_from: string
+    effective_to: string | null
+    currency: string
+    lines: GrantOfficialFeePreviewLine[]
+    total_payable_amount: GrantFeeMoney
+    preview_digest: string
+}
+
+export interface GrantOfficialFeeConfirmationPayload {
+    preview_digest: string
+    reviewed_evidence_version_id: string
+    expected_content_hash: string
+    confirmed_at: string
+    idempotency_key: string
+    lines: Array<{
+        fee_code: string
+        quantity: number
+        confirmed_payable_amount: GrantFeeMoney
+    }>
+}
+
+export interface GrantOfficialFeeConfirmationResult {
+    grant_fee_task_id: string
+    fee_obligation_id: string
+    review_activity_id: string
+    draft_id: string
+    obligation_line_ids: string[]
+    fee_item_ids: string[]
+    preview_digest: string
+    idempotency_key: string
+    reused: boolean
+}

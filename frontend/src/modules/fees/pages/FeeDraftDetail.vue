@@ -83,6 +83,8 @@
               :draft-id="draftId"
               :currency="draft.currency"
               :readonly="isLocked"
+              :source-facts="sourceFacts"
+              :source-facts-resolved="sourceFactsResolved"
               @change="fetchDraft"
             />
           </div>
@@ -145,6 +147,34 @@
                   </div>
                 </div>
               </div>
+
+              <div v-if="sourceFacts" class="case-panel fee-draft-main" data-testid="draft-source-facts">
+                <h3 class="panel-heading">计算与来源</h3>
+                <el-alert
+                  :title="sourceFacts.fee_domain === 'GOV' ? '官费草单：全部明细只读' : '服务费草单：仅授权项目可调整一次'"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                />
+                <el-table :data="sourceFacts.lines" stripe size="small" class="compact-table source-table">
+                  <el-table-column prop="fee_name" label="费用项目" min-width="180" />
+                  <el-table-column prop="source_authority" label="来源机构" min-width="150" />
+                  <el-table-column prop="source_version" label="版本" min-width="130" />
+                  <el-table-column prop="effective_date" label="生效日期" width="120">
+                    <template #default="{ row }">{{ row.effective_date || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column prop="source_ref" label="来源引用" min-width="220" />
+                  <el-table-column prop="source_sha256" label="来源摘要" min-width="220">
+                    <template #default="{ row }"><span class="source-digest">{{ row.source_sha256 }}</span></template>
+                  </el-table-column>
+                  <el-table-column prop="activation_status" label="启用状态" width="120" />
+                  <el-table-column label="调整记录" min-width="180">
+                    <template #default="{ row }">
+                      {{ row.adjustment_reason || (row.adjustable ? '尚未调整' : '不可调整') }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </div>
 
             <div class="case-side-panel">
@@ -192,8 +222,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCase } from '../../../api/cases'
 import { getClient } from '../../../api/clients'
-import { getFeeDraft, lockFeeDraft, unlockFeeDraft } from '../../../api/fees'
-import type { FeeDraftDetail } from '../../../api/fees.types'
+import { getFeeDraft, getFeeDraftSourceFacts, lockFeeDraft, unlockFeeDraft } from '../../../api/fees'
+import type { DemoV6DraftSourceFacts, FeeDraftDetail } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import FeeDraftItemsTable from '../components/FeeDraftItemsTable.vue'
@@ -209,6 +239,8 @@ const router = useRouter()
 const pageContext = usePageContext()
 
 const draft = ref<FeeDraftDetail | null>(null)
+const sourceFacts = ref<DemoV6DraftSourceFacts | null>(null)
+const sourceFactsResolved = ref(false)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('items')
@@ -228,6 +260,17 @@ const isLocked = computed(() => draft.value?.status === 'LOCKED')
 const statusTagType = computed<'warning' | 'info'>(() => {
   return draft.value?.status === 'LOCKED' ? 'warning' : 'info'
 })
+
+async function refreshSourceFacts() {
+  sourceFactsResolved.value = false
+  try {
+    sourceFacts.value = await getFeeDraftSourceFacts(draftId.value)
+    sourceFactsResolved.value = true
+  } catch (err) {
+    sourceFacts.value = null
+    sourceFactsResolved.value = (err as { response?: { status?: number } })?.response?.status === 404
+  }
+}
 
 async function resolveDisplayContext() {
   caseDisplayNo.value = draft.value?.case_id ? '未命名案件' : ''
@@ -270,6 +313,7 @@ async function fetchDraft() {
 
   try {
     draft.value = await getFeeDraft(draftId.value)
+    await refreshSourceFacts()
     await resolveDisplayContext()
     pageContext.setBreadcrumb(['费用管理', '费用草稿', displayDraftId.value])
   } catch (err) {
@@ -303,6 +347,7 @@ async function performLock() {
 
   try {
     draft.value = await lockFeeDraft(draftId.value)
+    await refreshSourceFacts()
     ElMessage.success(ZH.feeDetail.lockSuccess)
   } catch (err) {
     const apiError = err as ApiError
@@ -340,6 +385,7 @@ async function performUnlock() {
 
   try {
     draft.value = await unlockFeeDraft(draftId.value)
+    await refreshSourceFacts()
     ElMessage.success(ZH.feeDetail.unlockSuccess)
   } catch (err) {
     const apiError = err as ApiError
@@ -406,5 +452,15 @@ onBeforeUnmount(() => {
 
 .fee-linkage-section {
   margin-top: 16px;
+}
+
+.source-table {
+  margin-top: 16px;
+}
+
+.source-digest {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -245,6 +245,15 @@
               </span>
               <el-button
                 size="small"
+                type="warning"
+                :loading="previewLoadingTaskId === row.task_id"
+                :disabled="row.lineage_status !== 'CONFIRMED'"
+                @click="openOfficialFeePreview(row)"
+              >
+                预览官费
+              </el-button>
+              <el-button
+                size="small"
                 type="primary"
                 :loading="generatingTaskId === row.task_id"
                 :disabled="!canGenerateDraft(row)"
@@ -288,6 +297,54 @@
 
       <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[20, 50, 100]" />
     </div>
+
+    <el-dialog
+      v-model="officialFeeDialogVisible"
+      title="授权登记官费预览"
+      width="860px"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        title="候选预览，尚未形成缴费义务"
+        description="以下金额、版本和摘要均来自服务端当前生效的官费来源；确认后才生成只读官费草单。"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
+      <template v-if="officialFeePreview">
+        <el-descriptions class="preview-source" :column="2" border>
+          <el-descriptions-item label="来源机构">{{ officialFeePreview.source_authority }}</el-descriptions-item>
+          <el-descriptions-item label="费率版本">{{ officialFeePreview.rate_book_version }}</el-descriptions-item>
+          <el-descriptions-item label="生效日期">{{ officialFeePreview.effective_from }}</el-descriptions-item>
+          <el-descriptions-item label="预览摘要">{{ officialFeePreview.preview_digest }}</el-descriptions-item>
+          <el-descriptions-item label="费率簿摘要" :span="2">{{ officialFeePreview.rate_book_sha256 }}</el-descriptions-item>
+        </el-descriptions>
+        <el-table :data="officialFeePreview.lines" stripe size="small" class="preview-lines">
+          <el-table-column prop="fee_code" label="费用代码" min-width="130" />
+          <el-table-column prop="fee_name" label="费用项目" min-width="180" />
+          <el-table-column prop="quantity" label="数量" width="80" align="right" />
+          <el-table-column label="应缴金额" width="140" align="right">
+            <template #default="{ row }">{{ formatAmount(row.payable_amount, row.currency) }}</template>
+          </el-table-column>
+          <el-table-column prop="source_version" label="来源版本" min-width="130" />
+          <el-table-column prop="effective_from" label="行生效日" width="120" />
+        </el-table>
+        <p class="preview-total">
+          合计：{{ formatAmount(officialFeePreview.total_payable_amount, officialFeePreview.currency) }}
+        </p>
+      </template>
+      <template #footer>
+        <el-button @click="officialFeeDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="officialFeeConfirming"
+          :disabled="!officialFeePreview"
+          @click="confirmOfficialFeePreview"
+        >
+          确认官费并生成草单
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="replacementDialogVisible"
@@ -404,13 +461,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   applyGrantFeeBatchInstruction,
   applyGrantFeeTaskAction,
   createGrantFeeTaskReplacementNotice,
+  confirmGrantOfficialFees,
   generateGrantFeeDraft,
   generateGrantFeeNoticeDocuments,
+  getGrantOfficialFeePreview,
   getGrantFeeTasks,
 } from '../../../api/grantFees'
 import { getDocTemplates } from '../../../api/documents'
@@ -422,6 +482,7 @@ import type {
   GrantFeeTaskListItem,
   GrantFeeTaskListResponse,
   GrantFeeTaskStatus,
+  GrantOfficialFeePreview,
 } from '../../../api/grantFees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -443,6 +504,7 @@ interface ReplacementForm {
 }
 
 const authStore = useAuthStore()
+const router = useRouter()
 const tasks = ref<GrantFeeTaskListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
@@ -460,6 +522,11 @@ const replacementTemplates = ref<DocTemplate[]>([])
 const replacementTemplatesLoading = ref(false)
 const replacementTemplateError = ref('')
 const replacementSubmitting = ref(false)
+const previewLoadingTaskId = ref<string | null>(null)
+const officialFeeDialogVisible = ref(false)
+const officialFeePreview = ref<GrantOfficialFeePreview | null>(null)
+const officialFeeConfirming = ref(false)
+const officialFeeIdempotencyKey = ref(crypto.randomUUID())
 const replacementForm = reactive<ReplacementForm>(emptyReplacementForm())
 const filters = reactive<{
   status: '' | GrantFeeTaskStatus
@@ -528,6 +595,48 @@ function formatAmount(input: number | string, currency: string): string {
   const parsed = Number(input || 0)
   const safe = Number.isFinite(parsed) ? parsed : 0
   return `${currency} ${safe.toFixed(2)}`
+}
+
+async function openOfficialFeePreview(row: GrantFeeTaskListItem) {
+  if (row.lineage_status !== 'CONFIRMED') return
+  previewLoadingTaskId.value = row.task_id
+  error.value = null
+  try {
+    officialFeePreview.value = await getGrantOfficialFeePreview(row.task_id)
+    officialFeeIdempotencyKey.value = crypto.randomUUID()
+    officialFeeDialogVisible.value = true
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    previewLoadingTaskId.value = null
+  }
+}
+
+async function confirmOfficialFeePreview() {
+  const preview = officialFeePreview.value
+  if (!preview || officialFeeConfirming.value) return
+  officialFeeConfirming.value = true
+  try {
+    const result = await confirmGrantOfficialFees(preview.grant_fee_task_id, {
+      preview_digest: preview.preview_digest,
+      reviewed_evidence_version_id: preview.reviewed_evidence_version_id,
+      expected_content_hash: preview.reviewed_evidence_content_hash,
+      confirmed_at: new Date().toISOString().slice(0, 19),
+      idempotency_key: officialFeeIdempotencyKey.value,
+      lines: preview.lines.map(line => ({
+        fee_code: line.fee_code,
+        quantity: line.quantity,
+        confirmed_payable_amount: line.payable_amount,
+      })),
+    })
+    officialFeeDialogVisible.value = false
+    ElMessage.success(result.reused ? '已恢复同一官费草单' : '官费草单生成成功')
+    await router.push(`/fees/drafts/${result.draft_id}`)
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    officialFeeConfirming.value = false
+  }
 }
 
 function statusText(status: GrantFeeTaskStatus): string {
@@ -957,6 +1066,18 @@ onMounted(() => {
 .page-error,
 .page-empty {
   margin-top: 4px;
+}
+
+.preview-source,
+.preview-lines {
+  margin-top: 16px;
+}
+
+.preview-total {
+  margin: 16px 0 0;
+  text-align: right;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .page-table {

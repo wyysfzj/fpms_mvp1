@@ -10,6 +10,14 @@
       </div>
     </div>
 
+    <el-alert
+      class="page-notice"
+      title="核销记录与客户回款是不同业务对象"
+      type="info"
+      :closable="false"
+      description="回款记录资金到账；核销记录将回款分配到账单，两者分别保留可追溯事实。"
+    />
+
     <!-- Error Banner -->
     <div v-if="error" class="page-error">
       <el-alert :title="String(error)" type="error" show-icon closable @close="error = null" />

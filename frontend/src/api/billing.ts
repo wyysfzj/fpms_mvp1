@@ -221,6 +221,19 @@ function asNumber(input: number | string | null | undefined): number {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function settlementStatusText(status?: string): string {
+    switch ((status || '').toUpperCase()) {
+        case 'UNSETTLED':
+            return '未结清'
+        case 'PARTIALLY_SETTLED':
+            return '部分结清'
+        case 'SETTLED':
+            return '已结清'
+        default:
+            return '未知结清状态'
+    }
+}
+
 function mapBillListItem(input: BackendBill): BillListItem {
     return {
         id: input.id,

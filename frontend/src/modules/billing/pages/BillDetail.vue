@@ -56,6 +56,16 @@
         </div>
       </div>
 
+      <el-alert
+        :title="`账单结清状态：${settlementStatusText(bill.status)}`"
+        :type="bill.status === 'SETTLED' ? 'success' : 'warning'"
+        :closable="false"
+      >
+        <template #default>
+          账单余额为 {{ formatAmount(bill.balance) }}；余额大于零时为未结清或部分结清，余额归零后为已结清。
+        </template>
+      </el-alert>
+
       <el-tabs v-model="activeTab" class="case-tabs">
         <el-tab-pane :label="ZH.billDetail.items" name="items">
           <div class="case-panel">
@@ -281,7 +291,13 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBill, printBill, getOffsets, reverseOffset } from '../../../api/billing'
+import {
+  getBill,
+  getOffsets,
+  printBill,
+  reverseOffset,
+  settlementStatusText,
+} from '../../../api/billing'
 import type { BillDetail, OffsetListItem } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'

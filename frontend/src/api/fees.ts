@@ -25,6 +25,9 @@ import type {
     FeeObligationInstructionResult,
     OfficialFeeEstimateContext,
     OfficialFeeEstimateResult,
+    DemoServiceAdjustmentPayload,
+    DemoServiceAdjustmentResult,
+    DemoV6DraftSourceFacts,
 } from './fees.types'
 
 interface BackendFeeRate {
@@ -583,5 +586,25 @@ export async function lockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
  */
 export async function unlockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
     const response = await http.post<FeeDraftDetail>(`/fees/drafts/${draftId}/unlock`)
+    return response.data
+}
+
+export async function getFeeDraftSourceFacts(
+    draftId: string,
+): Promise<DemoV6DraftSourceFacts> {
+    const response = await http.get<DemoV6DraftSourceFacts>(
+        `/fees/drafts/${draftId}/source-facts`,
+    )
+    return response.data
+}
+
+export async function adjustDemoServiceDraft(
+    draftId: string,
+    payload: DemoServiceAdjustmentPayload,
+): Promise<DemoServiceAdjustmentResult> {
+    const response = await http.post<DemoServiceAdjustmentResult>(
+        `/fees/drafts/${draftId}/demo-service-adjustment`,
+        payload,
+    )
     return response.data
 }

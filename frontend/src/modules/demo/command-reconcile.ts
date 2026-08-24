@@ -56,6 +56,26 @@ export async function resolveCommandMutationResponse<T>(
   throw new CommandReconciliationError('命令仍在处理中，请稍后重试。')
 }
 
+export async function reconcileThenRetryMutationOnce<T>(
+  mutationError: unknown,
+  readCommand: () => Promise<CommandHttpResponse>,
+  retryMutation: () => Promise<CommandHttpResponse>,
+  parseCompleted: (value: unknown) => T,
+): Promise<T> {
+  if (!shouldReconcileUnknownCommand(mutationError)) throw mutationError
+
+  const durableResponse = await readCommand()
+  const classification = classifyCommandReadStatus(durableResponse.status)
+  if (classification === 'COMPLETED') {
+    return parseCompleted(durableResponse.data)
+  }
+  if (classification === 'INVALID') throw mutationError
+
+  // 传输结果未知时，先对账，再重试一次；重试沿用同一幂等键。
+  const retryResponse = await retryMutation()
+  return resolveCommandMutationResponse(retryResponse, readCommand, parseCompleted)
+}
+
 export async function reconcileUnknownMutationResult<T>(
   mutationError: unknown,
   readDurableState: () => Promise<T>,

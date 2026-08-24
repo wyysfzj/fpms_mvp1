@@ -284,7 +284,7 @@
           <el-card shadow="never" class="rows-card">
             <template #header>
               <div class="card-header">
-                <span class="form-card-title">支付记录</span>
+                <span class="form-card-title">官费登记记录</span>
                 <div class="card-header-actions">
                   <span class="page-count">共 {{ detail.payment.length }} 条</span>
                   <el-button
@@ -299,6 +299,14 @@
                 </div>
               </div>
             </template>
+
+            <el-alert
+              class="payment-evidence-notice"
+              title="已登记，待官方凭证核验"
+              type="warning"
+              :closable="false"
+              description="登记事实仅表示内部已记录缴费动作，不代表已经取得或核验官方收据、凭证或发票。"
+            />
 
             <el-empty
               v-if="detail.payment.length === 0"
@@ -859,6 +867,8 @@ function goToRegister(row: GovPaymentInfo) {
     query: {
       pay_list_id: String(payList.value.id),
       fee_item_id: row.fee_item_id,
+      demo_command: '1',
+      paid_amount: String(row.planned_amt ?? row.paid_amount),
     },
   })
 }
@@ -906,7 +916,7 @@ function govPaymentStatusText(status?: string): string {
     case 'PLANNED':
       return '已计划'
     case 'RECORDED':
-      return '已登记'
+      return '已登记，待官方凭证核验'
     case 'PAID':
       return '已缴费'
     default:

@@ -17,7 +17,7 @@
         >
           生成官费清单
         </el-button>
-        <el-button v-if="!readonly" size="small" type="primary" @click="openAddDialog">
+        <el-button v-if="canUseGenericEditing" size="small" type="primary" @click="openAddDialog">
           + 添加明细
         </el-button>
       </div>
@@ -82,10 +82,22 @@
             <span class="mono-num amount-cell">{{ formatAmount(row.amount) }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="!readonly" label="操作" width="120" align="center">
+        <el-table-column v-if="showActionColumn" label="操作" width="140" align="center">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEditDialog(row)">编辑</el-button>
-            <el-button text size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
+            <el-button
+              v-if="canAdjustItem(row)"
+              text
+              size="small"
+              type="primary"
+              @click="openAdjustmentDialog(row)"
+            >
+              调整数量
+            </el-button>
+            <template v-else-if="canUseGenericEditing">
+              <el-button text size="small" @click="openEditDialog(row)">编辑</el-button>
+              <el-button text size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
+            </template>
+            <span v-else class="field-hint">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -147,6 +159,33 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="adjustmentDialogVisible" title="调整服务费数量" width="480px">
+      <el-alert
+        title="本操作会生成可追溯的替代记录，每份服务费草单只允许调整一次。"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
+      <el-form label-position="top" class="adjustment-form">
+        <el-form-item label="费用项目">
+          <el-input :model-value="adjustingItem?.fee_name || adjustingItem?.description || '—'" disabled />
+        </el-form-item>
+        <el-form-item label="当前数量">
+          <el-input :model-value="String(adjustingItem?.quantity ?? '')" disabled />
+        </el-form-item>
+        <el-form-item label="调整后数量">
+          <el-input-number v-model="adjustmentForm.new_quantity" :min="1" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="调整原因（须包含中文）">
+          <el-input v-model="adjustmentForm.reason" type="textarea" :rows="3" maxlength="256" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="adjustmentDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="adjusting" @click="submitAdjustment">确认调整</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog
       v-model="payListDialogVisible"
       title="生成官费清单"
@@ -189,9 +228,15 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getFeeDraftItems, createFeeItem, updateFeeItem, deleteFeeItem } from '../../../api/fees'
+import {
+  adjustDemoServiceDraft,
+  getFeeDraftItems,
+  createFeeItem,
+  updateFeeItem,
+  deleteFeeItem,
+} from '../../../api/fees'
 import { createPayListFromFeeItems, mapGovPaymentsError } from '../../../api/govPayments'
-import type { FeeItem, FeeItemCreatePayload } from '../../../api/fees.types'
+import type { DemoV6DraftSourceFacts, FeeItem, FeeItemCreatePayload } from '../../../api/fees.types'
 import type { GovPaymentsApiError } from '../../../api/govPayments.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
@@ -201,6 +246,8 @@ const props = defineProps<{
   draftId: string
   currency?: string
   readonly?: boolean
+  sourceFacts?: DemoV6DraftSourceFacts | null
+  sourceFactsResolved?: boolean
 }>()
 
 const router = useRouter()
@@ -224,6 +271,15 @@ const selectedItems = ref<FeeItem[]>([])
 const payListDialogVisible = ref(false)
 const creatingPayList = ref(false)
 const payListError = ref<GovPaymentsApiError | null>(null)
+const adjustmentDialogVisible = ref(false)
+const adjustingItem = ref<FeeItem | null>(null)
+const adjusting = ref(false)
+
+const adjustmentForm = reactive({
+  new_quantity: 1,
+  reason: '',
+  idempotency_key: crypto.randomUUID(),
+})
 
 const form = reactive<FeeItemCreatePayload>({
   description: '',
@@ -253,6 +309,15 @@ const totalAmount = computed(() => {
 })
 
 const selectedGovItems = computed(() => selectedItems.value.filter(isGovItem))
+const canUseGenericEditing = computed(() => (
+  !props.readonly
+  && props.sourceFactsResolved === true
+  && !props.sourceFacts
+))
+const showActionColumn = computed(() => (
+  canUseGenericEditing.value
+  || Boolean(props.sourceFacts?.fee_domain === 'SERVICE' && !props.readonly)
+))
 const selectedGovTotal = computed(() => {
   return selectedGovItems.value.reduce((sum, item) => sum + Number(item.amount || 0), 0)
 })
@@ -293,6 +358,61 @@ function feeTypeText(feeType?: string | null): string {
 
 function isGovItem(item: FeeItem): boolean {
   return (item.fee_type || '').toUpperCase() === 'GOV'
+}
+
+function sourceFactFor(item: FeeItem) {
+  return props.sourceFacts?.lines.find(line => line.current_item_id === item.id)
+}
+
+function canAdjustItem(item: FeeItem): boolean {
+  const fact = sourceFactFor(item)
+  return Boolean(
+    !props.readonly
+    && props.sourceFacts?.fee_domain === 'SERVICE'
+    && fact?.adjustable
+    && !fact.adjustment_activity_id,
+  )
+}
+
+function openAdjustmentDialog(item: FeeItem) {
+  if (!canAdjustItem(item)) return
+  adjustingItem.value = item
+  adjustmentForm.new_quantity = item.quantity
+  adjustmentForm.reason = ''
+  adjustmentForm.idempotency_key = crypto.randomUUID()
+  adjustmentDialogVisible.value = true
+}
+
+async function submitAdjustment() {
+  const item = adjustingItem.value
+  const reason = adjustmentForm.reason.trim()
+  if (!item || !canAdjustItem(item)) return
+  if (!reason || !/[\u4e00-\u9fff]/.test(reason)) {
+    ElMessage.warning('请输入包含中文的调整原因。')
+    return
+  }
+  if (adjustmentForm.new_quantity === item.quantity) {
+    ElMessage.warning('调整后数量必须与当前数量不同。')
+    return
+  }
+  adjusting.value = true
+  try {
+    await adjustDemoServiceDraft(props.draftId, {
+      item_id: item.id,
+      expected_quantity: item.quantity,
+      new_quantity: adjustmentForm.new_quantity,
+      reason,
+      idempotency_key: adjustmentForm.idempotency_key,
+    })
+    adjustmentDialogVisible.value = false
+    await fetchItems()
+    emit('change')
+    ElMessage.success('服务费数量调整成功，来源与调整记录已更新。')
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    adjusting.value = false
+  }
 }
 
 function isItemSelected(item: FeeItem): boolean {
@@ -520,5 +640,9 @@ defineExpose({
 .field-hint {
   font-size: 12px;
   color: var(--text-sub);
+}
+
+.adjustment-form {
+  margin-top: 16px;
 }
 </style>

@@ -12,6 +12,14 @@
       </div>
     </div>
 
+    <el-alert
+      class="page-notice"
+      title="登记回款不等于账单核销"
+      type="info"
+      :closable="false"
+      description="客户回款先形成收款事实；只有后续核销记录才会减少对应账单余额。"
+    />
+
     <div class="report-summary">
       <div class="summary-card">
         <div class="card-label">预收款笔数</div>

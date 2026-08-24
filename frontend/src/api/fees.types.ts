@@ -392,3 +392,54 @@ export interface FeeItemUpdatePayload {
     quantity?: number
     unit_price?: number
 }
+
+export type DemoV6FeeDomain = 'GOV' | 'SERVICE'
+
+export interface DemoV6DraftSourceFactLine {
+    current_item_id: string
+    obligation_line_id: string
+    fee_code: string
+    fee_name: string
+    quantity: number
+    unit_price: FeeMoney
+    amount: FeeMoney
+    source_authority: string
+    source_ref: string
+    source_version: string
+    effective_date: string | null
+    source_sha256: string
+    activation_status: string
+    adjustable: boolean
+    adjustment_activity_id: string | null
+    adjustment_reason: string | null
+    adjustment_before_digest: string | null
+    adjustment_after_digest: string | null
+}
+
+export interface DemoV6DraftSourceFacts {
+    draft_id: string
+    draft_status: FeeDraftStatus
+    fee_domain: DemoV6FeeDomain
+    lines: DemoV6DraftSourceFactLine[]
+}
+
+export interface DemoServiceAdjustmentPayload {
+    item_id: string
+    expected_quantity: number
+    new_quantity: number
+    reason: string
+    idempotency_key: string
+}
+
+export interface DemoServiceAdjustmentResult {
+    draft_id: string
+    original_obligation_id: string
+    superseding_obligation_id: string
+    adjustment_activity_id: string
+    instruction_activity_id: string
+    fee_item_ids: string[]
+    before_total: FeeMoney
+    after_total: FeeMoney
+    idempotency_key: string
+    reused: boolean
+}

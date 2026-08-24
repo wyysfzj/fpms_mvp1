@@ -17,6 +17,9 @@ import type {
     GrantFeeTaskStateAction,
     GrantFeeTaskStateResult,
     GrantFeeTaskStatus,
+    GrantOfficialFeeConfirmationPayload,
+    GrantOfficialFeeConfirmationResult,
+    GrantOfficialFeePreview,
 } from './grantFees.types'
 
 interface BackendGrantFeeTaskListItem {
@@ -358,4 +361,24 @@ export async function generateGrantFeeNoticeDocuments(
             }))
             : [],
     }
+}
+
+export async function getGrantOfficialFeePreview(
+    taskId: string,
+): Promise<GrantOfficialFeePreview> {
+    const response = await http.get<GrantOfficialFeePreview>(
+        `/grant-fee-tasks/${taskId}/official-fee-preview`,
+    )
+    return response.data
+}
+
+export async function confirmGrantOfficialFees(
+    taskId: string,
+    payload: GrantOfficialFeeConfirmationPayload,
+): Promise<GrantOfficialFeeConfirmationResult> {
+    const response = await http.post<GrantOfficialFeeConfirmationResult>(
+        `/grant-fee-tasks/${taskId}/official-fee-confirmation`,
+        payload,
+    )
+    return response.data
 }
