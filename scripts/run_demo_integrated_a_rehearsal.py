@@ -22,17 +22,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import run_demo_abc_rehearsal as abc  # noqa: E402
+from scripts import run_demo_abc_rehearsal as abc
 
 BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from app.core.demo_bundle import load_demo_bundle  # noqa: E402
+from app.core.demo_bundle import load_demo_bundle
 
 PLAYWRIGHT = ROOT / "FPMS_Automation_Skeleton_Pack" / "playwright_ts"
-SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"
+LEGACY_SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"
+SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6.live-backend.spec.ts"
 STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a-static-contract.mjs"
+V6_STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6-static-contract.mjs"
 DEFAULT_ARTIFACT = ROOT / "artifacts" / "FPMS-DEMO-INTEGRATED-A-DIAGNOSTIC"
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
@@ -128,7 +130,21 @@ REHEARSAL_SCENARIO = {
     "payment_no_prefix": "RCPT-CYZN",
     "bank_ref_prefix": "BTR-CYZN",
 }
-CUSTOMER_STAGE_ORDER = tuple(f"{index:02d}" for index in range(1, 10))
+V6_CUSTOMER_STAGES = (
+    ("01", "客户与案件"),
+    ("02", "文件与递交准备"),
+    ("03", "受理与审查"),
+    ("04", "第一轮 OA"),
+    ("05", "第二轮 OA"),
+    ("06", "授权登记准备"),
+    ("07", "生效官费预览"),
+    ("08", "双草单与服务费调整"),
+    ("09", "官费清单与待凭证登记"),
+    ("10", "两次客户回款与核销"),
+    ("11", "同案双轨汇总"),
+)
+CUSTOMER_STAGE_ORDER = tuple(stage for stage, _label in V6_CUSTOMER_STAGES)
+LEGACY_CUSTOMER_STAGE_ORDER = tuple(f"{index:02d}" for index in range(1, 10))
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -235,7 +251,7 @@ def integrated_evidence_descriptors(bundle: Path) -> list[dict[str, Any]]:
     bundle_root = bundle.resolve()
     for row in rows:
         if not isinstance(row, dict):
-            raise RuntimeError("integrated evidence row is invalid")
+            raise TypeError("integrated evidence row is invalid")
         source_path = (bundle_root / str(row.get("path", ""))).resolve()
         if bundle_root not in source_path.parents or not source_path.is_file():
             raise RuntimeError("integrated evidence path escapes or is unavailable")
@@ -431,6 +447,15 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
             raise RuntimeError(f"run {ordinal} command metadata is not redacted")
         if (run_artifact / "integrated-final.png").stat().st_size == 0:
             raise RuntimeError(f"run {ordinal} final screenshot is empty")
+        v6_ledger = json.loads((run_artifact / "v6-stages.json").read_text(encoding="utf-8"))
+        v6_stages = v6_ledger.get("stages")
+        if not isinstance(v6_stages, list) or [row.get("stage") for row in v6_stages] != list(CUSTOMER_STAGE_ORDER):
+            raise RuntimeError(f"run {ordinal} V6 stage ledger is incomplete")
+        if v6_ledger.get("network_errors") != [] or v6_ledger.get("console_errors") != []:
+            raise RuntimeError(f"run {ordinal} contains browser errors")
+        v6_final = v6_stages[-1]
+        if v6_final.get("bill_status") != "SETTLED" or v6_final.get("bill_balance") != "0.00":
+            raise RuntimeError(f"run {ordinal} V6 final finance state is incomplete")
         role_map = json.loads((run_artifact / "evidence-role-map.json").read_text(encoding="utf-8"))
         if not isinstance(role_map, list) or len(role_map) != 12:
             raise RuntimeError(f"run {ordinal} evidence role map is incomplete")
@@ -455,6 +480,7 @@ def build_diagnostic_summary(artifact: Path, runs: int) -> dict[str, Any]:
         "status": "TECHNICAL_REHEARSAL_PASS",
         "runs": runs,
         "checkpoint_counts": [19] * runs,
+        "v6_stage_counts": [11] * runs,
         "evidence_binding_counts": [12] * runs,
         "run_ids": run_ids,
         "business_identity_sets_disjoint": True,
@@ -467,6 +493,45 @@ def write_checksums(artifact: Path) -> None:
     for path in sorted(item for item in artifact.rglob("*") if item.is_file() and item.name != "checksums.sha256"):
         rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(artifact)}")
     (artifact / "checksums.sha256").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def validate_v6_customer_acceptance_receipts(evidence_dir: Path | None = None) -> dict[str, Any]:
+    configured = os.environ.get("FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR")
+    root = evidence_dir or (Path(configured) if configured else None)
+    if root is None:
+        raise RuntimeError("FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR is required")
+    root = root.resolve()
+    run_ids: list[str] = []
+    database_paths: list[str] = []
+    manifest_digests: list[str] = []
+    for ordinal in (1, 2):
+        run = root / f"run{ordinal}"
+        run_record = json.loads((run / "run.json").read_text(encoding="utf-8"))
+        receipt = json.loads((run / "pass-receipt.json").read_text(encoding="utf-8"))
+        stages = json.loads((run / "v6-stages.json").read_text(encoding="utf-8"))
+        if receipt.get("status") != "PASS" or receipt.get("profile") != "CUSTOMER_DEMO":
+            raise RuntimeError(f"run {ordinal} customer PASS receipt is invalid")
+        if receipt.get("stage_count") != 11:
+            raise RuntimeError(f"run {ordinal} stage receipt is incomplete")
+        if stages.get("network_errors") != [] or stages.get("console_errors") != []:
+            raise RuntimeError(f"run {ordinal} browser evidence contains errors")
+        stage_rows = stages.get("stages")
+        if not isinstance(stage_rows, list) or [row.get("stage") for row in stage_rows] != list(CUSTOMER_STAGE_ORDER):
+            raise RuntimeError(f"run {ordinal} stage order is invalid")
+        run_ids.append(str(run_record.get("run_id", "")))
+        database_paths.append(str(run_record.get("database_path", "")))
+        manifest_digests.append(str(run_record.get("bundle_manifest_sha256", "")))
+    if len(set(run_ids)) != 2 or len(set(database_paths)) != 2:
+        raise RuntimeError("customer acceptance requires two distinct runs and databases")
+    if len(set(manifest_digests)) != 1 or _SHA256_RE.fullmatch(manifest_digests[0]) is None:
+        raise RuntimeError("customer acceptance input digests do not match")
+    return {
+        "status": "CUSTOMER_DEMO_PASS",
+        "runs": 2,
+        "run_ids": run_ids,
+        "database_paths": database_paths,
+        "bundle_manifest_sha256": manifest_digests[0],
+    }
 
 
 def _run_one(
@@ -565,7 +630,8 @@ def _run_one(
             FPMS_DEMO_BILL_NO_PREFIX=REHEARSAL_SCENARIO["bill_no_prefix"],
             FPMS_DEMO_PAYMENT_NO_PREFIX=REHEARSAL_SCENARIO["payment_no_prefix"],
             FPMS_DEMO_BANK_REF_PREFIX=REHEARSAL_SCENARIO["bank_ref_prefix"],
-            FPMS_DEMO_CUSTOMER_STAGE_ORDER=",".join(CUSTOMER_STAGE_ORDER),
+            FPMS_DEMO_CUSTOMER_STAGE_ORDER=",".join(LEGACY_CUSTOMER_STAGE_ORDER),
+            FPMS_DEMO_V6_STAGE_ORDER=",".join(CUSTOMER_STAGE_ORDER),
         )
         command = [
             "node",
@@ -594,9 +660,23 @@ def _run_one(
                 stdout=output,
                 stderr=subprocess.STDOUT,
                 timeout=300,
+                check=False,
             )
         if completed.returncode != 0:
             raise RuntimeError(f"integrated Playwright failed: rc={completed.returncode}")
+        v6_ledger = json.loads((run_artifact / "v6-stages.json").read_text(encoding="utf-8"))
+        _write_json(
+            run_artifact / "pass-receipt.json",
+            {
+                "status": "PASS",
+                "profile": profile,
+                "run_id": run_id,
+                "bundle_manifest_sha256": manifest_sha,
+                "stage_count": len(v6_ledger.get("stages", [])),
+                "network_errors": v6_ledger.get("network_errors"),
+                "console_errors": v6_ledger.get("console_errors"),
+            },
+        )
     finally:
         if runner.poll() is None:
             runner.send_signal(signal.SIGINT)
@@ -618,8 +698,18 @@ def main(argv: list[str] | None = None) -> int:
     if artifact.exists():
         raise RuntimeError(f"evidence path already exists: {artifact}")
     candidate = abc.candidate_identity()
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
     validate_spec_source(source)
+    static_check = subprocess.run(
+        ["node", str(V6_STATIC_CONTRACT)],
+        cwd=PLAYWRIGHT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if static_check.returncode != 0:
+        raise RuntimeError(static_check.stdout.strip())
     bundle_parent = Path(tempfile.mkdtemp(prefix="fpms-integrated-a-bundle-"))
     try:
         bundle, manifest_sha, authority_sha = resolve_runtime_bundle(args, bundle_parent)

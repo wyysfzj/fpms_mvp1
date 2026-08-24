@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts" / "run_demo_integrated_a_rehearsal.py"
-SPEC = (
+LEGACY_SPEC = (
     ROOT
     / "FPMS_Automation_Skeleton_Pack"
     / "playwright_ts"
@@ -17,6 +17,11 @@ SPEC = (
     / "tests"
     / "demo-integrated-a.live-backend.spec.ts"
 )
+SPEC = LEGACY_SPEC.with_name("demo-integrated-v6.live-backend.spec.ts")
+V6_SPEC = SPEC
+V6_STATIC_CONTRACT = LEGACY_SPEC.with_name("demo-integrated-v6-static-contract.mjs")
+V6_LIFECYCLE = ROOT / "docs/postdemo/demo-lifecycle-customer-v6.html"
+V6_RUNBOOK = ROOT / "docs/postdemo/demo-lifecycle-customer-v6-runbook.md"
 
 
 def _module():
@@ -26,6 +31,58 @@ def _module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_v6_contract_uses_exact_eleven_customer_stages_and_new_tail():
+    module = _module()
+    expected = (
+        ("01", "客户与案件"),
+        ("02", "文件与递交准备"),
+        ("03", "受理与审查"),
+        ("04", "第一轮 OA"),
+        ("05", "第二轮 OA"),
+        ("06", "授权登记准备"),
+        ("07", "生效官费预览"),
+        ("08", "双草单与服务费调整"),
+        ("09", "官费清单与待凭证登记"),
+        ("10", "两次客户回款与核销"),
+        ("11", "同案双轨汇总"),
+    )
+
+    assert module.V6_CUSTOMER_STAGES == expected
+    assert module.CUSTOMER_STAGE_ORDER == tuple(stage for stage, _label in expected)
+    assert module.SPEC == V6_SPEC
+    assert V6_SPEC.is_file()
+    assert V6_STATIC_CONTRACT.is_file()
+    assert V6_LIFECYCLE.is_file()
+    assert V6_RUNBOOK.is_file()
+
+
+def test_v6_contract_artifacts_share_the_same_stage_order_and_fact_boundaries():
+    spec = V6_SPEC.read_text(encoding="utf-8")
+    static_contract = V6_STATIC_CONTRACT.read_text(encoding="utf-8")
+    lifecycle = V6_LIFECYCLE.read_text(encoding="utf-8")
+    runbook = V6_RUNBOOK.read_text(encoding="utf-8")
+
+    for stage in range(1, 12):
+        ordinal = f"{stage:02d}"
+        assert f'data-stage="{ordinal}"' in lifecycle
+        assert f"## 阶段 {ordinal}" in runbook
+    for token in (
+        "候选预览，尚未形成缴费义务",
+        "GOV",
+        "SERVICE",
+        "调整数量",
+        "已登记，待官方凭证核验",
+        "PARTIALLY_SETTLED",
+        "SETTLED",
+        "同案双轨费用概览",
+    ):
+        assert token in spec + lifecycle + runbook
+    assert "demo-integrated-a.live-backend.spec" in spec
+    assert "test_v6_customer_acceptance_receipts" in Path(__file__).read_text(encoding="utf-8")
+    assert "FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR" in RUNNER.read_text(encoding="utf-8")
+    assert "Acorn" in static_contract
 
 
 def test_runner_selects_only_the_integrated_spec_and_supports_one_or_two_runs():
@@ -212,7 +269,7 @@ def test_runner_uses_permission_safe_run_root_cleanup():
 
 
 def test_integrated_spec_login_uses_current_visible_form_labels():
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
 
     assert "getByPlaceholder('用户名')" not in source
     assert "getByPlaceholder('密码')" not in source
@@ -241,7 +298,7 @@ def test_runner_binds_ia00_expectations_to_the_integrated_manifest():
 
 def test_runner_binds_the_approved_realistic_customer_scenario():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
 
     assert module.REHEARSAL_SCENARIO == {
         "customer_name": "澄岳智造技术（苏州）有限公司",
@@ -275,9 +332,10 @@ def test_runner_binds_the_approved_realistic_customer_scenario():
 
 def test_runner_binds_the_customer_stage_order():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
 
-    assert module.CUSTOMER_STAGE_ORDER == tuple(f"{index:02d}" for index in range(1, 10))
+    assert module.LEGACY_CUSTOMER_STAGE_ORDER == tuple(f"{index:02d}" for index in range(1, 10))
+    assert module.CUSTOMER_STAGE_ORDER == tuple(f"{index:02d}" for index in range(1, 12))
     assert "FPMS_DEMO_CUSTOMER_STAGE_ORDER" in RUNNER.read_text(encoding="utf-8")
     assert "FPMS_DEMO_CUSTOMER_STAGE_ORDER" in source
 
@@ -307,7 +365,7 @@ def test_runner_materializes_natural_oa_reply_output_titles(tmp_path: Path):
 
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
     module.validate_spec_source(source)
     assert module.PUBLIC_LIFECYCLE_API_ALLOWLIST == {
         "ARCHIVE_PACKAGE": ("POST", "/official-work-packages/{package_id}/archive"),
@@ -410,14 +468,14 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):
     module = _module()
-    source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
+    source = LEGACY_SPEC.read_text(encoding="utf-8") + "\n" + shortcut
     with pytest.raises(RuntimeError, match="visible UI"):
         module.validate_spec_source(source)
 
 
 def test_runner_rejects_imported_local_helper_evasion():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8") + '\n  import { uploadAttachment } from "./helper"'
+    source = LEGACY_SPEC.read_text(encoding="utf-8") + '\n  import { uploadAttachment } from "./helper"'
     with pytest.raises(RuntimeError, match="imports are not allowlisted"):
         module.validate_spec_source(source)
 
@@ -431,14 +489,14 @@ def test_runner_rejects_imported_local_helper_evasion():
 )
 def test_runner_rejects_dynamic_or_side_effect_import(shortcut: str):
     module = _module()
-    source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
+    source = LEGACY_SPEC.read_text(encoding="utf-8") + "\n" + shortcut
     with pytest.raises(RuntimeError):
         module.validate_spec_source(source)
 
 
 def test_runner_rejects_public_api_allowlist_drift_to_evidence_write():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8").replace(
+    source = LEGACY_SPEC.read_text(encoding="utf-8").replace(
         "/documents/{document_id}/lifecycle/acceptance-notice",
         "/documents/{document_id}/attachments",
         1,
@@ -449,7 +507,7 @@ def test_runner_rejects_public_api_allowlist_drift_to_evidence_write():
 
 def test_runner_accepts_the_frozen_driver_lifecycle_wrapper_shape():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8").replace(
+    source = LEGACY_SPEC.read_text(encoding="utf-8").replace(
         "  async preflight(): Promise<Json>",
         "  async expectedWrapper(): Promise<Json> { return this.publicLifecycleApi('RESOLVE_FILING', { case_id: 'dynamic' }) }\n"
         "  async preflight(): Promise<Json>",
@@ -460,7 +518,7 @@ def test_runner_accepts_the_frozen_driver_lifecycle_wrapper_shape():
 
 def test_runner_rejects_lifecycle_wrapper_calls_on_an_alternate_receiver():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8").replace(
+    source = LEGACY_SPEC.read_text(encoding="utf-8").replace(
         "  async preflight(): Promise<Json>",
         "  async invalidWrapper(): Promise<Json> { return journey.publicLifecycleApi('RESOLVE_FILING', { case_id: 'dynamic' }) }\n"
         "  async preflight(): Promise<Json>",
@@ -471,7 +529,7 @@ def test_runner_rejects_lifecycle_wrapper_calls_on_an_alternate_receiver():
 
 
 def test_integrated_spec_closes_ia18_with_authoritative_summary_artifacts():
-    source = SPEC.read_text(encoding="utf-8")
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
 
     assert "if (this.summaryReads > 1) return this.red('IA-18')" not in source
     assert "checkpoints_passed: checkpointContract.length" in source
@@ -531,6 +589,38 @@ def _write_fake_run(root: Path, ordinal: int) -> None:
     )
     (run / "evidence-role-map.json").write_text(json.dumps([{}] * 12), encoding="utf-8")
     (run / "integrated-final.png").write_bytes(b"png")
+    v6_stages = [
+        {"stage": f"{index:02d}", "label": f"stage-{index}"}
+        for index in range(1, 12)
+    ]
+    v6_stages[-1].update({"bill_status": "SETTLED", "bill_balance": "0.00"})
+    (run / "v6-stages.json").write_text(
+        json.dumps(
+            {"stages": v6_stages, "network_errors": [], "console_errors": []}
+        ),
+        encoding="utf-8",
+    )
+    (run / "run.json").write_text(
+        json.dumps(
+            {
+                "run_id": f"integrated-r{ordinal}-unique",
+                "database_path": f"/tmp/fpms-demo-{ordinal}.db",
+                "bundle_manifest_sha256": "a" * 64,
+                "created_at": "2026-08-25T00:00:00+08:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run / "pass-receipt.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "profile": "CUSTOMER_DEMO",
+                "stage_count": 11,
+            }
+        ),
+        encoding="utf-8",
+    )
     (run / "cleanup.json").write_text(
         json.dumps({"run_id": f"integrated-r{ordinal}-unique", "run_root_removed": True}),
         encoding="utf-8",
@@ -551,5 +641,24 @@ def test_runner_accepts_only_two_clean_runs_with_disjoint_business_identities(tm
     assert summary["status"] == "TECHNICAL_REHEARSAL_PASS"
     assert summary["runs"] == 2
     assert summary["checkpoint_counts"] == [19, 19]
+    assert summary["v6_stage_counts"] == [11, 11]
     assert summary["evidence_binding_counts"] == [12, 12]
     assert summary["business_identity_sets_disjoint"] is True
+
+
+def test_v6_customer_acceptance_receipts(tmp_path: Path, monkeypatch):
+    module = _module()
+    monkeypatch.delenv("FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR", raising=False)
+    with pytest.raises(RuntimeError, match="FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR"):
+        module.validate_v6_customer_acceptance_receipts()
+
+    _write_fake_run(tmp_path, 1)
+    _write_fake_run(tmp_path, 2)
+    monkeypatch.setenv("FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR", str(tmp_path))
+    result = module.validate_v6_customer_acceptance_receipts()
+
+    assert result["status"] == "CUSTOMER_DEMO_PASS"
+    assert result["runs"] == 2
+    assert len(set(result["run_ids"])) == 2
+    assert len(set(result["database_paths"])) == 2
+    assert result["bundle_manifest_sha256"] == "a" * 64

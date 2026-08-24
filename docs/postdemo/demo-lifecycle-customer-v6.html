@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FPMS 客户演示生命周期 V6</title>
+  <style>
+    :root{--ink:#16324a;--muted:#5d6b7c;--line:#dce5ec;--paper:#f4f7fa;--blue:#175d8f;--teal:#087f73;--amber:#b86b00;--new:#6842a5}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"PingFang SC",sans-serif}.page{max-width:1320px;margin:auto;padding:40px 24px 72px}header,.section{margin-bottom:24px;padding:28px;border:1px solid var(--line);border-radius:22px;background:white}h1,h2,h3,p{margin-top:0}.eyebrow,.label{font-size:12px;font-weight:800;letter-spacing:.08em}.eyebrow{color:var(--teal)}.boundary{padding:14px;border-left:5px solid var(--amber);background:#fff8eb}.stages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.stage{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:white}.stage h3{padding:16px 18px;margin:0;color:white;background:var(--blue)}.stage.new h3{background:var(--new)}.body{display:grid;gap:9px;padding:17px}.field{padding-left:10px;border-left:2px solid var(--line)}.field p{margin:2px 0;color:var(--muted)}.new .recent{background:#f6f0ff;border-radius:10px;padding:9px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.summary article{padding:16px;border-radius:14px;background:#eef5fa}.summary article:nth-child(2){background:#eaf8f5}.summary article:nth-child(3){background:#fff5e5}@media(max-width:820px){.stages,.summary{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <div class="eyebrow">CUSTOMER LIFECYCLE · V6</div>
+    <h1>同一案件，从立案到双轨费用闭环</h1>
+    <p>保留前六阶段既有案件、文件、两轮 OA 与授权登记演示；新增生效官费预览、GOV/SERVICE 双草单、待凭证官费登记、两次回款核销与同案汇总。</p>
+    <div class="boundary"><strong>数据事实边界：</strong>本页场景为 <code>SYNTHETIC_TEST_ONLY</code>，采用真实业务形态的合成测试数据，非客户授权、非生产输入。每次演示使用全新 run；主持人控制页面不进入客户共享屏幕。</div>
+  </header>
+
+  <section class="section">
+    <h2>十一阶段客户路线</h2>
+    <div class="stages">
+      <article class="stage" data-stage="01"><h3>01 客户与案件</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>从澄岳智造技术（苏州）有限公司和同一件发明申请开始。</p></div><div class="field"><span class="label">UI/操作</span><p>客户、联系人、案件正常新建页与案件详情。</p></div><div class="field"><span class="label">输入</span><p>周岚；CYIP-CN-INV-&lt;run suffix&gt;；真实业务形态案名。</p></div><div class="field"><span class="label">屏幕输出</span><p>唯一客户、联系人、案件和中文状态。</p></div><div class="field"><span class="label">期待结果</span><p>后续对象全部归于同案。</p></div><div class="field"><span class="label">验证方法</span><p>IA-01/IA-02 身份与计数。</p></div><div class="field"><span class="label">事实边界</span><p>合成测试输入。</p></div><div class="field"><span class="label">停止条件</span><p>重复、错案或 Network Error。</p></div><div class="field"><span class="label">最近新增</span><p>fresh-run 与动态业务号。</p></div>
+      </div></article>
+      <article class="stage" data-stage="02"><h3>02 文件与递交准备</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>先证明 runtime 模板与目录来源。</p></div><div class="field"><span class="label">UI/操作</span><p>文书目录和递交准备工作包。</p></div><div class="field"><span class="label">输入</span><p>模板代码、SHA-256、60 行目录。</p></div><div class="field"><span class="label">屏幕输出</span><p>目录行为与复用工作包。</p></div><div class="field"><span class="label">期待结果</span><p>重复 resolve 不增加对象。</p></div><div class="field"><span class="label">验证方法</span><p>IA-00/03/04。</p></div><div class="field"><span class="label">事实边界</span><p>准备不等于官方递交。</p></div><div class="field"><span class="label">停止条件</span><p>摘要或目录不一致。</p></div><div class="field"><span class="label">最近新增</span><p>runtime 来源门禁。</p></div>
+      </div></article>
+      <article class="stage" data-stage="03"><h3>03 受理与审查</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>状态只由已复核文件推动。</p></div><div class="field"><span class="label">UI/操作</span><p>上传、复核并消费六份文件。</p></div><div class="field"><span class="label">输入</span><p>递交、回执、受理、初审、公布、实审文件。</p></div><div class="field"><span class="label">屏幕输出</span><p>证据版本、哈希、活动和投影。</p></div><div class="field"><span class="label">期待结果</span><p>进入实质审查。</p></div><div class="field"><span class="label">验证方法</span><p>IA-05 lineage。</p></div><div class="field"><span class="label">事实边界</span><p>不声称直连官方。</p></div><div class="field"><span class="label">停止条件</span><p>未复核或哈希缺失。</p></div><div class="field"><span class="label">最近新增</span><p>版本—活动—消费链。</p></div>
+      </div></article>
+      <article class="stage" data-stage="04"><h3>04 第一轮 OA</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>第一轮拥有独立通知、期限、答复和回执。</p></div><div class="field"><span class="label">UI/操作</span><p>登记通知、答复，验证错误回执 no-write。</p></div><div class="field"><span class="label">输入</span><p>第一轮通知与回执。</p></div><div class="field"><span class="label">屏幕输出</span><p>开放任务、期限和归档。</p></div><div class="field"><span class="label">期待结果</span><p>正确回执只关闭目标任务。</p></div><div class="field"><span class="label">验证方法</span><p>IA-05 至 IA-08。</p></div><div class="field"><span class="label">事实边界</span><p>日期为合成输入。</p></div><div class="field"><span class="label">停止条件</span><p>错误回执写入。</p></div><div class="field"><span class="label">最近新增</span><p>4xx + no-write 证据。</p></div>
+      </div></article>
+      <article class="stage" data-stage="05"><h3>05 第二轮 OA</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>第二轮不是覆盖第一轮。</p></div><div class="field"><span class="label">UI/操作</span><p>完成第二轮并回看第一轮历史。</p></div><div class="field"><span class="label">输入</span><p>第二轮通知、答复与回执。</p></div><div class="field"><span class="label">屏幕输出</span><p>独立身份和稳定历史。</p></div><div class="field"><span class="label">期待结果</span><p>两轮互不污染。</p></div><div class="field"><span class="label">验证方法</span><p>IA-09。</p></div><div class="field"><span class="label">事实边界</span><p>不得复用证据。</p></div><div class="field"><span class="label">停止条件</span><p>身份重复或历史变化。</p></div><div class="field"><span class="label">最近新增</span><p>多轮独立 lineage。</p></div>
+      </div></article>
+      <article class="stage" data-stage="06"><h3>06 授权登记准备</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>更正通知替代原通知，旧任务失效。</p></div><div class="field"><span class="label">UI/操作</span><p>查看替代关系与旧任务门禁，当前任务记录 PAY。</p></div><div class="field"><span class="label">输入</span><p>原始和更正办理登记手续通知书。</p></div><div class="field"><span class="label">屏幕输出</span><p>授权登记处理中与当前任务。</p></div><div class="field"><span class="label">期待结果</span><p>旧任务 409/no-write。</p></div><div class="field"><span class="label">验证方法</span><p>IA-10 至 IA-12。</p></div><div class="field"><span class="label">事实边界</span><p>PAY 尚未形成官费金额。</p></div><div class="field"><span class="label">停止条件</span><p>旧任务可写或提前出现官费。</p></div><div class="field"><span class="label">最近新增</span><p>durable supersession。</p></div>
+      </div></article>
+      <article class="stage new" data-stage="07"><h3>07 生效官费预览</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>候选预览，尚未形成缴费义务。</p></div><div class="field"><span class="label">UI/操作</span><p>授权费用任务页预览并确认多行官费。</p></div><div class="field"><span class="label">输入</span><p>证据版本、active rate-book、逐行金额和幂等键。</p></div><div class="field"><span class="label">屏幕输出</span><p>来源、生效日、digest、多行金额和合计。</p></div><div class="field"><span class="label">期待结果</span><p>唯一 GOV obligation 与草单。</p></div><div class="field"><span class="label">验证方法</span><p>preview/source/rate-book SHA-256。</p></div><div class="field"><span class="label">事实边界</span><p>确认前不是义务。</p></div><div class="field"><span class="label">停止条件</span><p>来源未激活或摘要漂移。</p></div><div class="field recent"><span class="label">最近新增</span><p>多行官费预览与 digest-bound confirmation。</p></div>
+      </div></article>
+      <article class="stage new" data-stage="08"><h3>08 双草单与服务费调整</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>同案 GOV 与 SERVICE 分轨；官费只读，服务费可追溯调整一次。</p></div><div class="field"><span class="label">UI/操作</span><p>查看 GOV 草单；SERVICE OPEN 点击“调整数量”，随后锁定。</p></div><div class="field"><span class="label">输入</span><p>FWSQDJ001/FWSQDJ002；数量 1→2；中文原因。</p></div><div class="field"><span class="label">屏幕输出</span><p>来源事实、before/after total、活动和两份 LOCKED 草单。</p></div><div class="field"><span class="label">期待结果</span><p>GOV 无编辑；SERVICE 1,500.00→1,800.00 CNY。</p></div><div class="field"><span class="label">验证方法</span><p>/source-facts 与 adjustment activity。</p></div><div class="field"><span class="label">事实边界</span><p>SERVICE 不是官费。</p></div><div class="field"><span class="label">停止条件</span><p>可重复调整或锁定后可编辑。</p></div><div class="field recent"><span class="label">最近新增</span><p>双草单与一次审计调整。</p></div>
+      </div></article>
+      <article class="stage new" data-stage="09"><h3>09 官费清单与待凭证登记</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>内部登记不等于官方凭证核验。</p></div><div class="field"><span class="label">UI/操作</span><p>生成 PayList、逐行登记，再打开正常清单页。</p></div><div class="field"><span class="label">输入</span><p>planned amount；收据、凭证、发票均为空。</p></div><div class="field"><span class="label">屏幕输出</span><p>已登记，待官方凭证核验。</p></div><div class="field"><span class="label">期待结果</span><p>每行一条 GovPayment，无绿色支付成功。</p></div><div class="field"><span class="label">验证方法</span><p>GET idempotency 与空凭证字段。</p></div><div class="field"><span class="label">事实边界</span><p>不夸大官方事实。</p></div><div class="field"><span class="label">停止条件</span><p>Network Error、重复登记或错误成功文案。</p></div><div class="field recent"><span class="label">最近新增</span><p>per-line pending evidence 与 GET-first 恢复。</p></div>
+      </div></article>
+      <article class="stage new" data-stage="10"><h3>10 两次客户回款与核销</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>回款与核销是不同对象，分两笔完成。</p></div><div class="field"><span class="label">UI/操作</span><p>第一笔回款/核销，刷新余额，再做第二笔。</p></div><div class="field"><span class="label">输入</span><p>1,200.00 CNY + authoritative balance 600.00 CNY。</p></div><div class="field"><span class="label">屏幕输出</span><p>PARTIALLY_SETTLED → SETTLED；部分结清 → 已结清。</p></div><div class="field"><span class="label">期待结果</span><p>两笔回款、两次核销、余额 0.00。</p></div><div class="field"><span class="label">验证方法</span><p>1,200.00 + 600.00 = 1,800.00 CNY。</p></div><div class="field"><span class="label">事实边界</span><p>登记回款不等于账单核销。</p></div><div class="field"><span class="label">停止条件</span><p>回款即结清或未读取权威余额。</p></div><div class="field recent"><span class="label">最近新增</span><p>部分结清到完全结清。</p></div>
+      </div></article>
+      <article class="stage new" data-stage="11"><h3>11 同案双轨汇总</h3><div class="body">
+        <div class="field"><span class="label">演示话术</span><p>回到同案双轨费用概览，分别收口 GOV 与 SERVICE。</p></div><div class="field"><span class="label">UI/操作</span><p>案件详情核对两轨对象链。</p></div><div class="field"><span class="label">输入</span><p>无新写入。</p></div><div class="field"><span class="label">屏幕输出</span><p>GOV 待凭证；SERVICE 已结清。</p></div><div class="field"><span class="label">期待结果</span><p>同案、余额 0、网络/console 错误为空。</p></div><div class="field"><span class="label">验证方法</span><p>01–11 ledger、对象身份、金额等式和截图。</p></div><div class="field"><span class="label">事实边界</span><p>服务费结清不等于官费凭证核验。</p></div><div class="field"><span class="label">停止条件</span><p>任一轨缺失、跨案或错误。</p></div><div class="field recent"><span class="label">最近新增</span><p>同案双轨端到端验收。</p></div>
+      </div></article>
+    </div>
+  </section>
+
+  <section class="section"><h2>客户应记住的三条线</h2><div class="summary"><article><h3>案件与证据</h3><p>案件状态由已复核文件、活动与来源替代推动。</p></article><article><h3>GOV 官费</h3><p>active 来源 → 多行预览 → 只读草单 → PayList → 待官方凭证登记。</p></article><article><h3>SERVICE 服务费</h3><p>来源 → 一次调整 → 锁定草单 → AR 账单 → 两次回款与核销 → 余额 0。</p></article></div></section>
+</main>
+</body>
+</html>
