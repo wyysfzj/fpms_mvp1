@@ -296,6 +296,24 @@ def test_runner_binds_ia00_expectations_to_the_integrated_manifest():
     assert '(bundle / "manifest.json").read_text' in source
 
 
+def test_legacy_journey_reads_v6_service_provenance_from_the_first_item():
+    source = LEGACY_SPEC.read_text(encoding="utf-8")
+
+    assert "const primaryItem = (item.items as Json[])[0]" in source
+    assert "const primaryCreatedItem = (created.items as Json[])[0]" in source
+    assert "this.bundleAmount = created.total_amount" in source
+    assert "rate_item_code: primaryItem.item_code" in source
+    assert "rate_source_ref: primaryItem.source_ref" in source
+    assert "rate_source_version: primaryItem.source_version" in source
+    assert "rate_source_sha256: primaryItem.source_sha256" in source
+    assert "rate_item_code: primaryCreatedItem.item_code" in source
+    assert "rate_source_ref: primaryCreatedItem.source_ref" in source
+    assert "rate_source_version: primaryCreatedItem.source_version" in source
+    assert "rate_source_sha256: primaryCreatedItem.source_sha256" in source
+    assert "disclaimer: primaryCreatedItem.disclaimer_zh_cn" in source
+    assert "bundle_amount: created.total_amount" in source
+
+
 def test_runner_binds_the_approved_realistic_customer_scenario():
     module = _module()
     source = LEGACY_SPEC.read_text(encoding="utf-8")

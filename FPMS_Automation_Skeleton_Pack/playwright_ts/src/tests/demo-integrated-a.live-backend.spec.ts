@@ -1463,6 +1463,7 @@ class IntegratedJourneyDriver {
     const obligationCreated = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/fees/demo-service-obligations'))
     await this.operatorPage.getByTestId('create-obligation').click()
     const created = await (await obligationCreated).json() as Json
+    const primaryCreatedItem = (created.items as Json[])[0]
     const obligationReplayed = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/fees/demo-service-obligations'))
     await this.operatorPage.getByTestId('create-obligation').click()
     const replayed = await (await obligationReplayed).json() as Json
@@ -1503,7 +1504,7 @@ class IntegratedJourneyDriver {
     expect(lockedDraft.status).toBe('LOCKED')
     await expect(this.operatorPage.getByText('🔒 已锁定', { exact: true })).toBeVisible()
     this.draftId = lockedDraft.id
-    this.bundleAmount = created.amount
+    this.bundleAmount = created.total_amount
 
     const overlayResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
     const draftListResponse = this.operatorPage.waitForResponse((item) => {
@@ -1531,17 +1532,17 @@ class IntegratedJourneyDriver {
         manifest_sha256: created.manifest_sha256,
         template_code: created.template_code,
         template_sha256: created.template_sha256,
-        rate_item_code: created.item_code,
-        rate_source_ref: created.source_ref,
-        rate_source_version: created.source_version,
-        rate_source_sha256: created.source_sha256,
+        rate_item_code: primaryCreatedItem.item_code,
+        rate_source_ref: primaryCreatedItem.source_ref,
+        rate_source_version: primaryCreatedItem.source_version,
+        rate_source_sha256: primaryCreatedItem.source_sha256,
       },
-      disclaimer: created.disclaimer_zh_cn,
+      disclaimer: primaryCreatedItem.disclaimer_zh_cn,
       obligation_count: serviceObligationIds.size,
       draft_count: serviceDrafts.length,
       draft_status: lockedDraft.status,
       service_amount: lockedDraft.total_service,
-      bundle_amount: created.amount,
+      bundle_amount: created.total_amount,
       official_fee_display: '未配置',
       official_fee_in_total: lockedDraft.total_gov !== '0.00',
       official_fee_carriers: visible.official_fee_carriers,
@@ -1779,6 +1780,7 @@ class IntegratedJourneyDriver {
     const responsePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))
     await this.operatorPage.getByTestId('demo-preflight').click()
     const item = await (await responsePromise).json() as Json
+    const primaryItem = (item.items as Json[])[0]
     return {
       provenance: {
         bundle_id: item.bundle_id,
@@ -1786,10 +1788,10 @@ class IntegratedJourneyDriver {
         manifest_sha256: item.manifest_sha256,
         template_code: item.template_code,
         template_sha256: item.template_sha256,
-        rate_item_code: item.item_code,
-        rate_source_ref: item.source_ref,
-        rate_source_version: item.source_version,
-        rate_source_sha256: item.source_sha256,
+        rate_item_code: primaryItem.item_code,
+        rate_source_ref: primaryItem.source_ref,
+        rate_source_version: primaryItem.source_version,
+        rate_source_sha256: primaryItem.source_sha256,
       },
       business_counts: item.business_counts,
       readiness: item.readiness,
