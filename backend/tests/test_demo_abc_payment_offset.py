@@ -4,9 +4,10 @@ import hashlib
 import json
 import runpy
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.modules.billing.models import (
     Bill,
@@ -18,6 +19,11 @@ from app.modules.billing.models import (
     Offset,
     Payment,
     PaymentLine,
+)
+from app.modules.billing.schemas import DemoBankReceiptRequest
+from app.modules.billing.service import (
+    create_demo_bank_receipt,
+    reserve_demo_finance_command,
 )
 from app.modules.fees.models import FeeDraft, FeeItem
 
@@ -289,6 +295,193 @@ def test_demo_command_reconciliation_distinguishes_pending_absent_and_heals_comm
         headers=auth_headers,
     )
     assert absent.status_code == 404, absent.text
+
+
+@pytest.mark.parametrize("drift", ["bill_status", "line_allocation"])
+def test_demo_offset_reconciliation_rejects_settlement_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+    drift,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": bill_id,
+            "amount": "1200.00",
+            "pay_no": "DEMO-PAY-DRIFT",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-DRIFT",
+            "idempotency_key": "demo-payment-drift",
+        },
+        headers=auth_headers,
+    )
+    assert payment.status_code == 201, payment.text
+    line_id = payment.json()["line"]["id"]
+    offset_body = {
+        "payment_line_id": line_id,
+        "bill_id": bill_id,
+        "offset_amt": "1200.00",
+        "offset_date": "2026-08-16",
+        "idempotency_key": "demo-offset-drift",
+    }
+    offset = client.post(
+        "/api/v1/offsets/demo-full",
+        json=offset_body,
+        headers=auth_headers,
+    )
+    assert offset.status_code == 201, offset.text
+
+    with session_factory() as transaction:
+        command = transaction.scalar(
+            select(DemoFinanceCommand).where(
+                DemoFinanceCommand.operation == "OFFSET",
+                DemoFinanceCommand.idempotency_key == offset_body["idempotency_key"],
+            )
+        )
+        command.state = "IN_PROGRESS"
+        command.result_snapshot = None
+        if drift == "bill_status":
+            transaction.get(Bill, bill_id).status = "SETTLED"
+        else:
+            line = transaction.get(PaymentLine, line_id)
+            line.allocated_amt = 0
+            line.balance_amt = line.raw_amount
+        transaction.commit()
+
+    recovered = client.get(
+        f"/api/v1/offsets/idempotency/{offset_body['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert recovered.status_code == 409, recovered.text
+    with session_factory() as transaction:
+        command = transaction.scalar(
+            select(DemoFinanceCommand).where(
+                DemoFinanceCommand.operation == "OFFSET",
+                DemoFinanceCommand.idempotency_key == offset_body["idempotency_key"],
+            )
+        )
+        assert command.state == "IN_PROGRESS"
+
+
+def test_demo_payment_sequence_is_owned_by_bill_across_actors(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    first_body = {
+        "target_bill_id": bill_id,
+        "amount": "1200.00",
+        "pay_no": "DEMO-PAY-OTHER-ACTOR",
+        "pay_date": "2026-08-16",
+        "currency": "CNY",
+        "pay_method": "BANK_TRANSFER",
+        "bank_ref_no": "DEMO-BANK-OTHER-ACTOR",
+        "remark": None,
+        "idempotency_key": "demo-payment-other-actor",
+    }
+    actor_id = str(uuid4())
+    with session_factory() as transaction:
+        reserve_demo_finance_command(
+            transaction,
+            operation="PAYMENT",
+            idempotency_key=first_body["idempotency_key"],
+            actor_id=actor_id,
+            payload=first_body,
+        )
+        create_demo_bank_receipt(
+            transaction,
+            DemoBankReceiptRequest.model_validate(first_body),
+            actor_id=actor_id,
+        )
+
+    second = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            **first_body,
+            "pay_no": "DEMO-PAY-CURRENT-ACTOR",
+            "bank_ref_no": "DEMO-BANK-CURRENT-ACTOR",
+            "idempotency_key": "demo-payment-current-actor",
+        },
+        headers=auth_headers,
+    )
+    assert second.status_code == 409, second.text
+    with session_factory() as transaction:
+        assert transaction.scalar(select(func.count()).select_from(Payment)) == 1
+
+
+def test_demo_offset_postcondition_failure_rolls_back_domain_writes(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _client_id, case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": bill_id,
+            "amount": "1200.00",
+            "pay_no": "DEMO-PAY-ROLLBACK",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-ROLLBACK",
+            "idempotency_key": "demo-payment-rollback",
+        },
+        headers=auth_headers,
+    )
+    assert payment.status_code == 201, payment.text
+    line_id = payment.json()["line"]["id"]
+    with session_factory() as transaction:
+        transaction.add_all(
+            CaseReceipt(
+                id=str(uuid4()),
+                case_id=case_id,
+                fee_type="SERVICE",
+                currency="CNY",
+                receivable_amt=1800,
+                received_amt=0,
+            )
+            for _ in range(2)
+        )
+        transaction.commit()
+
+    response = client.post(
+        "/api/v1/offsets/demo-full",
+        json={
+            "payment_line_id": line_id,
+            "bill_id": bill_id,
+            "offset_amt": "1200.00",
+            "offset_date": "2026-08-16",
+            "idempotency_key": "demo-offset-rollback",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 409, response.text
+    with session_factory() as transaction:
+        bill = transaction.get(Bill, bill_id)
+        line = transaction.get(PaymentLine, line_id)
+        assert transaction.scalar(select(func.count()).select_from(Offset)) == 0
+        assert bill.status == "UNSETTLED"
+        assert bill.balance == 1800
+        assert line.allocated_amt == 0
+        assert line.balance_amt == 1200
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
     client,

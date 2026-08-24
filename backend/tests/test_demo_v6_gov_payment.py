@@ -150,6 +150,10 @@ def test_demo_gov_payment_is_recoverable_pending_evidence_and_idempotent(
     second = client.post(path, json=second_body, headers=auth_headers)
     assert second.status_code == 201, second.text
     assert second.json()["fact_status"] == "REGISTERED_PENDING_OFFICIAL_EVIDENCE"
+    assert client.get(
+        f"/api/v1/gov-payments/idempotency/{body['idempotency_key']}",
+        headers=auth_headers,
+    ).status_code == 200
 
     drifted = {**body, "paid_amount": "1.00"}
     assert client.post(path, json=drifted, headers=auth_headers).status_code == 409
@@ -158,6 +162,17 @@ def test_demo_gov_payment_is_recoverable_pending_evidence_and_idempotent(
         pay_list = transaction.get(PayList, pay_list_id)
         assert pay_list.status == "PAID"
         assert transaction.scalar(select(func.sum(GovPayment.paid_amount))) == pay_list.total_amount
+        first_payment = transaction.scalar(
+            select(GovPayment).where(GovPayment.fee_item_id == items[0][0])
+        )
+        first_payment.remark = "被篡改的登记事实"
+        transaction.commit()
+
+    assert client.get(
+        f"/api/v1/gov-payments/idempotency/{body['idempotency_key']}",
+        headers=auth_headers,
+    ).status_code == 409
+    assert client.post(path, json=body, headers=auth_headers).status_code == 409
 
 
 def test_demo_gov_payment_http_and_scope_boundaries(

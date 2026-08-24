@@ -396,8 +396,6 @@ class DemoGovPaymentOut(BaseModel):
 class DemoGovPayListOut(BaseModel):
     id: int
     pay_list_no: str
-    status: str
-    paid_date: date | None
     total_amount: Decimal
     currency: Literal["CNY"]
     client_id: str

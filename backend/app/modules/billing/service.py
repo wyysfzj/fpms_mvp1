@@ -2439,10 +2439,13 @@ def create_demo_bank_receipt(
     for command in db.scalars(
         select(DemoFinanceCommand).where(
             DemoFinanceCommand.operation == "PAYMENT",
-            DemoFinanceCommand.created_by == actor_id,
         )
     ):
-        payload = _demo_finance_payload(command, operation="PAYMENT", actor_id=actor_id)
+        payload = _demo_finance_payload(
+            command,
+            operation="PAYMENT",
+            actor_id=command.created_by or "",
+        )
         if payload.get("target_bill_id") == bill.id:
             payment_commands.append(command)
     active_offset_count = db.scalar(
@@ -2693,10 +2696,13 @@ def create_demo_full_offset(
     for command in db.scalars(
         select(DemoFinanceCommand).where(
             DemoFinanceCommand.operation == "PAYMENT",
-            DemoFinanceCommand.created_by == actor_id,
         )
     ):
-        payload = _demo_finance_payload(command, operation="PAYMENT", actor_id=actor_id)
+        payload = _demo_finance_payload(
+            command,
+            operation="PAYMENT",
+            actor_id=command.created_by or "",
+        )
         if (
             payload.get("target_bill_id") == bill.id
             and payload.get("pay_no") == payment.pay_no
@@ -2720,16 +2726,58 @@ def create_demo_full_offset(
             "核销金额、回款归属或账单权威余额冲突",
             status_code=400,
         )
-    try:
-        offset = create_offset(
-            db,
-            OffsetCreateSchema(
-                payment_line_id=line.id,
-                bill_id=bill.id,
-                offset_amt=data.offset_amt,
-                offset_date=data.offset_date,
-            ),
+    receipts_before = tuple(
+        db.scalars(
+            select(CaseReceipt).where(
+                CaseReceipt.case_id == next(iter(case_ids)),
+                CaseReceipt.fee_type == "SERVICE",
+                CaseReceipt.currency == "CNY",
+            )
         )
+    )
+    active_offset_total = sum(
+        (row.offset_amt for row in active_offsets),
+        Decimal("0"),
+    )
+    if (
+        len(receipts_before) != len(active_offsets)
+        or bill.balance != bill.amount - active_offset_total
+        or (
+            receipts_before
+            and (
+                receipts_before[0].receivable_amt != bill.amount
+                or receipts_before[0].received_amt != active_offset_total
+            )
+        )
+    ):
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销前的案件收款投影无效",
+            status_code=409,
+        )
+    offset = Offset(
+        id=str(uuid4()),
+        payment_line_id=line.id,
+        bill_id=bill.id,
+        offset_amt=data.offset_amt,
+        offset_date=data.offset_date,
+        is_reversed=False,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(offset)
+    bill.balance -= data.offset_amt
+    _apply_bill_status(
+        bill,
+        "SETTLED" if bill.balance == Decimal("0") else "PARTIALLY_SETTLED",
+    )
+    bill.updated_by = actor_id
+    line.allocated_amt += data.offset_amt
+    line.balance_amt -= data.offset_amt
+    line.updated_by = actor_id
+    _allocate_offset_to_receipts(db, bill, data.offset_amt, data.offset_date)
+    try:
+        db.flush()
     except IntegrityError:
         db.rollback()
         raise_business_error(
@@ -2751,12 +2799,29 @@ def create_demo_full_offset(
         receipt is None
         or receipt.receivable_amt != bill.amount
         or receipt.received_amt != bill.amount - bill.balance
+        or line.allocated_amt != data.offset_amt
+        or line.balance_amt != Decimal("0")
     ):
         raise_business_error(
             "DEMO_OFFSET_STORED_STATE_INVALID",
             "核销后的案件收款投影无效",
             status_code=409,
         )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise_business_error(
+            "DEMO_OFFSET_CONCURRENT_CONFLICT",
+            "核销命令与已存在记录冲突",
+            status_code=409,
+        )
+    db.refresh(offset)
+    _run_commission_settleable_recompute_non_blocking(
+        db,
+        bill_id=bill.id,
+        as_of_date=data.offset_date,
+    )
     return DemoFullOffsetResult(
         offset_id=offset.id,
         bill_id=bill.id,
@@ -2806,12 +2871,70 @@ def reconcile_demo_full_offset(
     offset = offsets[0] if len(offsets) == 1 else None
     line = db.get(PaymentLine, request.payment_line_id)
     bill = db.get(Bill, request.bill_id)
+    payment = db.get(Payment, line.payment_id) if line is not None else None
+    source = db.scalar(
+        select(BillDraftSource).where(BillDraftSource.bill_id == request.bill_id)
+    )
     items = (
         tuple(db.scalars(select(BillItem).where(BillItem.bill_id == request.bill_id)))
         if bill is not None
         else ()
     )
     case_ids = {item.case_id for item in items}
+    item_total = sum((item.amount or Decimal("0") for item in items), Decimal("0"))
+    active_offsets = (
+        tuple(
+            db.scalars(
+                select(Offset).where(
+                    Offset.bill_id == request.bill_id,
+                    Offset.is_reversed.is_(False),
+                )
+            )
+        )
+        if bill is not None
+        else ()
+    )
+    active_offset_total = sum(
+        (row.offset_amt for row in active_offsets),
+        Decimal("0"),
+    )
+    active_lines = tuple(
+        db.get(PaymentLine, row.payment_line_id) for row in active_offsets
+    )
+    active_payments = tuple(
+        db.get(Payment, row.payment_id) if row is not None else None
+        for row in active_lines
+    )
+    payment_requests: list[DemoBankReceiptRequest] = []
+    for payment_command in db.scalars(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.operation == "PAYMENT",
+        )
+    ):
+        payment_payload = _demo_finance_payload(
+            payment_command,
+            operation="PAYMENT",
+            actor_id=payment_command.created_by or "",
+        )
+        try:
+            payment_request = DemoBankReceiptRequest.model_validate(payment_payload)
+        except ValueError:
+            raise_business_error(
+                "DEMO_OFFSET_STORED_STATE_INVALID",
+                "核销关联的回款命令无效",
+                status_code=409,
+            )
+        if payment_request.target_bill_id == request.bill_id:
+            payment_requests.append(payment_request)
+    payment_requests_by_ref = {
+        (row.pay_no, row.bank_ref_no): row for row in payment_requests
+    }
+    expected_balance = (
+        bill.amount - active_offset_total if bill is not None else Decimal("-1")
+    )
+    expected_status = (
+        "SETTLED" if expected_balance == Decimal("0") else "PARTIALLY_SETTLED"
+    )
     receipts = (
         tuple(
             db.scalars(
@@ -2830,18 +2953,71 @@ def reconcile_demo_full_offset(
         offset is None
         or line is None
         or bill is None
+        or payment is None
+        or source is None
         or receipt is None
         or not items
-        or any(item.fee_type != "SERVICE" for item in items)
-        or line.allocated_amt + line.balance_amt != line.raw_amount
+        or any(
+            item.fee_type != "SERVICE"
+            or item.case_id is None
+            or item.amount is None
+            or item.amount <= Decimal("0")
+            for item in items
+        )
+        or len(case_ids) != 1
+        or item_total != bill.amount
+        or len(active_offsets) not in {1, 2}
+        or len({row.payment_line_id for row in active_offsets}) != len(active_offsets)
+        or any(row is None for row in active_lines)
+        or any(row is None for row in active_payments)
+        or len(payment_requests) != len(active_offsets)
+        or len(payment_requests_by_ref) != len(payment_requests)
+        or expected_balance < Decimal("0")
+        or bill.balance != expected_balance
+        or bill.status != expected_status
+        or bill.direction != "AR"
+        or bill.total_service != bill.amount
+        or bill.total_gov != Decimal("0")
+        or bill.total_misc != Decimal("0")
+        or payment.client_id != bill.client_id
+        or payment.currency != bill.currency
+        or line.case_id != next(iter(case_ids))
         or receipt.receivable_amt != bill.amount
-        or receipt.received_amt != bill.amount - bill.balance
+        or receipt.received_amt != active_offset_total
     ):
         raise_business_error(
             "DEMO_OFFSET_STORED_STATE_INVALID",
             "核销存量状态无效",
             status_code=409,
         )
+    for active_offset, active_line, active_payment in zip(
+        active_offsets,
+        active_lines,
+        active_payments,
+        strict=True,
+    ):
+        payment_request = payment_requests_by_ref.get(
+            (active_payment.pay_no, active_payment.bank_ref_no)
+        )
+        if (
+            payment_request is None
+            or active_payment.client_id != bill.client_id
+            or active_payment.pay_date != payment_request.pay_date
+            or active_payment.currency != payment_request.currency
+            or active_payment.amount != payment_request.amount
+            or active_payment.pay_method != payment_request.pay_method
+            or active_payment.remark != payment_request.remark
+            or active_line.case_id != next(iter(case_ids))
+            or active_line.raw_amount != payment_request.amount
+            or active_line.allocated_amt != active_offset.offset_amt
+            or active_line.balance_amt != Decimal("0")
+            or active_offset.offset_amt != payment_request.amount
+        ):
+            raise_business_error(
+                "DEMO_OFFSET_STORED_STATE_INVALID",
+                "核销关联的回款与结算金额无效",
+                status_code=409,
+            )
     return DemoFullOffsetResult(
         offset_id=offset.id,
         bill_id=offset.bill_id,

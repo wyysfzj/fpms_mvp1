@@ -19,7 +19,15 @@ from app.models.system_param import SystemParam
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.auth.models import T_User
 from app.modules.billing.doc_render_bill_context import BillContextBuilder
-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
+from app.modules.billing.models import (
+    Bill,
+    BillItem,
+    CaseReceipt,
+    DemoFinanceCommand,
+    Offset,
+    Payment,
+    PaymentLine,
+)
 from app.modules.billing.schemas import (
     BillBadDebtActionSchema,
     BillBadDebtRecoveryActionSchema,
@@ -493,8 +501,6 @@ def _demo_gov_payment_command_response(
         pay_list={
             "id": pay_list.id,
             "pay_list_no": pay_list.pay_list_no,
-            "status": pay_list.status,
-            "paid_date": pay_list.paid_date,
             "total_amount": pay_list.total_amount,
             "currency": pay_list.currency,
             "client_id": pay_list.client_id,
@@ -503,6 +509,37 @@ def _demo_gov_payment_command_response(
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )
+
+
+def _reconciled_demo_gov_payment_response(
+    db: Session,
+    *,
+    command: DemoFinanceCommand,
+    actor_id: str,
+) -> DemoGovPaymentResponse:
+    if command.result_snapshot is None:
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_STORED_STATE_INVALID",
+            "官费登记存量状态无效",
+            status_code=409,
+        )
+    result = reconcile_demo_gov_payment(
+        db,
+        command.idempotency_key,
+        actor_id=actor_id,
+    )
+    current = _demo_gov_payment_command_response(db, result)
+    stored = _stored_demo_command_response(
+        DemoGovPaymentResponse,
+        command.result_snapshot,
+    )
+    if current != stored:
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_STORED_STATE_INVALID",
+            "官费登记存量状态与权威对象不一致",
+            status_code=409,
+        )
+    return current
 
 
 @router.post(
@@ -528,9 +565,22 @@ def create_local_demo_gov_payment(
     )
     if reservation.state == "COMPLETED" and reservation.result_snapshot is not None:
         response.status_code = status.HTTP_200_OK
-        return _stored_demo_command_response(
-            DemoGovPaymentResponse,
-            reservation.result_snapshot,
+        command = get_demo_finance_command(
+            db,
+            operation="GOV_PAYMENT",
+            idempotency_key=payload.idempotency_key,
+            actor_id=actor_id,
+        )
+        if command is None:
+            raise_business_error(
+                "DEMO_GOV_PAYMENT_COMMAND_NOT_FOUND",
+                "未找到可恢复的官费登记命令",
+                status_code=404,
+            )
+        return _reconciled_demo_gov_payment_response(
+            db,
+            command=command,
+            actor_id=actor_id,
         )
     if not reservation.created:
         try:
@@ -596,9 +646,10 @@ def reconcile_local_demo_gov_payment(
             status_code=404,
         )
     if command.state == "COMPLETED" and command.result_snapshot is not None:
-        return _stored_demo_command_response(
-            DemoGovPaymentResponse,
-            command.result_snapshot,
+        return _reconciled_demo_gov_payment_response(
+            db,
+            command=command,
+            actor_id=actor_id,
         )
     try:
         result = reconcile_demo_gov_payment(
