@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
+from app.modules.annuity.service import register_gov_payment
 from app.modules.billing.models import (
     BadDebtRecovery,
     BadDebtVoucher,
@@ -23,8 +24,6 @@ from app.modules.billing.models import (
     BillItem,
     CaseReceipt,
     DemoFinanceCommand,
-    DemoOffsetCommand,
-    DemoPaymentCommand,
     Offset,
     Payment,
     PaymentLine,
@@ -41,6 +40,7 @@ from app.modules.billing.schemas import (
     DemoBankReceiptRequest,
     DemoBillFromDraftRequest,
     DemoFullOffsetRequest,
+    DemoGovPaymentRequest,
     OffsetCreateSchema,
     PaymentSchema,
 )
@@ -82,6 +82,13 @@ class DemoFullOffsetResult:
 
 
 @dataclass(frozen=True, slots=True)
+class DemoGovPaymentResult:
+    gov_payment_id: int
+    idempotency_key: str
+    reused: bool
+
+
+@dataclass(frozen=True, slots=True)
 class DemoFinanceReservation:
     command_id: str
     state: str
@@ -89,7 +96,9 @@ class DemoFinanceReservation:
     created: bool
 
 
-_DEMO_FINANCE_OPERATIONS = frozenset({"BILL", "PAYMENT", "OFFSET"})
+_DEMO_FINANCE_OPERATIONS = frozenset(
+    {"BILL", "PAYMENT", "OFFSET", "GOV_PAYMENT"}
+)
 
 
 def reserve_demo_finance_command(
@@ -2028,19 +2037,26 @@ def create_demo_bill_from_draft(
     items = tuple(
         db.scalars(select(FeeItem).where(FeeItem.draft_id == draft.id)).all()
     )
+    service_total = sum((item.amount or Decimal("0") for item in items), Decimal("0"))
+    case_ids = {item.case_id for item in items}
     if (
-        len(items) != 1
-        or items[0].fee_type != "SERVICE"
-        or items[0].amount is None
-        or items[0].amount <= Decimal("0")
+        not items
+        or any(
+            item.fee_type != "SERVICE"
+            or item.amount is None
+            or item.amount <= Decimal("0")
+            or item.case_id is None
+            for item in items
+        )
+        or len(case_ids) != 1
         or draft.total_gov != Decimal("0")
         or draft.total_misc != Decimal("0")
-        or draft.total_service != items[0].amount
-        or draft.amount != items[0].amount
+        or draft.total_service != service_total
+        or draft.amount != service_total
     ):
         raise_business_error(
             "DEMO_BILL_DRAFT_CONTENT_INVALID",
-            "演示账单要求一个正额服务费项目",
+            "演示账单要求同一案件的多行正额服务费项目",
             status_code=400,
         )
 
@@ -2055,26 +2071,29 @@ def create_demo_bill_from_draft(
         bill_date=data.bill_date,
         due_date=data.due_date,
         total_gov=Decimal("0"),
-        total_service=items[0].amount,
+        total_service=service_total,
         total_misc=Decimal("0"),
-        amount=items[0].amount,
-        balance=items[0].amount,
+        amount=service_total,
+        balance=service_total,
         created_by=actor_id,
         updated_by=actor_id,
     )
-    bill_item = BillItem(
-        id=str(uuid4()),
-        bill_id=bill_id,
-        case_id=items[0].case_id,
-        draft_id=draft.id,
-        fee_item_id=items[0].id,
-        fee_code=items[0].fee_code,
-        fee_name=items[0].fee_name,
-        fee_type=items[0].fee_type,
-        year_no=items[0].year_no,
-        amount=items[0].amount,
-        created_by=actor_id,
-        updated_by=actor_id,
+    bill_items = tuple(
+        BillItem(
+            id=str(uuid4()),
+            bill_id=bill_id,
+            case_id=item.case_id,
+            draft_id=draft.id,
+            fee_item_id=item.id,
+            fee_code=item.fee_code,
+            fee_name=item.fee_name,
+            fee_type=item.fee_type,
+            year_no=item.year_no,
+            amount=item.amount,
+            created_by=actor_id,
+            updated_by=actor_id,
+        )
+        for item in items
     )
     source = BillDraftSource(
         id=str(uuid4()),
@@ -2085,7 +2104,7 @@ def create_demo_bill_from_draft(
         created_by=actor_id,
         updated_by=actor_id,
     )
-    db.add_all((bill, bill_item, source))
+    db.add_all((bill, *bill_items, source))
     try:
         db.commit()
     except IntegrityError:
@@ -2134,15 +2153,227 @@ def _demo_finance_scope_or_fail() -> None:
         )
 
 
-def _demo_command_hash(payload: dict[str, object], actor_id: str) -> str:
-    canonical = json.dumps(
-        {"actor_id": actor_id, **payload},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
+def _demo_finance_payload(
+    command: DemoFinanceCommand,
+    *,
+    operation: str,
+    actor_id: str,
+) -> dict[str, object]:
+    try:
+        stored = json.loads(command.command_snapshot)
+        canonical = json.dumps(
+            stored,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError):
+        raise_business_error(
+            "DEMO_FINANCE_STORED_STATE_INVALID",
+            "财务命令存量状态无效",
+            status_code=409,
+        )
+    if (
+        type(stored) is not dict
+        or set(stored) != {"actor_id", "operation", "payload"}
+        or stored.get("actor_id") != actor_id
+        or stored.get("operation") != operation
+        or type(stored.get("payload")) is not dict
+        or canonical != command.command_snapshot
+        or hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        != command.command_hash
+    ):
+        raise_business_error(
+            "DEMO_FINANCE_STORED_STATE_INVALID",
+            "财务命令存量状态无效",
+            status_code=409,
+        )
+    return stored["payload"]
+
+
+def _demo_gov_payment_or_fail(
+    db: Session,
+    *,
+    pay_list_id: int,
+    fee_item_id: str,
+    paid_date: date,
+    paid_amount: Decimal,
+    remark: str,
+    completed: bool,
+) -> GovPayment:
+    pay_list = db.get(PayList, pay_list_id)
+    if pay_list is None:
+        raise_business_error(
+            "PAY_LIST_NOT_FOUND",
+            "官费清单不存在",
+            status_code=404,
+        )
+    item_row = db.execute(
+        select(FeeItem, FeeDraft)
+        .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
+        .where(FeeItem.id == fee_item_id)
+    ).first()
+    if item_row is None:
+        raise_business_error(
+            "FEE_ITEM_NOT_FOUND",
+            "费用明细不存在",
+            status_code=404,
+        )
+    item, draft = item_row
+    payments = tuple(
+        db.scalars(
+            select(GovPayment).where(
+                GovPayment.pay_list_id == pay_list_id,
+                GovPayment.fee_item_id == fee_item_id,
+            )
+        )
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if len(payments) != 1:
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_SCOPE_CONFLICT",
+            "官费清单明细关联无效",
+            status_code=409,
+        )
+    payment = payments[0]
+    expected_status = "PAID" if completed else "PLANNED"
+    expected_paid_date = paid_date if completed else None
+    expected_remark = remark if completed else f"from_fee_item:{item.id}"
+    if (
+        item.fee_type != "GOV"
+        or item.case_id is None
+        or draft.client_id != pay_list.client_id
+        or draft.currency != pay_list.currency
+        or pay_list.currency != "CNY"
+        or item.amount != paid_amount
+        or payment.case_id != item.case_id
+        or payment.fee_code != item.fee_code
+        or payment.status != expected_status
+        or payment.paid_date != expected_paid_date
+        or payment.paid_amount != paid_amount
+        or payment.planned_amt != item.amount
+        or payment.currency != "CNY"
+        or payment.planned_currency != "CNY"
+        or payment.paid_currency != ("CNY" if completed else None)
+        or payment.official_receipt_no is not None
+        or payment.voucher_no is not None
+        or payment.invoice_no is not None
+        or payment.remark != expected_remark
+    ):
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_SCOPE_CONFLICT",
+            "官费登记与清单权威明细不一致",
+            status_code=409,
+        )
+    return payment
+
+
+def create_demo_gov_payment(
+    db: Session,
+    data: DemoGovPaymentRequest,
+    *,
+    actor_id: str,
+) -> DemoGovPaymentResult:
+    _demo_finance_scope_or_fail()
+    _demo_gov_payment_or_fail(
+        db,
+        pay_list_id=data.pay_list_id,
+        fee_item_id=data.fee_item_id,
+        paid_date=data.paid_date,
+        paid_amount=data.paid_amount,
+        remark=data.remark,
+        completed=False,
+    )
+    register_gov_payment(
+        db,
+        pay_list_id=data.pay_list_id,
+        fee_item_id=data.fee_item_id,
+        paid_date=data.paid_date,
+        paid_amount=data.paid_amount,
+        official_receipt_no=None,
+        remark=data.remark,
+        paid_currency="CNY",
+        voucher_no=None,
+        invoice_no=None,
+        actor_id=actor_id,
+    )
+    payment = _demo_gov_payment_or_fail(
+        db,
+        pay_list_id=data.pay_list_id,
+        fee_item_id=data.fee_item_id,
+        paid_date=data.paid_date,
+        paid_amount=data.paid_amount,
+        remark=data.remark,
+        completed=True,
+    )
+    return DemoGovPaymentResult(payment.id, data.idempotency_key, False)
+
+
+def reconcile_demo_gov_payment(
+    db: Session,
+    idempotency_key: str,
+    *,
+    actor_id: str,
+) -> DemoGovPaymentResult:
+    _demo_finance_scope_or_fail()
+    command = get_demo_finance_command(
+        db,
+        operation="GOV_PAYMENT",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
+    )
+    if command is None:
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_COMMAND_NOT_FOUND",
+            "未找到可恢复的官费登记命令",
+            status_code=404,
+        )
+    payload = _demo_finance_payload(
+        command,
+        operation="GOV_PAYMENT",
+        actor_id=actor_id,
+    )
+    try:
+        request = DemoGovPaymentRequest.model_validate(payload)
+    except ValueError:
+        raise_business_error(
+            "DEMO_FINANCE_STORED_STATE_INVALID",
+            "财务命令存量状态无效",
+            status_code=409,
+        )
+    planned = db.scalar(
+        select(GovPayment).where(
+            GovPayment.pay_list_id == request.pay_list_id,
+            GovPayment.fee_item_id == request.fee_item_id,
+            GovPayment.status == "PLANNED",
+            GovPayment.paid_date.is_(None),
+        )
+    )
+    if planned is not None:
+        _demo_gov_payment_or_fail(
+            db,
+            pay_list_id=request.pay_list_id,
+            fee_item_id=request.fee_item_id,
+            paid_date=request.paid_date,
+            paid_amount=request.paid_amount,
+            remark=request.remark,
+            completed=False,
+        )
+        raise_business_error(
+            "DEMO_GOV_PAYMENT_DOMAIN_RESULT_NOT_FOUND",
+            "官费登记命令尚未形成可恢复的业务结果",
+            status_code=404,
+        )
+    payment = _demo_gov_payment_or_fail(
+        db,
+        pay_list_id=request.pay_list_id,
+        fee_item_id=request.fee_item_id,
+        paid_date=request.paid_date,
+        paid_amount=request.paid_amount,
+        remark=request.remark,
+        completed=True,
+    )
+    return DemoGovPaymentResult(payment.id, idempotency_key, True)
 
 
 def create_demo_bank_receipt(
@@ -2152,54 +2383,12 @@ def create_demo_bank_receipt(
     actor_id: str,
 ) -> DemoBankReceiptResult:
     _demo_finance_scope_or_fail()
-    command_hash = _demo_command_hash(
-        {
-            "amount": format(data.amount, ".2f"),
-            "bank_ref_no": data.bank_ref_no,
-            "currency": data.currency,
-            "pay_date": data.pay_date.isoformat(),
-            "pay_method": data.pay_method,
-            "pay_no": data.pay_no,
-            "remark": data.remark,
-            "target_bill_id": data.target_bill_id,
-        },
-        actor_id,
-    )
     connection = db.connection()
     if (
         connection.dialect.name == "sqlite"
         and not connection.connection.driver_connection.in_transaction
     ):
         connection.exec_driver_sql("BEGIN IMMEDIATE")
-    existing = db.scalar(
-        select(DemoPaymentCommand).where(
-            DemoPaymentCommand.idempotency_key == data.idempotency_key
-        )
-    )
-    if existing is not None:
-        if existing.command_hash != command_hash:
-            raise_business_error(
-                "DEMO_PAYMENT_IDEMPOTENCY_CONFLICT",
-                "回款幂等键已用于不同命令",
-                status_code=409,
-            )
-        line = db.scalar(
-            select(PaymentLine).where(PaymentLine.payment_id == existing.payment_id)
-        )
-        if line is None:
-            raise_business_error(
-                "DEMO_PAYMENT_STORED_STATE_INVALID",
-                "回款存量状态无效",
-                status_code=409,
-            )
-        return DemoBankReceiptResult(
-            payment_id=existing.payment_id,
-            line_id=line.id,
-            target_bill_id=existing.target_bill_id,
-            idempotency_key=data.idempotency_key,
-            reused=True,
-        )
-
     bill = db.scalar(select(Bill).where(Bill.id == data.target_bill_id))
     if bill is None:
         raise_business_error(
@@ -2213,38 +2402,79 @@ def create_demo_bank_receipt(
     items = tuple(
         db.scalars(select(BillItem).where(BillItem.bill_id == data.target_bill_id)).all()
     )
-    if source is None or len(items) != 1 or items[0].case_id is None:
+    case_ids = {item.case_id for item in items}
+    item_total = sum((item.amount or Decimal("0") for item in items), Decimal("0"))
+    if (
+        source is None
+        or not items
+        or any(
+            item.fee_type != "SERVICE"
+            or item.amount is None
+            or item.amount <= Decimal("0")
+            or item.case_id is None
+            for item in items
+        )
+        or len(case_ids) != 1
+        or item_total != bill.amount
+        or bill.total_service != bill.amount
+        or bill.total_gov != Decimal("0")
+        or bill.total_misc != Decimal("0")
+    ):
         raise_business_error(
             "DEMO_PAYMENT_BILL_INVALID",
             "目标账单不是可收款的本地演示账单",
             status_code=400,
         )
-    if bill.status != "UNSETTLED":
-        raise_business_error(
-            "DEMO_PAYMENT_BILL_STATE_CONFLICT",
-            "目标账单当前状态不可登记回款",
-            status_code=409,
-        )
     if (
         bill.currency != "CNY"
         or bill.direction != "AR"
-        or bill.balance <= Decimal("0")
-        or data.amount != bill.balance
     ):
         raise_business_error(
             "DEMO_PAYMENT_AMOUNT_OR_BILL_CONFLICT",
-            "回款金额必须等于当前演示账单余额",
+            "回款金额或目标账单不符合本地演示边界",
             status_code=400,
         )
-    prior_target = db.scalar(
-        select(DemoPaymentCommand.id).where(
-            DemoPaymentCommand.target_bill_id == bill.id
+
+    payment_commands = []
+    for command in db.scalars(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.operation == "PAYMENT",
+            DemoFinanceCommand.created_by == actor_id,
+        )
+    ):
+        payload = _demo_finance_payload(command, operation="PAYMENT", actor_id=actor_id)
+        if payload.get("target_bill_id") == bill.id:
+            payment_commands.append(command)
+    active_offset_count = db.scalar(
+        select(func.count(Offset.id)).where(
+            Offset.bill_id == bill.id,
+            Offset.is_reversed.is_(False),
         )
     )
-    if prior_target is not None:
+    ordinal = len(payment_commands)
+    if ordinal == 1 and not Decimal("0") < data.amount < bill.balance:
         raise_business_error(
-            "DEMO_PAYMENT_BILL_ALREADY_OWNED",
-            "目标账单已有客户回款命令",
+            "DEMO_PAYMENT_AMOUNT_OR_BILL_CONFLICT",
+            "首笔回款必须为小于账单余额的正额",
+            status_code=400,
+        )
+    if ordinal == 1:
+        valid_state = (
+            active_offset_count == 0
+            and bill.status == "UNSETTLED"
+        )
+    elif ordinal == 2:
+        valid_state = (
+            active_offset_count == 1
+            and bill.status == "PARTIALLY_SETTLED"
+            and data.amount == bill.balance
+        )
+    else:
+        valid_state = False
+    if not valid_state:
+        raise_business_error(
+            "DEMO_PAYMENT_SEQUENCE_CONFLICT",
+            "回款金额或顺序与账单权威余额不一致",
             status_code=409,
         )
     if db.scalar(select(Payment.id).where(Payment.pay_no == data.pay_no)) is not None or db.scalar(
@@ -2274,26 +2504,15 @@ def create_demo_bank_receipt(
     line = PaymentLine(
         id=line_id,
         payment_id=payment_id,
-        case_id=items[0].case_id,
+        case_id=next(iter(case_ids)),
         raw_amount=data.amount,
         allocated_amt=Decimal("0"),
         balance_amt=data.amount,
         created_by=actor_id,
         updated_by=actor_id,
     )
-    command = DemoPaymentCommand(
-        id=str(uuid4()),
-        payment_id=payment_id,
-        target_bill_id=bill.id,
-        idempotency_key=data.idempotency_key,
-        command_hash=command_hash,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-    db.add(payment)
+    db.add_all((payment, line))
     try:
-        db.flush()
-        db.add_all((line, command))
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -2315,11 +2534,11 @@ def reconcile_demo_bank_receipt(
     db: Session, idempotency_key: str, *, actor_id: str
 ) -> DemoBankReceiptResult:
     _demo_finance_scope_or_fail()
-    command = db.scalar(
-        select(DemoPaymentCommand).where(
-            DemoPaymentCommand.idempotency_key == idempotency_key,
-            DemoPaymentCommand.created_by == actor_id,
-        )
+    command = get_demo_finance_command(
+        db,
+        operation="PAYMENT",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
     )
     if command is None:
         raise_business_error(
@@ -2327,20 +2546,72 @@ def reconcile_demo_bank_receipt(
             "未找到可对账的回款命令",
             status_code=404,
         )
-    line = db.scalar(
-        select(PaymentLine).where(PaymentLine.payment_id == command.payment_id)
+    payload = _demo_finance_payload(command, operation="PAYMENT", actor_id=actor_id)
+    try:
+        request = DemoBankReceiptRequest.model_validate(payload)
+    except ValueError:
+        raise_business_error(
+            "DEMO_PAYMENT_STORED_STATE_INVALID",
+            "回款存量状态无效",
+            status_code=409,
+        )
+    payments = tuple(
+        db.scalars(
+            select(Payment).where(
+                Payment.pay_no == request.pay_no,
+                Payment.bank_ref_no == request.bank_ref_no,
+            )
+        )
     )
-    if line is None:
+    payment = payments[0] if len(payments) == 1 else None
+    if payment is None:
+        raise_business_error(
+            "DEMO_PAYMENT_DOMAIN_RESULT_NOT_FOUND",
+            "回款命令尚未形成可恢复的业务结果",
+            status_code=404,
+        )
+    lines = (
+        tuple(db.scalars(select(PaymentLine).where(PaymentLine.payment_id == payment.id)))
+        if payment is not None
+        else ()
+    )
+    line = lines[0] if len(lines) == 1 else None
+    bill = db.get(Bill, request.target_bill_id)
+    items = (
+        tuple(db.scalars(select(BillItem).where(BillItem.bill_id == bill.id)))
+        if bill is not None
+        else ()
+    )
+    case_ids = {item.case_id for item in items}
+    if (
+        payment is None
+        or line is None
+        or bill is None
+        or not items
+        or len(case_ids) != 1
+        or None in case_ids
+        or any(item.fee_type != "SERVICE" for item in items)
+        or payment.client_id != bill.client_id
+        or payment.pay_date != request.pay_date
+        or payment.currency != request.currency
+        or payment.amount != request.amount
+        or payment.pay_method != request.pay_method
+        or payment.remark != request.remark
+        or line.case_id != next(iter(case_ids))
+        or line.raw_amount != request.amount
+        or line.allocated_amt + line.balance_amt != line.raw_amount
+        or line.allocated_amt not in {Decimal("0"), line.raw_amount}
+    ):
         raise_business_error(
             "DEMO_PAYMENT_STORED_STATE_INVALID",
             "回款存量状态无效",
             status_code=409,
         )
     return DemoBankReceiptResult(
-        payment_id=command.payment_id,
+        payment_id=payment.id,
         line_id=line.id,
-        target_bill_id=command.target_bill_id,
-        idempotency_key=command.idempotency_key,
+        target_bill_id=bill.id,
+        idempotency_key=idempotency_key,
         reused=True,
     )
 
@@ -2352,51 +2623,12 @@ def create_demo_full_offset(
     actor_id: str,
 ) -> DemoFullOffsetResult:
     _demo_finance_scope_or_fail()
-    command_hash = _demo_command_hash(
-        {
-            "bill_id": data.bill_id,
-            "offset_amt": format(data.offset_amt, ".2f"),
-            "offset_date": data.offset_date.isoformat(),
-            "payment_line_id": data.payment_line_id,
-        },
-        actor_id,
-    )
     connection = db.connection()
     if (
         connection.dialect.name == "sqlite"
         and not connection.connection.driver_connection.in_transaction
     ):
         connection.exec_driver_sql("BEGIN IMMEDIATE")
-    existing = db.scalar(
-        select(DemoOffsetCommand).where(
-            DemoOffsetCommand.idempotency_key == data.idempotency_key
-        )
-    )
-    if existing is not None:
-        if existing.command_hash != command_hash:
-            raise_business_error(
-                "DEMO_OFFSET_IDEMPOTENCY_CONFLICT",
-                "核销幂等键已用于不同命令",
-                status_code=409,
-            )
-        offset = db.get(Offset, existing.offset_id)
-        line = db.get(PaymentLine, data.payment_line_id)
-        receipt = db.get(CaseReceipt, existing.receipt_id)
-        if offset is None or line is None or receipt is None:
-            raise_business_error(
-                "DEMO_OFFSET_STORED_STATE_INVALID",
-                "核销存量状态无效",
-                status_code=409,
-            )
-        return DemoFullOffsetResult(
-            offset_id=offset.id,
-            bill_id=data.bill_id,
-            line_id=line.id,
-            receipt_id=receipt.id,
-            idempotency_key=data.idempotency_key,
-            reused=True,
-        )
-
     bill = db.get(Bill, data.bill_id)
     if bill is None:
         raise_business_error("DEMO_OFFSET_BILL_NOT_FOUND", "目标账单不存在", status_code=404)
@@ -2406,18 +2638,38 @@ def create_demo_full_offset(
     payment = db.get(Payment, line.payment_id) if line is not None else None
     if payment is None:
         raise_business_error("DEMO_OFFSET_PAYMENT_NOT_FOUND", "客户回款不存在", status_code=404)
-    item = db.scalar(select(BillItem).where(BillItem.bill_id == data.bill_id))
+    items = tuple(
+        db.scalars(select(BillItem).where(BillItem.bill_id == data.bill_id)).all()
+    )
     source = db.scalar(select(BillDraftSource).where(BillDraftSource.bill_id == data.bill_id))
-    active_offset = db.scalar(
+    active_offsets = tuple(
+        db.scalars(
+            select(Offset).where(
+                Offset.bill_id == data.bill_id,
+                Offset.is_reversed.is_(False),
+            )
+        )
+    )
+    line_offset = db.scalar(
         select(Offset.id).where(
+            Offset.payment_line_id == line.id,
             Offset.bill_id == data.bill_id,
             Offset.is_reversed.is_(False),
         )
     )
+    case_ids = {item.case_id for item in items}
+    item_total = sum((item.amount or Decimal("0") for item in items), Decimal("0"))
     if (
-        item is None
-        or item.case_id is None
-        or item.fee_code is None
+        not items
+        or any(
+            item.case_id is None
+            or item.fee_type != "SERVICE"
+            or item.amount is None
+            or item.amount <= Decimal("0")
+            for item in items
+        )
+        or len(case_ids) != 1
+        or item_total != bill.amount
         or source is None
     ):
         raise_business_error(
@@ -2425,109 +2677,84 @@ def create_demo_full_offset(
             "账单或回款不属于可核销的本地演示闭环",
             status_code=400,
         )
-    if active_offset is not None or bill.status != "UNSETTLED":
+    expected_status = "UNSETTLED" if len(active_offsets) == 0 else "PARTIALLY_SETTLED"
+    if (
+        line_offset is not None
+        or len(active_offsets) not in {0, 1}
+        or bill.status != expected_status
+    ):
         raise_business_error(
             "DEMO_OFFSET_STATE_CONFLICT",
-            "账单已有核销或当前状态不可核销",
+            "账单核销顺序或当前状态冲突",
             status_code=409,
         )
+
+    linked_payment_commands = []
+    for command in db.scalars(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.operation == "PAYMENT",
+            DemoFinanceCommand.created_by == actor_id,
+        )
+    ):
+        payload = _demo_finance_payload(command, operation="PAYMENT", actor_id=actor_id)
+        if (
+            payload.get("target_bill_id") == bill.id
+            and payload.get("pay_no") == payment.pay_no
+            and payload.get("bank_ref_no") == payment.bank_ref_no
+        ):
+            linked_payment_commands.append(command)
     if (
-        bill.client_id != payment.client_id
+        len(linked_payment_commands) != 1
+        or bill.client_id != payment.client_id
         or bill.currency != payment.currency
         or bill.currency != "CNY"
-        or line.case_id != item.case_id
+        or line.case_id != next(iter(case_ids))
         or bill.balance <= Decimal("0")
         or line.balance_amt <= Decimal("0")
-        or data.offset_amt != bill.balance
         or data.offset_amt != line.balance_amt
+        or data.offset_amt > bill.balance
+        or (len(active_offsets) == 1 and data.offset_amt != bill.balance)
     ):
         raise_business_error(
             "DEMO_OFFSET_BALANCE_CONFLICT",
-            "核销金额必须等于账单及回款可用余额",
+            "核销金额、回款归属或账单权威余额冲突",
             status_code=400,
         )
-
-    year_component = str(item.year_no) if item.year_no is not None and item.year_no > 0 else "-"
-    receipt_components = (
-        item.case_id,
-        item.fee_code,
-        "SERVICE",
-        year_component,
-        "CNY",
-    )
-    if any(
-        not component or component != component.strip() or "|" in component
-        for component in receipt_components
-    ):
-        raise_business_error(
-            "DEMO_OFFSET_RECEIPT_IDENTITY_INVALID",
-            "案件收款标识包含非法分隔符或空白",
-            status_code=400,
-        )
-    receipt_key = "|".join(receipt_components)
-    receipt = db.scalar(
-        select(CaseReceipt).where(CaseReceipt.receipt_key == receipt_key)
-    )
-    if receipt is None:
-        receipt = CaseReceipt(
-            id=str(uuid4()),
-            case_id=item.case_id,
-            fee_type="SERVICE",
-            currency="CNY",
-            receivable_amt=item.amount,
-            received_amt=data.offset_amt,
-            last_receipt_date=data.offset_date,
-            fee_code=item.fee_code,
-            year_no=item.year_no,
-            fee_name=item.fee_name,
-            is_arrears=False,
-            is_prepayment=False,
-            receipt_key=receipt_key,
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
-    else:
-        raise_business_error(
-            "DEMO_OFFSET_RECEIPT_ALREADY_EXISTS",
-            "案件收款投影已存在",
-            status_code=409,
-        )
-
-    offset = Offset(
-        id=str(uuid4()),
-        payment_line_id=line.id,
-        bill_id=bill.id,
-        offset_amt=data.offset_amt,
-        offset_date=data.offset_date,
-        is_reversed=False,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-    command = DemoOffsetCommand(
-        id=str(uuid4()),
-        offset_id=offset.id,
-        receipt_id=receipt.id,
-        idempotency_key=data.idempotency_key,
-        command_hash=command_hash,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-    line.allocated_amt = data.offset_amt
-    line.balance_amt = Decimal("0")
-    line.updated_by = actor_id
-    bill.balance = Decimal("0")
-    bill.status = "SETTLED"
-    bill.updated_by = actor_id
-    db.add_all((receipt, offset))
     try:
-        db.flush()
-        db.add(command)
-        db.commit()
+        offset = create_offset(
+            db,
+            OffsetCreateSchema(
+                payment_line_id=line.id,
+                bill_id=bill.id,
+                offset_amt=data.offset_amt,
+                offset_date=data.offset_date,
+            ),
+        )
     except IntegrityError:
         db.rollback()
         raise_business_error(
             "DEMO_OFFSET_CONCURRENT_CONFLICT",
             "核销命令与已存在记录冲突",
+            status_code=409,
+        )
+    receipts = tuple(
+        db.scalars(
+            select(CaseReceipt).where(
+                CaseReceipt.case_id == next(iter(case_ids)),
+                CaseReceipt.fee_type == "SERVICE",
+                CaseReceipt.currency == "CNY",
+            )
+        )
+    )
+    receipt = receipts[0] if len(receipts) == 1 else None
+    if (
+        receipt is None
+        or receipt.receivable_amt != bill.amount
+        or receipt.received_amt != bill.amount - bill.balance
+    ):
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销后的案件收款投影无效",
             status_code=409,
         )
     return DemoFullOffsetResult(
@@ -2544,11 +2771,11 @@ def reconcile_demo_full_offset(
     db: Session, idempotency_key: str, *, actor_id: str
 ) -> DemoFullOffsetResult:
     _demo_finance_scope_or_fail()
-    command = db.scalar(
-        select(DemoOffsetCommand).where(
-            DemoOffsetCommand.idempotency_key == idempotency_key,
-            DemoOffsetCommand.created_by == actor_id,
-        )
+    command = get_demo_finance_command(
+        db,
+        operation="OFFSET",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
     )
     if command is None:
         raise_business_error(
@@ -2556,10 +2783,60 @@ def reconcile_demo_full_offset(
             "未找到可对账的核销命令",
             status_code=404,
         )
-    offset = db.get(Offset, command.offset_id)
-    receipt = db.get(CaseReceipt, command.receipt_id)
-    line = db.get(PaymentLine, offset.payment_line_id) if offset is not None else None
-    if offset is None or receipt is None or line is None:
+    payload = _demo_finance_payload(command, operation="OFFSET", actor_id=actor_id)
+    try:
+        request = DemoFullOffsetRequest.model_validate(payload)
+    except ValueError:
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销存量状态无效",
+            status_code=409,
+        )
+    offsets = tuple(
+        db.scalars(
+            select(Offset).where(
+                Offset.payment_line_id == request.payment_line_id,
+                Offset.bill_id == request.bill_id,
+                Offset.offset_amt == request.offset_amt,
+                Offset.offset_date == request.offset_date,
+                Offset.is_reversed.is_(False),
+            )
+        )
+    )
+    offset = offsets[0] if len(offsets) == 1 else None
+    line = db.get(PaymentLine, request.payment_line_id)
+    bill = db.get(Bill, request.bill_id)
+    items = (
+        tuple(db.scalars(select(BillItem).where(BillItem.bill_id == request.bill_id)))
+        if bill is not None
+        else ()
+    )
+    case_ids = {item.case_id for item in items}
+    receipts = (
+        tuple(
+            db.scalars(
+                select(CaseReceipt).where(
+                    CaseReceipt.case_id == next(iter(case_ids)),
+                    CaseReceipt.fee_type == "SERVICE",
+                    CaseReceipt.currency == "CNY",
+                )
+            )
+        )
+        if len(case_ids) == 1 and None not in case_ids
+        else ()
+    )
+    receipt = receipts[0] if len(receipts) == 1 else None
+    if (
+        offset is None
+        or line is None
+        or bill is None
+        or receipt is None
+        or not items
+        or any(item.fee_type != "SERVICE" for item in items)
+        or line.allocated_amt + line.balance_amt != line.raw_amount
+        or receipt.receivable_amt != bill.amount
+        or receipt.received_amt != bill.amount - bill.balance
+    ):
         raise_business_error(
             "DEMO_OFFSET_STORED_STATE_INVALID",
             "核销存量状态无效",
@@ -2570,7 +2847,7 @@ def reconcile_demo_full_offset(
         bill_id=offset.bill_id,
         line_id=line.id,
         receipt_id=receipt.id,
-        idempotency_key=command.idempotency_key,
+        idempotency_key=idempotency_key,
         reused=True,
     )
 

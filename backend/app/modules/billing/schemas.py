@@ -354,6 +354,63 @@ class DemoFullOffsetResponse(BaseModel):
     reused: bool
 
 
+class DemoGovPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pay_list_id: int = Field(..., gt=0)
+    fee_item_id: str = Field(..., min_length=1, max_length=36)
+    paid_date: DemoDate
+    paid_amount: DemoPositiveMoney
+    official_receipt_no: None = None
+    voucher_no: None = None
+    invoice_no: None = None
+    remark: Literal["已登记，待官方凭证核验"]
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator("fee_item_id", "idempotency_key", mode="before")
+    @classmethod
+    def validate_text(cls, value: object, info):
+        return _strict_demo_text(value, info.field_name)
+
+
+class DemoGovPaymentOut(BaseModel):
+    id: int
+    pay_list_id: int
+    case_id: str
+    fee_item_id: str
+    status: str
+    currency: str
+    paid_date: date
+    paid_amount: Decimal
+    official_receipt_no: None
+    remark: Literal["已登记，待官方凭证核验"]
+    fee_code: str
+    year_no: int | None
+    planned_amt: Decimal
+    planned_currency: Literal["CNY"]
+    paid_currency: Literal["CNY"]
+    voucher_no: None
+    invoice_no: None
+
+
+class DemoGovPayListOut(BaseModel):
+    id: int
+    pay_list_no: str
+    status: str
+    paid_date: date | None
+    total_amount: Decimal
+    currency: Literal["CNY"]
+    client_id: str
+
+
+class DemoGovPaymentResponse(BaseModel):
+    gov_payment: DemoGovPaymentOut
+    pay_list: DemoGovPayListOut
+    fact_status: Literal["REGISTERED_PENDING_OFFICIAL_EVIDENCE"]
+    idempotency_key: str
+    reused: bool
+
+
 class PaymentSchema(BaseModel):
     """Schema for recording payments."""
 
