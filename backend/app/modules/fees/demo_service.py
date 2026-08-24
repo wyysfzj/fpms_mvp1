@@ -559,6 +559,44 @@ def _service_source_rows(
     return source, tuple(rows)
 
 
+def _valid_pay_activity(
+    activity: CaseActivityEvent,
+    payload: dict[str, object],
+    *,
+    case_id: str,
+    obligation_id: str,
+    expected_actor_id: str | None = None,
+) -> bool:
+    return (
+        set(payload)
+        == {
+            "actor_id",
+            "instruction",
+            "obligation_id",
+            "previous_instruction_status",
+            "schema",
+        }
+        and payload.get("schema") == "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1"
+        and payload.get("obligation_id") == obligation_id
+        and payload.get("instruction") == "PAY"
+        and payload.get("previous_instruction_status") == "PENDING"
+        and type(payload.get("actor_id")) is str
+        and bool(payload.get("actor_id"))
+        and activity.activity_type == "FEE_CLIENT_INSTRUCTION_RECORDED"
+        and activity.case_id == case_id
+        and activity.lane == ActivityLane.FEE.value
+        and activity.confirmation_status == ConfirmationStatus.CONFIRMED.value
+        and activity.actor_id == payload.get("actor_id")
+        and (
+            expected_actor_id is None
+            or activity.actor_id == expected_actor_id
+        )
+        and activity.reviewer_id is None
+        and activity.supersedes_event_id is None
+        and activity.occurred_at == activity.effective_at
+    )
+
+
 def _service_adjustment_replay(
     command: DemoServiceAdjustmentCommand,
     transaction: Session,
@@ -598,6 +636,7 @@ def _service_adjustment_replay(
         or activity.actor_id != command.actor_id
         or activity.reviewer_id is not None
         or activity.supersedes_event_id is not None
+        or activity.occurred_at != activity.effective_at
         or activity.idempotency_key
         != f"demo-service-adjustment:{command.idempotency_key}"
     ):
@@ -729,20 +768,23 @@ def _service_adjustment_replay(
     if (
         activity.source_activity_id != original_instruction_id
         or activity.case_id != draft.case_id
-        or original_instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
-        or original_instruction.case_id != activity.case_id
-        or original_instruction_payload.get("obligation_id") != original_id
-        or original_instruction_payload.get("instruction") != "PAY"
+        or not _valid_pay_activity(
+            original_instruction,
+            original_instruction_payload,
+            case_id=activity.case_id,
+            obligation_id=original_id,
+        )
         or original_recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
         or original_recognition.case_id != activity.case_id
         or original_recognition.source_activity_id != source_id
         or original_recognition_payload.get("obligation_id") != original_id
-        or instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
-        or instruction.case_id != activity.case_id
-        or instruction.supersedes_event_id is not None
-        or instruction_payload.get("obligation_id") != child.id
-        or instruction_payload.get("instruction") != "PAY"
-        or instruction_payload.get("actor_id") != command.actor_id
+        or not _valid_pay_activity(
+            instruction,
+            instruction_payload,
+            case_id=activity.case_id,
+            obligation_id=child.id,
+            expected_actor_id=command.actor_id,
+        )
         or replacement_recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
         or replacement_recognition.case_id != activity.case_id
         or replacement_recognition.source_activity_id != activity.id
@@ -790,6 +832,7 @@ def _service_adjustment_replay(
             original_line.case_id != activity.case_id
             or original_line.obligation_id != original_id
             or original_line.source_activity_id != source_id
+            or original_line.fee_name != source_row.get("name_zh_cn")
             or original_line.payable_amount != before_amount
             or original_line.source_amount != before_amount
             or replacement_line.case_id != activity.case_id
@@ -835,6 +878,7 @@ def _service_adjustment_replay(
     if (
         before_rows != expected_before
         or after_rows != expected_after
+        or command.expected_quantity != target_source.get("quantity")
         or target_source.get("adjustable") is not True
         or target_source.get("final_quantity") != command.new_quantity
     ):
@@ -858,10 +902,17 @@ def _service_adjustment_replay(
         or original.obligation_status != FeeObligationStatus.SUPERSEDED.value
         or original.client_instruction_status != FeeClientInstructionStatus.PAY.value
         or original.draft_status != FeeObligationDraftStatus.NOT_CREATED.value
+        or original.payment_status != FeePaymentStatus.UNPAID.value
+        or original.official_evidence_status
+        != FeeOfficialEvidenceStatus.NOT_APPLICABLE.value
         or child.obligation_status != FeeObligationStatus.RECOGNIZED.value
         or child.client_instruction_status != FeeClientInstructionStatus.PAY.value
         or child.draft_status != FeeObligationDraftStatus.CREATED.value
+        or child.payment_status != FeePaymentStatus.UNPAID.value
+        or child.official_evidence_status
+        != FeeOfficialEvidenceStatus.NOT_APPLICABLE.value
         or child.supersedes_obligation_id != original_id
+        or child.supersede_reason != command.reason
         or child.source_activity_id != activity.id
         or draft.total_gov != Decimal("0.00")
         or draft.total_misc != Decimal("0.00")
@@ -898,11 +949,23 @@ def _validated_service_adjustment_activity(
         payload.get("actor_id"),
     )
     if (
-        any(type(value) is not str or not value for value in values)
+        any(
+            type(value) is not str
+            or not value
+            or value != value.strip()
+            or "\x00" in value
+            or len(value) > limit
+            for value, limit in zip(values, (36, 36, 256, 36), strict=True)
+        )
         or type(payload.get("expected_quantity")) is not int
         or type(payload.get("new_quantity")) is not int
+        or payload["expected_quantity"] <= 0
+        or payload["new_quantity"] <= 0
+        or not any("\u4e00" <= char <= "\u9fff" for char in str(payload["reason"]))
+        or activity.occurred_at != activity.effective_at
         or not activity.idempotency_key.startswith(prefix)
         or not activity.idempotency_key[len(prefix) :]
+        or len(activity.idempotency_key[len(prefix) :]) > 96
     ):
         _adjustment_conflict("服务费草单调整记录无效")
     command = DemoServiceAdjustmentCommand(

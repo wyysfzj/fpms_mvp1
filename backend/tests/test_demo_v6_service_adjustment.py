@@ -671,3 +671,53 @@ def test_adjustment_replay_rejects_deleted_current_link(
         headers=auth_headers,
     )
     assert replay.status_code == 409
+
+
+def test_adjustment_replay_rejects_header_and_pay_activity_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _case_id, original_id, draft_id = _create_open_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
+        )
+        item_id = item.id
+    body = {
+        "item_id": item_id,
+        "expected_quantity": 1,
+        "new_quantity": 2,
+        "reason": "客户确认增加一份附加文件处理",
+        "idempotency_key": "v6-service-adjustment-header-drift",
+    }
+    first = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json=body,
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    path = f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment"
+    with session_factory() as transaction:
+        original = transaction.get(FeeObligation, original_id)
+        original.payment_status = "PAID"
+        transaction.commit()
+    assert client.post(path, json=body, headers=auth_headers).status_code == 409
+
+    with session_factory() as transaction:
+        original = transaction.get(FeeObligation, original_id)
+        original.payment_status = "UNPAID"
+        instruction = transaction.get(
+            CaseActivityEvent,
+            first.json()["instruction_activity_id"],
+        )
+        instruction.lane = "CASE"
+        transaction.commit()
+    assert client.post(path, json=body, headers=auth_headers).status_code == 409

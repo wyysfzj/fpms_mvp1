@@ -199,6 +199,8 @@ def _service_facts(
         if (
             item.fee_type != "SERVICE"
             or item.fee_code != line.fee_code
+            or line.fee_name != source.get("name_zh_cn")
+            or item.fee_name != source.get("name_zh_cn")
             or item.amount != expected
             or (item.quantity is None) != (item.unit_price is None)
             or (

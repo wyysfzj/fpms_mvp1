@@ -270,7 +270,7 @@ def test_adjusted_source_facts_reject_payload_and_item_drift(
         )
         original_payload = activity.payload_json
         payload = json.loads(original_payload)
-        payload["before_digest"] = "0" * 64
+        payload["expected_quantity"] = 2
         activity.payload_json = json.dumps(
             payload,
             ensure_ascii=False,
@@ -293,3 +293,39 @@ def test_adjusted_source_facts_reject_payload_and_item_drift(
         item.amount = 600
         transaction.commit()
     assert client.get(path, headers=auth_headers).status_code == 409
+
+
+def test_service_source_facts_reject_coordinated_fee_name_drift(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    helpers = runpy.run_path(
+        str(Path(__file__).with_name("test_demo_v6_service_adjustment.py"))
+    )
+    _case_id, _obligation_id, draft_id = helpers["_create_open_service_draft"](
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        item = transaction.scalar(
+            select(FeeItem).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ001",
+            )
+        )
+        link = transaction.scalar(
+            select(FeeObligationDraftItemLink).where(
+                FeeObligationDraftItemLink.fee_item_id == item.id
+            )
+        )
+        line = transaction.get(FeeObligationLine, link.obligation_line_id)
+        item.fee_name = "协调改写后的名称"
+        line.fee_name = "协调改写后的名称"
+        transaction.commit()
+    response = client.get(
+        f"/api/v1/fees/drafts/{draft_id}/source-facts",
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
