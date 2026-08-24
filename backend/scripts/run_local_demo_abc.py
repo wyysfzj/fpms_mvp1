@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import os
@@ -12,24 +13,33 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.demo_bundle import (
     DemoBundleSnapshot,
     demo_bundle_forbidden_roots,
+    demo_official_fee_row_sha256,
     load_demo_bundle,
 )
 from app.models import *  # noqa: F401, F403 - register the complete ORM graph before seeding
+from app.modules.auth.models import T_User
 from app.modules.documents.models import DocTemplate
 from app.modules.documents.official_notice_catalog import (
     seed_fee_reduction_approval_official_notice_catalog,
+)
+from app.modules.fees.models import FeeRate, OfficialRateBook
+from app.modules.fees.official_rate_book import (
+    ActivateOfficialRateBookCommand,
+    activate_official_rate_book,
 )
 from app.modules.tasks.models import TaskTemplate
 from scripts.seed_demo_abc import DemoIdentity, seed_demo_identities
@@ -226,38 +236,154 @@ def seed_demo_oa_out_template(db: Session) -> None:
     db.flush()
 
 
+def _materialize_official_fee_source(
+    db: Session,
+    *,
+    bundle: DemoBundleSnapshot,
+    reviewer_username: str,
+) -> None:
+    source = bundle.official_fee_source
+    if source is None:
+        return
+    selector = bundle.official_fee_selector
+    if selector is None:
+        raise RuntimeError("V6 official fee source requires a selector")
+
+    reviewer = db.scalar(select(T_User).where(T_User.username == reviewer_username))
+    if reviewer is None:
+        raise RuntimeError("demo reviewer is unavailable for official fee activation")
+    activated_at = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+
+    source_book = source.rate_book
+    candidate = OfficialRateBook(
+        book_code=source_book.book_code,
+        version_code=source_book.version_code,
+        source_authority=source_book.source_authority,
+        source_reference=source_book.source_reference,
+        source_version=source_book.source_version,
+        source_published_on=source_book.source_published_on,
+        source_snapshot=source_book.source_snapshot,
+        source_snapshot_hash=source_book.source_snapshot_hash,
+        effective_from=source_book.effective_from,
+        effective_to=source_book.effective_to,
+        approval_status="PENDING",
+        activation_status="INACTIVE",
+    )
+    db.add(candidate)
+    db.flush()
+    db.add_all(
+        FeeRate(**vars(row), official_rate_book_id=candidate.id)
+        for row in source.rows
+    )
+    db.flush()
+
+    result = activate_official_rate_book(
+        ActivateOfficialRateBookCommand(
+            rate_book_id=candidate.id,
+            approved_by=reviewer.id,
+            approved_at=activated_at,
+            activated_by=reviewer.id,
+            activated_at=activated_at,
+            expected_current_rate_book_id=None,
+        ),
+        db,
+    )
+    db.flush()
+    db.expire_all()
+
+    stored_books = db.scalars(select(OfficialRateBook)).all()
+    if len(stored_books) != 1:
+        raise RuntimeError("fresh demo must contain exactly one official rate book")
+    stored_book = stored_books[0]
+    expected_book_facts = (
+        source_book.book_code,
+        source_book.version_code,
+        source_book.source_authority,
+        source_book.source_reference,
+        source_book.source_version,
+        source_book.source_published_on,
+        source_book.source_snapshot,
+        source_book.source_snapshot_hash,
+        source_book.effective_from,
+        source_book.effective_to,
+    )
+    actual_book_facts = (
+        stored_book.book_code,
+        stored_book.version_code,
+        stored_book.source_authority,
+        stored_book.source_reference,
+        stored_book.source_version,
+        stored_book.source_published_on,
+        stored_book.source_snapshot,
+        stored_book.source_snapshot_hash,
+        stored_book.effective_from,
+        stored_book.effective_to,
+    )
+    expected_identity = f"CNIPA|{source_book.book_code}"
+    if (
+        actual_book_facts != expected_book_facts
+        or result.rate_book_id != stored_book.id
+        or result.book_code != source_book.book_code
+        or result.version_code != source_book.version_code
+        or result.approval_status != "APPROVED"
+        or result.activation_status != "ACTIVE"
+        or stored_book.approval_status != "APPROVED"
+        or stored_book.activation_status != "ACTIVE"
+        or stored_book.approved_by != reviewer.id
+        or stored_book.activated_by != reviewer.id
+        or stored_book.approved_at != activated_at
+        or stored_book.activated_at != activated_at
+        or stored_book.current_identity_key != expected_identity
+        or hashlib.sha256(stored_book.source_snapshot.encode("utf-8")).hexdigest()
+        != source_book.source_snapshot_hash
+    ):
+        raise RuntimeError("materialized official rate book verification failed")
+
+    stored_rows = db.scalars(select(FeeRate)).all()
+    stored_by_code = {row.fee_code: row for row in stored_rows}
+    selector_hashes = dict(selector.fee_row_sha256s)
+    if (
+        len(stored_rows) != len(source.rows)
+        or set(stored_by_code) != set(selector.fee_codes)
+    ):
+        raise RuntimeError("materialized official fee row set verification failed")
+    for fee_code in selector.fee_codes:
+        row = stored_by_code[fee_code]
+        if (
+            row.official_rate_book_id != stored_book.id
+            or demo_official_fee_row_sha256(row) != selector_hashes[fee_code]
+        ):
+            raise RuntimeError("materialized official fee row verification failed")
+
+
 def bootstrap_demo_run() -> DemoRun:
     run_id, bundle, operator, reviewer, jwt_secret = _preflight()
     run_root = Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}"
     if run_root.exists() or run_root.is_symlink():
         raise RuntimeError(f"demo run ID already exists: {run_id}")
 
+    engine = None
     run_root.mkdir()
     try:
         bundle = _materialize_bundle(bundle, run_root)
-    except Exception:
-        shutil.rmtree(run_root)
-        raise
+        storage_path = run_root / "storage"
+        database_path = run_root / "fpms-demo.db"
+        storage_path.mkdir()
+        database_url = f"sqlite:///{database_path}"
+        os.environ.update(
+            DATABASE_URL=database_url,
+            STORAGE_DIR=str(storage_path),
+            JWT_SECRET=jwt_secret,
+            CORS_ORIGINS='["http://localhost:5173","http://127.0.0.1:5173"]',
+        )
+        get_settings.cache_clear()
 
-    storage_path = run_root / "storage"
-    database_path = run_root / "fpms-demo.db"
-    storage_path.mkdir()
-    database_url = f"sqlite:///{database_path}"
-    os.environ.update(
-        DATABASE_URL=database_url,
-        STORAGE_DIR=str(storage_path),
-        JWT_SECRET=jwt_secret,
-        CORS_ORIGINS='["http://localhost:5173","http://127.0.0.1:5173"]',
-    )
-    get_settings.cache_clear()
+        alembic_config = Config(str(_BACKEND_ROOT / "alembic.ini"))
+        alembic_config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
+        alembic_config.set_main_option("sqlalchemy.url", database_url)
+        command.upgrade(alembic_config, "head")
 
-    alembic_config = Config(str(_BACKEND_ROOT / "alembic.ini"))
-    alembic_config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
-    alembic_config.set_main_option("sqlalchemy.url", database_url)
-    command.upgrade(alembic_config, "head")
-
-    engine = _sqlite_engine(database_url)
-    try:
+        engine = _sqlite_engine(database_url)
         factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         with factory() as db:
             catalog_count = seed_fee_reduction_approval_official_notice_catalog(db)
@@ -268,40 +394,58 @@ def bootstrap_demo_run() -> DemoRun:
             seed_demo_task_templates(db)
             seed_demo_oa_out_template(db)
             seed_demo_identities(db, operator=operator, reviewer=reviewer)
-    finally:
+            with db.begin():
+                _materialize_official_fee_source(
+                    db,
+                    bundle=bundle,
+                    reviewer_username=reviewer.username,
+                )
         engine.dispose()
+        engine = None
 
-    candidate_commit, candidate_tree = _candidate_identity()
-    metadata = {
-        "run_id": run_id,
-        "candidate_commit": candidate_commit,
-        "candidate_tree": candidate_tree,
-        "run_profile": os.environ["FPMS_DEMO_RUN_PROFILE"],
-        "bundle_id": bundle.bundle_id,
-        "bundle_version": bundle.bundle_version,
-        "manifest_sha256": bundle.manifest_sha256,
-        "authority_sha256": bundle.authority_sha256,
-        "authority_classification": bundle.authority_classification,
-        "customer_activation_eligible": bundle.customer_activation_eligible,
-        "approved_by": bundle.approved_by,
-        "approved_at": bundle.approved_at,
-        "evaluated_date": bundle.local_date.isoformat(),
-        "timezone": "Asia/Shanghai",
-        "operator_username": operator.username,
-        "reviewer_username": reviewer.username,
-        "database_path": str(database_path),
-        "storage_path": str(storage_path),
-    }
-    (run_root / "run-metadata.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n"
-    )
-    return DemoRun(
-        run_id=run_id,
-        run_root=run_root,
-        database_path=database_path,
-        storage_path=storage_path,
-        bundle=bundle,
-    )
+        candidate_commit, candidate_tree = _candidate_identity()
+        metadata = {
+            "run_id": run_id,
+            "candidate_commit": candidate_commit,
+            "candidate_tree": candidate_tree,
+            "run_profile": os.environ["FPMS_DEMO_RUN_PROFILE"],
+            "bundle_id": bundle.bundle_id,
+            "bundle_version": bundle.bundle_version,
+            "manifest_sha256": bundle.manifest_sha256,
+            "authority_sha256": bundle.authority_sha256,
+            "authority_classification": bundle.authority_classification,
+            "customer_activation_eligible": bundle.customer_activation_eligible,
+            "approved_by": bundle.approved_by,
+            "approved_at": bundle.approved_at,
+            "evaluated_date": bundle.local_date.isoformat(),
+            "timezone": "Asia/Shanghai",
+            "operator_username": operator.username,
+            "reviewer_username": reviewer.username,
+            "database_path": str(database_path),
+            "storage_path": str(storage_path),
+        }
+        (run_root / "run-metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n"
+        )
+        return DemoRun(
+            run_id=run_id,
+            run_root=run_root,
+            database_path=database_path,
+            storage_path=storage_path,
+            bundle=bundle,
+        )
+    except Exception:
+        try:
+            if engine is not None:
+                engine.dispose()
+        finally:
+            if run_root.exists() and not run_root.is_symlink():
+                run_root.chmod(0o755)
+                for path in run_root.rglob("*"):
+                    if path.is_dir() and not path.is_symlink():
+                        path.chmod(0o755)
+                shutil.rmtree(run_root)
+        raise
 
 
 def _assert_port_available(port: int) -> None:
