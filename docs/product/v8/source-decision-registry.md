@@ -446,6 +446,42 @@ dispatch lane.
   raw/internal case projection but performs no database, lifecycle, fee or decision-gate mutation.
   The historical customer transcript and prior demo evidence must not be deleted or reinterpreted.
 
+### `DEC-DEMO-V6-UI-PARITY-20260826`
+
+- Status: `APPROVED_DESIGN_SCOPE`; written-spec acceptance, implementation, customer-site display
+  and release remain subject to later explicit gates.
+- Exact source/version: the customer's requirement that both manual and Codex execution succeed,
+  the UI-only boundary presented for confirmation, and the customer's exact confirmation in Codex
+  task `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved as a labelled UTF-8/LF transcript with one
+  terminal LF at
+  `docs/product/v8/customer-decisions/2026-08-26-demo-v6-ui-parity.txt`, decision version
+  `customer-decision:2026-08-26:demo-v6-ui-parity:v1`, received on `2026-08-26` in timezone
+  `Asia/Shanghai`.
+- Exact source size: `1785` bytes.
+- Source SHA-256:
+  `d40a90d2d49ce8bfb8516da2ecde553758d302ab526c922ef5de363fb4583546`.
+- Actor and acceptance authority: the repository customer/user rejected any Codex-only business
+  privilege, required a human presenter and another Codex account to enter equivalent values using
+  the same normal UI, and then explicitly sent `确认` for the presented strict boundary.
+- Approved design decision: preserve the existing automated V6 rehearsal as lane A. Design a
+  separate lane B in which HUMAN and CODEX each start from a fresh empty business database and use
+  only normal visible UI controls. Browser-triggered frontend API traffic is allowed; direct
+  business API clients, database/session access, hidden `/demo/abc` writes and pre-created business
+  objects are forbidden. Source-bound and app-generated values remain distinct from explicit user
+  input.
+- Fact boundary: the decision does not change `SYNTHETIC_TEST_ONLY`, activate a customer or official
+  source, approve a formal `CUSTOMER_DEMO` profile, or establish any template, price, fee, legal,
+  submission or payment truth. Any future customer-site synthetic display requires the accepted
+  written spec, exact implementation tasks, a visible synthetic-data boundary and independent
+  acceptance.
+- Effective scope/time: active from `2026-08-26` only to write and independently review the UI
+  parity design and implementation plan. Product implementation begins only after independent
+  zero-finding spec review, the customer's explicit written-spec approval, and independent
+  zero-finding plan review. It does not authorize release-ref promotion.
+- Rollback impact: reverting this design decision returns the work to the existing hybrid automated
+  rehearsal and blocks the new HUMAN/CODEX UI-only lane. It performs no data mutation and must not
+  delete or reinterpret existing runtime, lifecycle, fee, billing or rehearsal evidence.
+
 The first story that relies on a new or changed source/decision must update this registry
 with source/version/hash, decision value, actor, effective scope/time and rollback impact.
 Official/legal/fee/customer truth remains `PROTECTED` and requires independent review.

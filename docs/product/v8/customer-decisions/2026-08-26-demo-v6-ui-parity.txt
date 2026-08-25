@@ -1,0 +1,33 @@
+FPMS customer decision transcript
+decision_version: customer-decision:2026-08-26:demo-v6-ui-parity:v1
+thread_ref: Codex task 019ffc07-14a5-7dc2-9536-f2047327e14a
+received_on: 2026-08-26 Asia/Shanghai
+actor: repository customer/user
+
+[user]
+我给你所有你需要的授权，确保无论手动还是codex，demo都要成功。V6 version已经演练成功了
+
+[user]
+A和b 不能同时满足吗，技术上是可以的
+
+[assistant — exact boundary presented for confirmation]
+你说得对。当前 V6 runner 没有伪造数据库结果，但第 07–10 阶段确实直接调用 API 完成部分写入，再打开 UI 验证结果。相对于“人工可在 UI 完成同样操作”，这属于旁路，不能证明 B。
+
+应改成真正的 UI 等价方案：
+
+- `prepare` 只启动全新空业务库、runtime bundle、账号和服务，不预建案件或费用对象。
+- 主持人从正常 UI 逐项输入 runbook 的值。
+- 另一 Codex 账号也只能通过浏览器填写相同字段、点击相同按钮。
+- 允许“浏览器 → 前端 → API”；禁止 runner/Codex 直接调用业务 API、写数据库或预造业务对象。
+- 对目前缺少正常 UI 入口的步骤，只补齐最小页面操作。
+- 自动 runner 继续作为 A 的技术回归，但不再冒充人工演示证明。
+- 验收时记录每一步的输入、页面 URL、浏览器请求、屏幕结果和最终对象链，证明人工与 Codex 路径等价。
+
+所以技术上 A、人工 B、Codex B 三条都可以满足；我刚才的暂停 runner 方案不够严格，现予以撤回。
+
+请确认新的精确边界：**B 和 Codex 均为 UI-only，同值、同按钮、同结果，禁止直接业务 API/数据库旁路。**
+
+[user]
+确认
+
+Normalization: UTF-8, LF line endings, one terminal LF.
