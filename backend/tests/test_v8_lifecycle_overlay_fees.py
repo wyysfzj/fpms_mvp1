@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
@@ -962,6 +964,90 @@ def test_fee_activity_relation_corruption_fails_closed(
                 case_id=CASE_ID,
                 after_sequence=0,
                 limit=25,
+                as_of_revision=None,
+                transaction=transaction,
+            )
+
+    assert raised.value.code == "LIFECYCLE_OVERLAY_FEE_CONFLICT"
+    assert raised.value.status_code == 409
+
+
+def test_exact_service_draft_supersession_remains_visible_and_fail_closed(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_v6_service_adjustment.py")))
+    case_id, original_obligation_id, draft_id = helpers["_create_open_service_draft"](
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        adjustable_item = (
+            transaction.query(FeeItem)
+            .filter(FeeItem.draft_id == draft_id, FeeItem.fee_code == "FWSQDJ002")
+            .one()
+        )
+        adjustable_item_id = adjustable_item.id
+
+    adjusted = client.post(
+        f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
+        json={
+            "item_id": adjustable_item_id,
+            "expected_quantity": 1,
+            "new_quantity": 2,
+            "reason": "客户确认增加一份附加文件处理",
+            "idempotency_key": "overlay-service-adjustment-1",
+        },
+        headers=auth_headers,
+    )
+    assert adjusted.status_code == 201, adjusted.text
+    replacement_obligation_id = adjusted.json()["superseding_obligation_id"]
+
+    with session_factory() as transaction:
+        result = read_lifecycle_overlay(
+            case_id=case_id,
+            after_sequence=0,
+            limit=200,
+            as_of_revision=None,
+            transaction=transaction,
+        )
+        obligations = tuple(
+            obligation
+            for milestone in result.milestones
+            for obligation in milestone.fee_obligations
+        )
+        assert {original_obligation_id, replacement_obligation_id} <= {
+            obligation.obligation_id for obligation in obligations
+        }
+        assert any(
+            fact.kind.value == "DRAFT" and fact.object_id == draft_id
+            for obligation in obligations
+            if obligation.obligation_id == replacement_obligation_id
+            for fact in obligation.related_facts
+        )
+        assert all(
+            fact.kind.value != "DRAFT"
+            for obligation in obligations
+            if obligation.obligation_id == original_obligation_id
+            for fact in obligation.related_facts
+        )
+
+        replacement = transaction.get(FeeObligation, replacement_obligation_id)
+        assert replacement is not None
+        adjustment = transaction.get(CaseActivityEvent, replacement.source_activity_id)
+        assert adjustment is not None
+        payload = json.loads(adjustment.payload_json)
+        payload["original_obligation_id"] = "unrelated-obligation"
+        adjustment.payload_json = _canonical(payload)
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as raised:
+            read_lifecycle_overlay(
+                case_id=case_id,
+                after_sequence=0,
+                limit=200,
                 as_of_revision=None,
                 transaction=transaction,
             )

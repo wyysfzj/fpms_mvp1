@@ -1302,23 +1302,30 @@ def _read_fee_facts(
     for activity in activities:
         if activity.lane != ActivityLane.FEE.value:
             continue
-        spec = _FEE_ACTIVITY_SCHEMAS.get(activity.activity_type)
-        if spec is None:
-            projected[activity.id] = ()
-            continue
-        payload = _fee_payload(
-            case_id,
-            activity,
-            expected_schema=spec[0],
-            expected_keys=spec[2],
-        )
-        obligation_ids, related = _fee_activity_roots(
-            transaction,
-            case_id=case_id,
-            activity=activity,
-            payload=payload,
-            identity_field=spec[1],
-        )
+        if activity.activity_type == "DEMO_SERVICE_DRAFT_ADJUSTED":
+            obligation_ids, related = _adjusted_service_activity_roots(
+                transaction,
+                case_id=case_id,
+                activity=activity,
+            )
+        else:
+            spec = _FEE_ACTIVITY_SCHEMAS.get(activity.activity_type)
+            if spec is None:
+                projected[activity.id] = ()
+                continue
+            payload = _fee_payload(
+                case_id,
+                activity,
+                expected_schema=spec[0],
+                expected_keys=spec[2],
+            )
+            obligation_ids, related = _fee_activity_roots(
+                transaction,
+                case_id=case_id,
+                activity=activity,
+                payload=payload,
+                identity_field=spec[1],
+            )
         obligations: list[OverlayFeeObligation] = []
         for obligation_id in sorted(obligation_ids):
             try:
@@ -1372,6 +1379,44 @@ def _read_fee_facts(
             )
         projected[activity.id] = tuple(obligations)
     return projected
+
+
+def _adjusted_service_activity_roots(
+    transaction: Session,
+    *,
+    case_id: str,
+    activity: CaseActivityEvent,
+) -> tuple[tuple[str, ...], tuple[tuple[str, OverlayFeeRelatedFact], ...]]:
+    from app.modules.fees.demo_service import _validated_service_adjustment_activity
+
+    try:
+        _payload, adjustment = _validated_service_adjustment_activity(transaction, activity)
+    except BusinessError:
+        _fee_conflict(case_id, "SERVICE_ADJUSTMENT_INVALID")
+    if adjustment.adjustment_activity_id != activity.id:
+        _fee_conflict(case_id, "SERVICE_ADJUSTMENT_INVALID")
+    replacement = transaction.get(
+        FeeObligationModel,
+        adjustment.superseding_obligation_id,
+    )
+    draft = transaction.get(FeeDraft, adjustment.draft_id)
+    if (
+        replacement is None
+        or replacement.case_id != case_id
+        or draft is None
+        or draft.case_id != case_id
+    ):
+        _fee_conflict(case_id, "SERVICE_ADJUSTMENT_INVALID")
+    return (replacement.id,), (
+        (
+            replacement.id,
+            OverlayFeeRelatedFact(
+                kind=OverlayFeeRelatedFactKind.DRAFT,
+                object_id=draft.id,
+                status=draft.status,
+            ),
+        ),
+    )
 
 
 def _fee_payload(
@@ -1475,10 +1520,15 @@ def _fee_activity_roots(
         obligation_ids = _pay_list_obligation_ids(transaction, case_id, pay_list_id)
 
     related: list[tuple[str, OverlayFeeRelatedFact]] = []
+    adjusted_service_draft = False
     if activity.activity_type == "FEE_DRAFT_CREATED":
-        related.extend(
-            _draft_related_facts(transaction, case_id, payload.get("draft_id"), obligation_ids)
+        draft_facts, adjusted_service_draft = _draft_related_facts(
+            transaction,
+            case_id,
+            payload.get("draft_id"),
+            obligation_ids,
         )
+        related.extend(draft_facts)
     elif activity.activity_type in {"PAY_LIST_CREATED", "PAY_LIST_INTERNAL_EXPORTED"}:
         related.extend(
             _pay_list_related_facts(
@@ -1507,6 +1557,7 @@ def _fee_activity_roots(
         activity_type=activity.activity_type,
         payload=payload,
         obligation_ids=obligation_ids,
+        adjusted_service_draft=adjusted_service_draft,
     )
     return tuple(sorted(obligation_ids)), tuple(
         sorted(related, key=lambda item: (item[0], item[1].kind.value, item[1].object_id))
@@ -1520,6 +1571,7 @@ def _validate_fee_payload_relations(
     activity_type: str,
     payload: dict[str, object],
     obligation_ids: tuple[str, ...],
+    adjusted_service_draft: bool,
 ) -> None:
     if activity_type == "FEE_DRAFT_CREATED":
         draft_id = cast(str, payload["draft_id"])
@@ -1547,7 +1599,13 @@ def _validate_fee_payload_relations(
             .where(FeeItem.draft_id == draft_id)
         ).all()
         if sorted(normalized) != sorted((row.id, row.obligation_line_id) for row in rows):
-            _fee_conflict(case_id, "DRAFT_PAYLOAD_LINK_MISMATCH")
+            if not adjusted_service_draft or not _historical_draft_links_match_original(
+                transaction,
+                draft_id=draft_id,
+                obligation_ids=obligation_ids,
+                declared=tuple(normalized),
+            ):
+                _fee_conflict(case_id, "DRAFT_PAYLOAD_LINK_MISMATCH")
     elif activity_type == "PAY_LIST_CREATED":
         pay_list_id = cast(int, payload["pay_list_id"])
         rows = _pay_list_relation_rows(transaction, pay_list_id)
@@ -1600,6 +1658,45 @@ def _validate_fee_payload_relations(
             _fee_conflict(case_id, "PAY_LIST_ARTIFACT_MISMATCH")
 
 
+def _historical_draft_links_match_original(
+    transaction: Session,
+    *,
+    draft_id: str,
+    obligation_ids: tuple[str, ...],
+    declared: tuple[tuple[str, str], ...],
+) -> bool:
+    if (
+        not declared
+        or len(declared) != len(set(declared))
+        or len({item_id for item_id, _line_id in declared}) != len(declared)
+        or len({_line_id for _item_id, _line_id in declared}) != len(declared)
+    ):
+        return False
+    items = transaction.execute(
+        select(FeeItem.id, FeeItem.fee_code).where(FeeItem.draft_id == draft_id)
+    ).all()
+    lines = transaction.execute(
+        select(
+            FeeObligationLine.id,
+            FeeObligationLine.obligation_id,
+            FeeObligationLine.fee_code,
+        ).where(FeeObligationLine.id.in_(tuple(line_id for _item_id, line_id in declared)))
+    ).all()
+    item_by_id = {row.id: row for row in items}
+    line_by_id = {row.id: row for row in lines}
+    return bool(
+        len(items) == len(declared)
+        and len(lines) == len(declared)
+        and set(item_by_id) == {item_id for item_id, _line_id in declared}
+        and set(line_by_id) == {line_id for _item_id, line_id in declared}
+        and all(
+            line_by_id[line_id].obligation_id in obligation_ids
+            and line_by_id[line_id].fee_code == item_by_id[item_id].fee_code
+            for item_id, line_id in declared
+        )
+    )
+
+
 def _string_list(case_id: str, value: object, field: str) -> tuple[str, ...]:
     if (
         type(value) is not list
@@ -1640,25 +1737,75 @@ def _draft_related_facts(
     case_id: str,
     draft_id: object,
     obligation_ids: tuple[str, ...],
-) -> tuple[tuple[str, OverlayFeeRelatedFact], ...]:
+) -> tuple[tuple[tuple[str, OverlayFeeRelatedFact], ...], bool]:
     if type(draft_id) is not str or not draft_id:
         _fee_conflict(case_id, "DRAFT_ID_INVALID")
     draft = transaction.get(FeeDraft, draft_id)
     if draft is None or draft.case_id != case_id:
         _fee_conflict(case_id, "DRAFT_CASE_MISMATCH")
     owners = _draft_obligation_ids(transaction, draft_id)
+    adjusted_service_draft = False
     if owners != set(obligation_ids):
-        _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
-    return tuple(
-        (
-            owner,
-            OverlayFeeRelatedFact(
-                kind=OverlayFeeRelatedFactKind.DRAFT,
-                object_id=draft.id,
-                status=draft.status,
-            ),
+        adjusted_service_draft = _is_exact_adjusted_service_draft_transition(
+            transaction,
+            case_id=case_id,
+            draft_id=draft.id,
+            original_obligation_ids=set(obligation_ids),
+            current_obligation_ids=owners,
         )
-        for owner in sorted(owners)
+        if not adjusted_service_draft:
+            _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
+    return (
+        ()
+        if adjusted_service_draft
+        else tuple(
+            (
+                owner,
+                OverlayFeeRelatedFact(
+                    kind=OverlayFeeRelatedFactKind.DRAFT,
+                    object_id=draft.id,
+                    status=draft.status,
+                ),
+            )
+            for owner in sorted(owners)
+        ),
+        adjusted_service_draft,
+    )
+
+
+def _is_exact_adjusted_service_draft_transition(
+    transaction: Session,
+    *,
+    case_id: str,
+    draft_id: str,
+    original_obligation_ids: set[str],
+    current_obligation_ids: set[str],
+) -> bool:
+    if len(original_obligation_ids) != 1 or len(current_obligation_ids) != 1:
+        return False
+    original_id = next(iter(original_obligation_ids))
+    replacement_id = next(iter(current_obligation_ids))
+    replacement = transaction.get(FeeObligationModel, replacement_id)
+    if (
+        replacement is None
+        or replacement.case_id != case_id
+        or replacement.supersedes_obligation_id != original_id
+    ):
+        return False
+    activity = transaction.get(CaseActivityEvent, replacement.source_activity_id)
+    if activity is None or activity.activity_type != "DEMO_SERVICE_DRAFT_ADJUSTED":
+        return False
+    from app.modules.fees.demo_service import _validated_service_adjustment_activity
+
+    try:
+        _payload, adjustment = _validated_service_adjustment_activity(transaction, activity)
+    except BusinessError:
+        return False
+    return bool(
+        adjustment.draft_id == draft_id
+        and adjustment.original_obligation_id == original_id
+        and adjustment.superseding_obligation_id == replacement_id
+        and adjustment.adjustment_activity_id == activity.id
     )
 
 
