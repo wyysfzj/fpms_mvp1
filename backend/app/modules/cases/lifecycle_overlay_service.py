@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -84,6 +84,9 @@ from app.modules.system.decision_gate_service import (
 )
 from app.modules.tasks.enums import TaskStatus
 from app.modules.tasks.models import Task
+
+if TYPE_CHECKING:
+    from app.modules.fees.demo_service import DemoServiceAdjustmentResult
 
 __all__ = ("read_lifecycle_overlay",)
 
@@ -230,6 +233,7 @@ def read_lifecycle_overlay(
         transaction,
         case_id=case_id,
         activities=tuple(item[0] for item in page),
+        revision_activity_ids=frozenset(item[0].id for item in frozen),
     )
     conflict_codes_by_activity = read_activity_conflict_codes(
         transaction,
@@ -1296,9 +1300,11 @@ def _read_fee_facts(
     *,
     case_id: str,
     activities: tuple[CaseActivityEvent, ...],
+    revision_activity_ids: frozenset[str],
 ) -> dict[str, tuple[OverlayFeeObligation, ...]]:
     projected: dict[str, tuple[OverlayFeeObligation, ...]] = {}
     obligation_cache: dict[str, object] = {}
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult] = {}
     for activity in activities:
         if activity.lane != ActivityLane.FEE.value:
             continue
@@ -1307,6 +1313,7 @@ def _read_fee_facts(
                 transaction,
                 case_id=case_id,
                 activity=activity,
+                adjustment_cache=adjustment_cache,
             )
         else:
             spec = _FEE_ACTIVITY_SCHEMAS.get(activity.activity_type)
@@ -1325,6 +1332,8 @@ def _read_fee_facts(
                 activity=activity,
                 payload=payload,
                 identity_field=spec[1],
+                revision_activity_ids=revision_activity_ids,
+                adjustment_cache=adjustment_cache,
             )
         obligations: list[OverlayFeeObligation] = []
         for obligation_id in sorted(obligation_ids):
@@ -1386,11 +1395,14 @@ def _adjusted_service_activity_roots(
     *,
     case_id: str,
     activity: CaseActivityEvent,
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, OverlayFeeRelatedFact], ...]]:
-    from app.modules.fees.demo_service import _validated_service_adjustment_activity
-
     try:
-        _payload, adjustment = _validated_service_adjustment_activity(transaction, activity)
+        adjustment = _read_persisted_service_adjustment(
+            transaction,
+            activity=activity,
+            adjustment_cache=adjustment_cache,
+        )
     except BusinessError:
         _fee_conflict(case_id, "SERVICE_ADJUSTMENT_INVALID")
     if adjustment.adjustment_activity_id != activity.id:
@@ -1417,6 +1429,27 @@ def _adjusted_service_activity_roots(
             ),
         ),
     )
+
+
+def _read_persisted_service_adjustment(
+    transaction: Session,
+    *,
+    activity: CaseActivityEvent,
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
+) -> DemoServiceAdjustmentResult:
+    cached = adjustment_cache.get(activity.id)
+    if cached is not None:
+        return cached
+    from app.modules.fees.demo_service import (
+        validate_persisted_demo_service_adjustment,
+    )
+
+    _payload, adjustment = validate_persisted_demo_service_adjustment(
+        transaction,
+        activity,
+    )
+    adjustment_cache[activity.id] = adjustment
+    return adjustment
 
 
 def _fee_payload(
@@ -1495,6 +1528,8 @@ def _fee_activity_roots(
     activity: CaseActivityEvent,
     payload: dict[str, object],
     identity_field: str,
+    revision_activity_ids: frozenset[str],
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, OverlayFeeRelatedFact], ...]]:
     if identity_field == "obligation_id":
         value = payload.get(identity_field)
@@ -1527,6 +1562,8 @@ def _fee_activity_roots(
             case_id,
             payload.get("draft_id"),
             obligation_ids,
+            revision_activity_ids=revision_activity_ids,
+            adjustment_cache=adjustment_cache,
         )
         related.extend(draft_facts)
     elif activity.activity_type in {"PAY_LIST_CREATED", "PAY_LIST_INTERNAL_EXPORTED"}:
@@ -1737,6 +1774,9 @@ def _draft_related_facts(
     case_id: str,
     draft_id: object,
     obligation_ids: tuple[str, ...],
+    *,
+    revision_activity_ids: frozenset[str],
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
 ) -> tuple[tuple[tuple[str, OverlayFeeRelatedFact], ...], bool]:
     if type(draft_id) is not str or not draft_id:
         _fee_conflict(case_id, "DRAFT_ID_INVALID")
@@ -1745,19 +1785,24 @@ def _draft_related_facts(
         _fee_conflict(case_id, "DRAFT_CASE_MISMATCH")
     owners = _draft_obligation_ids(transaction, draft_id)
     adjusted_service_draft = False
+    related_owners = owners
     if owners != set(obligation_ids):
-        adjusted_service_draft = _is_exact_adjusted_service_draft_transition(
+        adjustment = _exact_adjusted_service_draft_transition(
             transaction,
             case_id=case_id,
             draft_id=draft.id,
             original_obligation_ids=set(obligation_ids),
             current_obligation_ids=owners,
+            adjustment_cache=adjustment_cache,
         )
-        if not adjusted_service_draft:
+        if adjustment is None:
             _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
+        adjusted_service_draft = True
+        if adjustment.adjustment_activity_id not in revision_activity_ids:
+            related_owners = set(obligation_ids)
     return (
         ()
-        if adjusted_service_draft
+        if adjusted_service_draft and related_owners == owners
         else tuple(
             (
                 owner,
@@ -1767,22 +1812,23 @@ def _draft_related_facts(
                     status=draft.status,
                 ),
             )
-            for owner in sorted(owners)
+            for owner in sorted(related_owners)
         ),
         adjusted_service_draft,
     )
 
 
-def _is_exact_adjusted_service_draft_transition(
+def _exact_adjusted_service_draft_transition(
     transaction: Session,
     *,
     case_id: str,
     draft_id: str,
     original_obligation_ids: set[str],
     current_obligation_ids: set[str],
-) -> bool:
+    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
+) -> DemoServiceAdjustmentResult | None:
     if len(original_obligation_ids) != 1 or len(current_obligation_ids) != 1:
-        return False
+        return None
     original_id = next(iter(original_obligation_ids))
     replacement_id = next(iter(current_obligation_ids))
     replacement = transaction.get(FeeObligationModel, replacement_id)
@@ -1791,22 +1837,27 @@ def _is_exact_adjusted_service_draft_transition(
         or replacement.case_id != case_id
         or replacement.supersedes_obligation_id != original_id
     ):
-        return False
+        return None
     activity = transaction.get(CaseActivityEvent, replacement.source_activity_id)
     if activity is None or activity.activity_type != "DEMO_SERVICE_DRAFT_ADJUSTED":
-        return False
-    from app.modules.fees.demo_service import _validated_service_adjustment_activity
+        return None
 
     try:
-        _payload, adjustment = _validated_service_adjustment_activity(transaction, activity)
+        adjustment = _read_persisted_service_adjustment(
+            transaction,
+            activity=activity,
+            adjustment_cache=adjustment_cache,
+        )
     except BusinessError:
-        return False
-    return bool(
+        return None
+    if not (
         adjustment.draft_id == draft_id
         and adjustment.original_obligation_id == original_id
         and adjustment.superseding_obligation_id == replacement_id
         and adjustment.adjustment_activity_id == activity.id
-    )
+    ):
+        return None
+    return adjustment
 
 
 def _pay_list_related_facts(

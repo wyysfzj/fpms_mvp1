@@ -569,6 +569,113 @@ def _service_source_rows(
     return source, tuple(rows)
 
 
+def _persisted_service_source_rows(
+    transaction: Session,
+    source_activity_id: str,
+    *,
+    case_id: str,
+) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
+    source = transaction.get(CaseActivityEvent, source_activity_id)
+    if (
+        source is None
+        or source.case_id != case_id
+        or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED"
+        or source.lane != ActivityLane.FEE.value
+        or source.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or source.source_activity_id is not None
+        or source.supersedes_event_id is not None
+    ):
+        _adjustment_conflict("服务费来源记录不存在")
+    payload = _stored_adjustment_payload(source)
+    rows = payload.get("items")
+    manifest_sha256 = payload.get("manifest_sha256")
+    authority_sha256 = payload.get("authority_sha256")
+    try:
+        expected_object_id = str(UUID(str(manifest_sha256)[:32]))
+    except (AttributeError, ValueError):
+        _adjustment_conflict("服务费来源记录无效")
+    evidence = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == source.id
+            )
+        )
+    )
+    expected_payload_keys = {
+        "schema",
+        "bundle_id",
+        "bundle_version",
+        "manifest_sha256",
+        "authority_sha256",
+        "authority_classification",
+        "approved_by",
+        "approved_at",
+        "items",
+    }
+    expected_row_keys = {
+        "item_code",
+        "name_zh_cn",
+        "currency",
+        "unit_price",
+        "quantity",
+        "final_quantity",
+        "adjustable",
+        "amount",
+        "source_ref",
+        "source_version",
+        "source_sha256",
+        "disclaimer_zh_cn",
+    }
+    if (
+        set(payload) != expected_payload_keys
+        or payload.get("schema") != _SOURCE_SCHEMA
+        or not _exact_adjustment_text(payload.get("bundle_id"), 128)
+        or not _exact_adjustment_text(payload.get("bundle_version"), 128)
+        or type(manifest_sha256) is not str
+        or len(manifest_sha256) != 64
+        or type(authority_sha256) is not str
+        or len(authority_sha256) != 64
+        or payload.get("authority_classification")
+        not in {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
+        or type(rows) is not list
+        or len(rows) < 2
+        or any(type(row) is not dict or set(row) != expected_row_keys for row in rows)
+        or len({row.get("item_code") for row in rows}) != len(rows)
+        or len(evidence) != 1
+        or evidence[0].case_id != case_id
+        or evidence[0].evidence_kind != "DEMO_SERVICE_BUNDLE"
+        or evidence[0].object_type != "DemoBundle"
+        or evidence[0].object_id != expected_object_id
+        or evidence[0].content_hash != manifest_sha256
+    ):
+        _adjustment_conflict("服务费来源记录无效")
+    for row in rows:
+        try:
+            unit_price = Decimal(str(row["unit_price"]))
+            amount = Decimal(str(row["amount"]))
+        except (InvalidOperation, KeyError, TypeError, ValueError):
+            _adjustment_conflict("服务费来源记录无效")
+        if (
+            not _exact_adjustment_text(row.get("item_code"), 64)
+            or not _exact_adjustment_text(row.get("name_zh_cn"), 256)
+            or row.get("currency") != "CNY"
+            or type(row.get("quantity")) is not int
+            or row["quantity"] <= 0
+            or type(row.get("final_quantity")) is not int
+            or row["final_quantity"] <= 0
+            or type(row.get("adjustable")) is not bool
+            or unit_price <= 0
+            or amount != unit_price * row["quantity"]
+            or not _exact_adjustment_text(row.get("source_ref"), 512)
+            or not _exact_adjustment_text(row.get("source_version"), 128)
+            or type(row.get("source_sha256")) is not str
+            or len(row["source_sha256"]) != 64
+            or not _exact_adjustment_text(row.get("disclaimer_zh_cn"), 512)
+        ):
+            _adjustment_conflict("服务费来源记录无效")
+    return source, tuple(rows)
+
+
 def _valid_pay_activity(
     activity: CaseActivityEvent,
     payload: dict[str, object],
@@ -610,6 +717,8 @@ def _service_adjustment_replay(
     command: DemoServiceAdjustmentCommand,
     transaction: Session,
     activity: CaseActivityEvent,
+    *,
+    persisted_only: bool = False,
 ) -> DemoServiceAdjustmentResult:
     payload = _stored_adjustment_payload(activity)
     if (
@@ -747,7 +856,10 @@ def _service_adjustment_replay(
     original_instruction_id = payload.get("original_instruction_activity_id")
     if type(source_id) is not str or type(original_instruction_id) is not str:
         _adjustment_conflict("服务费草单调整记录无效")
-    _source, source_rows = _service_source_rows(
+    source_reader = (
+        _persisted_service_source_rows if persisted_only else _service_source_rows
+    )
+    _source, source_rows = source_reader(
         transaction,
         source_id,
         case_id=activity.case_id,
@@ -945,10 +1057,9 @@ def _service_adjustment_replay(
     )
 
 
-def _validated_service_adjustment_activity(
-    transaction: Session,
+def _adjustment_command_from_activity(
     activity: CaseActivityEvent,
-) -> tuple[dict[str, object], DemoServiceAdjustmentResult]:
+) -> tuple[dict[str, object], DemoServiceAdjustmentCommand]:
     payload = _stored_adjustment_payload(activity)
     prefix = "demo-service-adjustment:"
     values = (
@@ -972,7 +1083,7 @@ def _validated_service_adjustment_activity(
         or not _exact_adjustment_text(activity.idempotency_key[len(prefix) :], 96)
     ):
         _adjustment_conflict("服务费草单调整记录无效")
-    command = DemoServiceAdjustmentCommand(
+    return payload, DemoServiceAdjustmentCommand(
         draft_id=str(payload["draft_id"]),
         item_id=str(payload["item_id"]),
         expected_quantity=int(payload["expected_quantity"]),
@@ -982,6 +1093,26 @@ def _validated_service_adjustment_activity(
         idempotency_key=activity.idempotency_key[len(prefix) :],
         adjusted_at=activity.effective_at,
     )
+
+
+def validate_persisted_demo_service_adjustment(
+    transaction: Session,
+    activity: CaseActivityEvent,
+) -> tuple[dict[str, object], DemoServiceAdjustmentResult]:
+    payload, command = _adjustment_command_from_activity(activity)
+    return payload, _service_adjustment_replay(
+        command,
+        transaction,
+        activity,
+        persisted_only=True,
+    )
+
+
+def _validated_service_adjustment_activity(
+    transaction: Session,
+    activity: CaseActivityEvent,
+) -> tuple[dict[str, object], DemoServiceAdjustmentResult]:
+    payload, command = _adjustment_command_from_activity(activity)
     return payload, _service_adjustment_replay(command, transaction, activity)
 
 

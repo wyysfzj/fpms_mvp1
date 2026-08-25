@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import runpy
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core import demo_bundle
 from app.core.errors import BusinessError
 from app.modules.annuity.models import GovPayment, PayList, PayListExportArtifact
 from app.modules.auth.models import T_User
@@ -24,6 +25,7 @@ from app.modules.cases.lifecycle_contracts import (
 from app.modules.cases.lifecycle_overlay_service import read_lifecycle_overlay
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents.models import Document
+from app.modules.fees import demo_service
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
@@ -34,6 +36,8 @@ from app.modules.fees.models import (
 )
 from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.masterdata.clients.models import Client
+from tests.test_demo_abc_runtime_bundle import _valid_v6_bundle
+from tests.test_demo_abc_runtime_service_draft import _seed_case
 
 CASE_ID = "case-overlay-fees"
 SOURCE_ACTIVITY_ID = "activity-overlay-fees-source"
@@ -972,24 +976,63 @@ def test_fee_activity_relation_corruption_fails_closed(
     assert raised.value.status_code == 409
 
 
-def test_exact_service_draft_supersession_remains_visible_and_fail_closed(
+def _create_adjusted_service_draft(
     client,
     auth_headers,
     session_factory: sessionmaker,
     tmp_path: Path,
     monkeypatch,
-) -> None:
-    helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_v6_service_adjustment.py")))
-    case_id, original_obligation_id, draft_id = helpers["_create_open_service_draft"](
-        client, auth_headers, session_factory, tmp_path, monkeypatch
+) -> tuple[str, str, str, str, str]:
+    bundle, _manifest, manifest_sha = _valid_v6_bundle(tmp_path)
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    monkeypatch.setenv("FPMS_DEMO_RUN_PROFILE", "TECHNICAL_REHEARSAL")
+    monkeypatch.setenv("FPMS_DEMO_BUNDLE_PATH", str(bundle))
+    monkeypatch.setenv("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setenv(
+        "FPMS_DEMO_EXPECTED_AUTHORITY_SHA256",
+        hashlib.sha256((bundle / "authority.json").read_bytes()).hexdigest(),
     )
+    monkeypatch.setenv(
+        "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION", "SYNTHETIC_TEST_ONLY"
+    )
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    client_id, case_id = _seed_case(session_factory)
+    created = client.post(
+        "/api/v1/fees/demo-service-obligations",
+        json={"case_id": case_id, "idempotency_key": "overlay-service-source-1"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    original_obligation_id = created.json()["obligation"]["id"]
+    instruction = client.post(
+        f"/api/v1/fees/obligations/{original_obligation_id}/instruction",
+        json={"instruction": "PAY", "idempotency_key": "overlay-service-pay-1"},
+        headers=auth_headers,
+    )
+    assert instruction.status_code == 200, instruction.text
+    draft = client.post(
+        "/api/v1/fees/drafts",
+        json={
+            "case_id": case_id,
+            "client_id": client_id,
+            "draft_type": "GENERIC",
+            "currency": "CNY",
+            "obligation_id": original_obligation_id,
+        },
+        headers=auth_headers,
+    )
+    assert draft.status_code == 201, draft.text
+    draft_id = draft.json()["id"]
     with session_factory() as transaction:
-        adjustable_item = (
-            transaction.query(FeeItem)
-            .filter(FeeItem.draft_id == draft_id, FeeItem.fee_code == "FWSQDJ002")
-            .one()
+        adjustable_item_id = transaction.scalar(
+            select(FeeItem.id).where(
+                FeeItem.draft_id == draft_id,
+                FeeItem.fee_code == "FWSQDJ002",
+            )
         )
-        adjustable_item_id = adjustable_item.id
+        assert adjustable_item_id is not None
 
     adjusted = client.post(
         f"/api/v1/fees/drafts/{draft_id}/demo-service-adjustment",
@@ -1004,6 +1047,49 @@ def test_exact_service_draft_supersession_remains_visible_and_fail_closed(
     )
     assert adjusted.status_code == 201, adjusted.text
     replacement_obligation_id = adjusted.json()["superseding_obligation_id"]
+    return (
+        case_id,
+        original_obligation_id,
+        replacement_obligation_id,
+        draft_id,
+        adjusted.json()["adjustment_activity_id"],
+    )
+
+
+def _overlay_obligations(result) -> tuple[object, ...]:
+    return tuple(
+        obligation
+        for milestone in result.milestones
+        for obligation in milestone.fee_obligations
+    )
+
+
+def test_adjusted_service_draft_reads_without_runtime_bundle(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (
+        case_id,
+        original_obligation_id,
+        replacement_obligation_id,
+        draft_id,
+        _adjustment_activity_id,
+    ) = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    for key in (
+        "FPMS_ENV",
+        "FPMS_DEMO_SCOPE",
+        "FPMS_DEMO_RUN_PROFILE",
+        "FPMS_DEMO_BUNDLE_PATH",
+        "FPMS_DEMO_EXPECTED_MANIFEST_SHA256",
+        "FPMS_DEMO_EXPECTED_AUTHORITY_SHA256",
+        "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION",
+    ):
+        monkeypatch.delenv(key)
 
     with session_factory() as transaction:
         result = read_lifecycle_overlay(
@@ -1013,34 +1099,161 @@ def test_exact_service_draft_supersession_remains_visible_and_fail_closed(
             as_of_revision=None,
             transaction=transaction,
         )
-        obligations = tuple(
-            obligation
-            for milestone in result.milestones
-            for obligation in milestone.fee_obligations
-        )
-        assert {original_obligation_id, replacement_obligation_id} <= {
-            obligation.obligation_id for obligation in obligations
-        }
-        assert any(
-            fact.kind.value == "DRAFT" and fact.object_id == draft_id
-            for obligation in obligations
-            if obligation.obligation_id == replacement_obligation_id
-            for fact in obligation.related_facts
-        )
-        assert all(
-            fact.kind.value != "DRAFT"
-            for obligation in obligations
-            if obligation.obligation_id == original_obligation_id
-            for fact in obligation.related_facts
+    obligations = _overlay_obligations(result)
+    assert {original_obligation_id, replacement_obligation_id} <= {
+        obligation.obligation_id for obligation in obligations
+    }
+    assert any(
+        fact.kind.value == "DRAFT" and fact.object_id == draft_id
+        for obligation in obligations
+        if obligation.obligation_id == replacement_obligation_id
+        for fact in obligation.related_facts
+    )
+    assert all(
+        fact.kind.value != "DRAFT"
+        for obligation in obligations
+        if obligation.obligation_id == original_obligation_id
+        for fact in obligation.related_facts
+    )
+
+
+def test_adjusted_service_draft_preserves_pre_adjustment_revision(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (
+        case_id,
+        original_obligation_id,
+        replacement_obligation_id,
+        draft_id,
+        adjustment_activity_id,
+    ) = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        adjustment = transaction.get(CaseActivityEvent, adjustment_activity_id)
+        assert adjustment is not None
+        result = read_lifecycle_overlay(
+            case_id=case_id,
+            after_sequence=0,
+            limit=200,
+            as_of_revision=adjustment.sequence - 1,
+            transaction=transaction,
         )
 
-        replacement = transaction.get(FeeObligation, replacement_obligation_id)
-        assert replacement is not None
-        adjustment = transaction.get(CaseActivityEvent, replacement.source_activity_id)
-        assert adjustment is not None
-        payload = json.loads(adjustment.payload_json)
-        payload["original_obligation_id"] = "unrelated-obligation"
-        adjustment.payload_json = _canonical(payload)
+    obligations = _overlay_obligations(result)
+    assert replacement_obligation_id not in {
+        obligation.obligation_id for obligation in obligations
+    }
+    assert any(
+        fact.kind.value == "DRAFT" and fact.object_id == draft_id
+        for obligation in obligations
+        if obligation.obligation_id == original_obligation_id
+        for fact in obligation.related_facts
+    )
+
+
+def test_adjusted_service_draft_validation_runs_once_per_overlay_read(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_id, *_rest = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    calls = 0
+    original = demo_service._validated_service_adjustment_activity
+
+    def counted(transaction, activity):
+        nonlocal calls
+        calls += 1
+        return original(transaction, activity)
+
+    monkeypatch.setattr(
+        demo_service,
+        "validate_persisted_demo_service_adjustment",
+        counted,
+        raising=False,
+    )
+    with session_factory() as transaction:
+        read_lifecycle_overlay(
+            case_id=case_id,
+            after_sequence=0,
+            limit=200,
+            as_of_revision=None,
+            transaction=transaction,
+        )
+
+    assert calls == 1
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ("historical_draft_payload", "replacement_link", "adjustment_payload"),
+)
+def test_adjusted_service_draft_corruption_fails_closed(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+    corruption: str,
+) -> None:
+    (
+        case_id,
+        original_obligation_id,
+        _replacement_obligation_id,
+        draft_id,
+        adjustment_activity_id,
+    ) = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+
+    raised: pytest.ExceptionInfo[BusinessError]
+    with session_factory() as transaction:
+        if corruption == "historical_draft_payload":
+            activity = next(
+                activity
+                for activity in transaction.scalars(
+                    select(CaseActivityEvent).where(
+                        CaseActivityEvent.case_id == case_id,
+                        CaseActivityEvent.activity_type == "FEE_DRAFT_CREATED",
+                    )
+                )
+                if json.loads(activity.payload_json).get("draft_id") == draft_id
+            )
+            payload = json.loads(activity.payload_json)
+            payload["links"][0]["obligation_line_id"] = "unrelated-line"
+            activity.payload_json = _canonical(payload)
+        elif corruption == "replacement_link":
+            item = transaction.scalar(
+                select(FeeItem).where(FeeItem.draft_id == draft_id).limit(1)
+            )
+            assert item is not None
+            original_line_id = transaction.scalar(
+                select(FeeObligationLine.id).where(
+                    FeeObligationLine.obligation_id == original_obligation_id,
+                    FeeObligationLine.fee_code == item.fee_code,
+                )
+            )
+            link = transaction.scalar(
+                select(FeeObligationDraftItemLink).where(
+                    FeeObligationDraftItemLink.fee_item_id == item.id
+                )
+            )
+            assert original_line_id is not None and link is not None
+            link.obligation_line_id = original_line_id
+        else:
+            activity = transaction.get(CaseActivityEvent, adjustment_activity_id)
+            assert activity is not None
+            payload = json.loads(activity.payload_json)
+            payload["original_obligation_id"] = "unrelated-obligation"
+            activity.payload_json = _canonical(payload)
         transaction.commit()
 
         with pytest.raises(BusinessError) as raised:
