@@ -37,6 +37,7 @@ async function login(page: Page): Promise<string> {
   const response = await responsePromise
   const body = await response.json() as Json
   expect(body.access_token).toMatch(/^\S+$/)
+  await page.waitForLoadState('networkidle')
   return body.access_token
 }
 
@@ -67,6 +68,7 @@ async function expectNormalPage(page: Page, route: string, visibleText: string):
   await page.goto(`${baseUrl}${route}`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   await expect(page.getByText(visibleText, { exact: false }).first()).toBeVisible()
+  await page.waitForLoadState('networkidle')
 }
 
 test('V6 appends authoritative dual-track fee stages on normal customer pages', async ({ page, request }) => {
