@@ -184,7 +184,7 @@ test('V6 appends authoritative dual-track fee stages on normal customer pages', 
     await page.getByRole('tab', { name: '概览' }).click()
     const serviceSourceFacts = page.getByTestId('draft-source-facts')
     await expect(serviceSourceFacts.getByText('服务费草单：仅授权项目可调整一次')).toBeVisible()
-    await expect(serviceSourceFacts.getByText('客户确认增加一份附加文件处理')).toBeVisible()
+    await expect(serviceSourceFacts.getByText('客户确认增加一份附加文件处理').first()).toBeVisible()
     const after = await api(request, token, 'GET', `/fees/drafts/${serviceDraftId}/source-facts`)
     expect(after.draft_status).toBe('LOCKED')
     expect(after.lines.some((line: Json) => Boolean(line.adjustment_activity_id))).toBe(true)
