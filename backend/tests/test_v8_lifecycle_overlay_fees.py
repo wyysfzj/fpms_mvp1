@@ -1239,6 +1239,7 @@ def test_adjusted_service_draft_validation_runs_once_per_overlay_read(
         "authority_hash",
         "approved_by",
         "approved_at",
+        "item_code_type",
         "row_source_hash",
         "fixed_row_change",
         "second_adjustable_row",
@@ -1268,6 +1269,8 @@ def test_persisted_service_source_corruption_fails_closed(
             payload["approved_by"] = ""
         elif corruption == "approved_at":
             payload["approved_at"] = "2026-08-16T12:00:00"
+        elif corruption == "item_code_type":
+            fixed_row["item_code"] = ["FWSQDJ002"]
         elif corruption == "row_source_hash":
             fixed_row["source_sha256"] = "z" * 64
         elif corruption == "fixed_row_change":

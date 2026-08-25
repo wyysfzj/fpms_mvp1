@@ -585,7 +585,6 @@ def _validated_service_source_payload(
         or type(rows) is not list
         or len(rows) < 2
         or any(type(row) is not dict or set(row) != expected_row_keys for row in rows)
-        or len({row.get("item_code") for row in rows}) != len(rows)
     ):
         _adjustment_conflict("服务费来源记录无效")
     adjustable_rows = 0
@@ -620,7 +619,12 @@ def _validated_service_source_payload(
             _adjustment_conflict("服务费来源记录无效")
         adjustable_rows += int(row["adjustable"])
         changed_rows += int(row["final_quantity"] != row["quantity"])
-    if adjustable_rows < 1 or adjustable_rows == len(rows) or changed_rows != 1:
+    if (
+        len({row["item_code"] for row in rows}) != len(rows)
+        or adjustable_rows < 1
+        or adjustable_rows == len(rows)
+        or changed_rows != 1
+    ):
         _adjustment_conflict("服务费来源记录无效")
     return tuple(rows), str(manifest_sha256)
 
