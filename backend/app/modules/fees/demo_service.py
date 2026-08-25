@@ -521,6 +521,10 @@ def _is_lower_sha256(value: object) -> bool:
     )
 
 
+def _is_bounded_string(value: object, maximum: int) -> bool:
+    return type(value) is str and 1 <= len(value) <= maximum
+
+
 def _is_aware_second_timestamp(value: object) -> bool:
     if type(value) is not str:
         return False
@@ -576,7 +580,7 @@ def _validated_service_source_payload(
         or not _is_lower_sha256(authority_sha256)
         or payload.get("authority_classification")
         not in {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
-        or not _exact_adjustment_text(payload.get("approved_by"), 120)
+        or not _is_bounded_string(payload.get("approved_by"), 120)
         or not _is_aware_second_timestamp(payload.get("approved_at"))
         or type(rows) is not list
         or len(rows) < 2
@@ -594,7 +598,7 @@ def _validated_service_source_payload(
             _adjustment_conflict("服务费来源记录无效")
         if (
             not _exact_adjustment_text(row.get("item_code"), 64)
-            or not _exact_adjustment_text(row.get("name_zh_cn"), 120)
+            or not _is_bounded_string(row.get("name_zh_cn"), 120)
             or row.get("currency") != "CNY"
             or type(row.get("quantity")) is not int
             or row["quantity"] <= 0
@@ -608,15 +612,15 @@ def _validated_service_source_payload(
             or amount != unit_price * row["quantity"]
             or format(unit_price, ".2f") != row["unit_price"]
             or format(amount, ".2f") != row["amount"]
-            or not _exact_adjustment_text(row.get("source_ref"), 240)
-            or not _exact_adjustment_text(row.get("source_version"), 120)
+            or not _is_bounded_string(row.get("source_ref"), 240)
+            or not _is_bounded_string(row.get("source_version"), 120)
             or not _is_lower_sha256(row.get("source_sha256"))
-            or not _exact_adjustment_text(row.get("disclaimer_zh_cn"), 200)
+            or not _is_bounded_string(row.get("disclaimer_zh_cn"), 200)
         ):
             _adjustment_conflict("服务费来源记录无效")
         adjustable_rows += int(row["adjustable"])
         changed_rows += int(row["final_quantity"] != row["quantity"])
-    if adjustable_rows != 1 or changed_rows != 1:
+    if adjustable_rows < 1 or adjustable_rows == len(rows) or changed_rows != 1:
         _adjustment_conflict("服务费来源记录无效")
     return tuple(rows), str(manifest_sha256)
 

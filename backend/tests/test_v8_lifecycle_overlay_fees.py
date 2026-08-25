@@ -1291,6 +1291,40 @@ def test_persisted_service_source_corruption_fails_closed(
     assert raised.value.status_code == 409
 
 
+def test_shared_service_source_validator_accepts_loader_compatible_rows(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _case_id, original_obligation_id, *_rest = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        original = transaction.get(FeeObligation, original_obligation_id)
+        assert original is not None
+        source = transaction.get(CaseActivityEvent, original.source_activity_id)
+        assert source is not None
+        payload = json.loads(source.payload_json)
+
+    extra = dict(next(row for row in payload["items"] if row["adjustable"] is True))
+    extra.update(
+        {
+            "item_code": "FWSQDJ003",
+            "name_zh_cn": " 额外服务项目",
+            "final_quantity": extra["quantity"],
+            "source_sha256": "f" * 64,
+        }
+    )
+    payload["items"].append(extra)
+    rows, _manifest_sha256 = demo_service._validated_service_source_payload(payload)
+
+    assert len(rows) == 3
+    assert sum(row["adjustable"] is True for row in rows) == 2
+    assert sum(row["final_quantity"] != row["quantity"] for row in rows) == 1
+
+
 @pytest.mark.parametrize(
     "corruption",
     ("historical_draft_payload", "replacement_link", "adjustment_payload"),
