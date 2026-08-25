@@ -1787,19 +1787,34 @@ def _draft_related_facts(
     adjusted_service_draft = False
     related_owners = owners
     if owners != set(obligation_ids):
-        adjustment = _exact_adjusted_service_draft_transition(
+        transition = _adjusted_service_draft_transition(
             transaction,
             case_id=case_id,
-            draft_id=draft.id,
             original_obligation_ids=set(obligation_ids),
             current_obligation_ids=owners,
-            adjustment_cache=adjustment_cache,
         )
-        if adjustment is None:
+        if transition is None:
             _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
         adjusted_service_draft = True
-        if adjustment.adjustment_activity_id not in revision_activity_ids:
+        activity, original_id, replacement_id = transition
+        if activity.id not in revision_activity_ids:
             related_owners = set(obligation_ids)
+        else:
+            try:
+                adjustment = _read_persisted_service_adjustment(
+                    transaction,
+                    activity=activity,
+                    adjustment_cache=adjustment_cache,
+                )
+            except BusinessError:
+                _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
+            if (
+                adjustment.draft_id != draft.id
+                or adjustment.original_obligation_id != original_id
+                or adjustment.superseding_obligation_id != replacement_id
+                or adjustment.adjustment_activity_id != activity.id
+            ):
+                _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
     return (
         ()
         if adjusted_service_draft and related_owners == owners
@@ -1818,15 +1833,13 @@ def _draft_related_facts(
     )
 
 
-def _exact_adjusted_service_draft_transition(
+def _adjusted_service_draft_transition(
     transaction: Session,
     *,
     case_id: str,
-    draft_id: str,
     original_obligation_ids: set[str],
     current_obligation_ids: set[str],
-    adjustment_cache: dict[str, DemoServiceAdjustmentResult],
-) -> DemoServiceAdjustmentResult | None:
+) -> tuple[CaseActivityEvent, str, str] | None:
     if len(original_obligation_ids) != 1 or len(current_obligation_ids) != 1:
         return None
     original_id = next(iter(original_obligation_ids))
@@ -1841,23 +1854,7 @@ def _exact_adjusted_service_draft_transition(
     activity = transaction.get(CaseActivityEvent, replacement.source_activity_id)
     if activity is None or activity.activity_type != "DEMO_SERVICE_DRAFT_ADJUSTED":
         return None
-
-    try:
-        adjustment = _read_persisted_service_adjustment(
-            transaction,
-            activity=activity,
-            adjustment_cache=adjustment_cache,
-        )
-    except BusinessError:
-        return None
-    if not (
-        adjustment.draft_id == draft_id
-        and adjustment.original_obligation_id == original_id
-        and adjustment.superseding_obligation_id == replacement_id
-        and adjustment.adjustment_activity_id == activity.id
-    ):
-        return None
-    return adjustment
+    return activity, original_id, replacement_id
 
 
 def _pay_list_related_facts(

@@ -513,94 +513,32 @@ def _snapshot_digest(rows: list[dict[str, object]]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _service_source_rows(
-    transaction: Session,
-    source_activity_id: str,
-    *,
-    case_id: str,
-) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
-    source = transaction.get(CaseActivityEvent, source_activity_id)
-    if (
-        source is None
-        or source.case_id != case_id
-        or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED"
-        or source.lane != ActivityLane.FEE.value
-        or source.confirmation_status != ConfirmationStatus.CONFIRMED.value
-        or source.source_activity_id is not None
-        or source.supersedes_event_id is not None
-    ):
-        _adjustment_conflict("服务费来源记录不存在")
-    payload = _stored_adjustment_payload(source)
-    rows = payload.get("items")
-    snapshot = _bundle()
-    if snapshot.schema_version != _INTEGRATED_SCHEMA:
-        _adjustment_conflict("服务费运行输入无效")
-    selection = _demo_service_items(snapshot)
-    evidence = tuple(
-        transaction.scalars(
-            select(CaseActivityEventEvidence).where(
-                CaseActivityEventEvidence.activity_id == source.id
-            )
-        )
+def _is_lower_sha256(value: object) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
     )
-    expected_object_id = str(UUID(snapshot.manifest_sha256[:32]))
-    if (
-        payload != _service_source_payload(snapshot, selection)
-        or type(rows) is not list
-        or len(rows) < 2
-        or any(type(row) is not dict for row in rows)
-        or any(
-            type(row.get("item_code")) is not str
-            or type(row.get("source_ref")) is not str
-            or type(row.get("source_version")) is not str
-            or type(row.get("source_sha256")) is not str
-            or len(str(row.get("source_sha256"))) != 64
-            for row in rows
-        )
-        or len({row.get("item_code") for row in rows}) != len(rows)
-        or len(evidence) != 1
-        or evidence[0].case_id != case_id
-        or evidence[0].evidence_kind != "DEMO_SERVICE_BUNDLE"
-        or evidence[0].object_type != "DemoBundle"
-        or evidence[0].object_id != expected_object_id
-        or evidence[0].content_hash != snapshot.manifest_sha256
-    ):
-        _adjustment_conflict("服务费来源记录无效")
-    return source, tuple(rows)
 
 
-def _persisted_service_source_rows(
-    transaction: Session,
-    source_activity_id: str,
-    *,
-    case_id: str,
-) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
-    source = transaction.get(CaseActivityEvent, source_activity_id)
-    if (
-        source is None
-        or source.case_id != case_id
-        or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED"
-        or source.lane != ActivityLane.FEE.value
-        or source.confirmation_status != ConfirmationStatus.CONFIRMED.value
-        or source.source_activity_id is not None
-        or source.supersedes_event_id is not None
-    ):
-        _adjustment_conflict("服务费来源记录不存在")
-    payload = _stored_adjustment_payload(source)
-    rows = payload.get("items")
-    manifest_sha256 = payload.get("manifest_sha256")
-    authority_sha256 = payload.get("authority_sha256")
+def _is_aware_second_timestamp(value: object) -> bool:
+    if type(value) is not str:
+        return False
     try:
-        expected_object_id = str(UUID(str(manifest_sha256)[:32]))
-    except (AttributeError, ValueError):
-        _adjustment_conflict("服务费来源记录无效")
-    evidence = tuple(
-        transaction.scalars(
-            select(CaseActivityEventEvidence).where(
-                CaseActivityEventEvidence.activity_id == source.id
-            )
-        )
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return bool(
+        parsed.tzinfo is not None
+        and parsed.utcoffset() is not None
+        and parsed.microsecond == 0
+        and parsed.isoformat() == value
     )
+
+
+def _validated_service_source_payload(
+    payload: dict[str, object],
+) -> tuple[tuple[dict[str, object], ...], str]:
     expected_payload_keys = {
         "schema",
         "bundle_id",
@@ -626,29 +564,28 @@ def _persisted_service_source_rows(
         "source_sha256",
         "disclaimer_zh_cn",
     }
+    rows = payload.get("items")
+    manifest_sha256 = payload.get("manifest_sha256")
+    authority_sha256 = payload.get("authority_sha256")
     if (
         set(payload) != expected_payload_keys
         or payload.get("schema") != _SOURCE_SCHEMA
         or not _exact_adjustment_text(payload.get("bundle_id"), 128)
         or not _exact_adjustment_text(payload.get("bundle_version"), 128)
-        or type(manifest_sha256) is not str
-        or len(manifest_sha256) != 64
-        or type(authority_sha256) is not str
-        or len(authority_sha256) != 64
+        or not _is_lower_sha256(manifest_sha256)
+        or not _is_lower_sha256(authority_sha256)
         or payload.get("authority_classification")
         not in {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
+        or not _exact_adjustment_text(payload.get("approved_by"), 120)
+        or not _is_aware_second_timestamp(payload.get("approved_at"))
         or type(rows) is not list
         or len(rows) < 2
         or any(type(row) is not dict or set(row) != expected_row_keys for row in rows)
         or len({row.get("item_code") for row in rows}) != len(rows)
-        or len(evidence) != 1
-        or evidence[0].case_id != case_id
-        or evidence[0].evidence_kind != "DEMO_SERVICE_BUNDLE"
-        or evidence[0].object_type != "DemoBundle"
-        or evidence[0].object_id != expected_object_id
-        or evidence[0].content_hash != manifest_sha256
     ):
         _adjustment_conflict("服务费来源记录无效")
+    adjustable_rows = 0
+    changed_rows = 0
     for row in rows:
         try:
             unit_price = Decimal(str(row["unit_price"]))
@@ -657,23 +594,93 @@ def _persisted_service_source_rows(
             _adjustment_conflict("服务费来源记录无效")
         if (
             not _exact_adjustment_text(row.get("item_code"), 64)
-            or not _exact_adjustment_text(row.get("name_zh_cn"), 256)
+            or not _exact_adjustment_text(row.get("name_zh_cn"), 120)
             or row.get("currency") != "CNY"
             or type(row.get("quantity")) is not int
             or row["quantity"] <= 0
             or type(row.get("final_quantity")) is not int
             or row["final_quantity"] <= 0
             or type(row.get("adjustable")) is not bool
+            or (not row["adjustable"] and row["final_quantity"] != row["quantity"])
+            or not unit_price.is_finite()
+            or not amount.is_finite()
             or unit_price <= 0
             or amount != unit_price * row["quantity"]
-            or not _exact_adjustment_text(row.get("source_ref"), 512)
-            or not _exact_adjustment_text(row.get("source_version"), 128)
-            or type(row.get("source_sha256")) is not str
-            or len(row["source_sha256"]) != 64
-            or not _exact_adjustment_text(row.get("disclaimer_zh_cn"), 512)
+            or format(unit_price, ".2f") != row["unit_price"]
+            or format(amount, ".2f") != row["amount"]
+            or not _exact_adjustment_text(row.get("source_ref"), 240)
+            or not _exact_adjustment_text(row.get("source_version"), 120)
+            or not _is_lower_sha256(row.get("source_sha256"))
+            or not _exact_adjustment_text(row.get("disclaimer_zh_cn"), 200)
         ):
             _adjustment_conflict("服务费来源记录无效")
-    return source, tuple(rows)
+        adjustable_rows += int(row["adjustable"])
+        changed_rows += int(row["final_quantity"] != row["quantity"])
+    if adjustable_rows != 1 or changed_rows != 1:
+        _adjustment_conflict("服务费来源记录无效")
+    return tuple(rows), str(manifest_sha256)
+
+
+def _persisted_service_source_rows(
+    transaction: Session,
+    source_activity_id: str,
+    *,
+    case_id: str,
+) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
+    source = transaction.get(CaseActivityEvent, source_activity_id)
+    if (
+        source is None
+        or source.case_id != case_id
+        or source.activity_type != "DEMO_SERVICE_PRICE_ITEM_SELECTED"
+        or source.lane != ActivityLane.FEE.value
+        or source.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or source.source_activity_id is not None
+        or source.supersedes_event_id is not None
+    ):
+        _adjustment_conflict("服务费来源记录不存在")
+    rows, manifest_sha256 = _validated_service_source_payload(
+        _stored_adjustment_payload(source)
+    )
+    evidence = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == source.id
+            )
+        )
+    )
+    expected_object_id = str(UUID(manifest_sha256[:32]))
+    if (
+        len(evidence) != 1
+        or evidence[0].case_id != case_id
+        or evidence[0].evidence_kind != "DEMO_SERVICE_BUNDLE"
+        or evidence[0].object_type != "DemoBundle"
+        or evidence[0].object_id != expected_object_id
+        or evidence[0].content_hash != manifest_sha256
+    ):
+        _adjustment_conflict("服务费来源记录无效")
+    return source, rows
+
+
+def _service_source_rows(
+    transaction: Session,
+    source_activity_id: str,
+    *,
+    case_id: str,
+) -> tuple[CaseActivityEvent, tuple[dict[str, object], ...]]:
+    source, rows = _persisted_service_source_rows(
+        transaction,
+        source_activity_id,
+        case_id=case_id,
+    )
+    snapshot = _bundle()
+    if snapshot.schema_version != _INTEGRATED_SCHEMA:
+        _adjustment_conflict("服务费运行输入无效")
+    if _stored_adjustment_payload(source) != _service_source_payload(
+        snapshot,
+        _demo_service_items(snapshot),
+    ):
+        _adjustment_conflict("服务费来源记录无效")
+    return source, rows
 
 
 def _valid_pay_activity(

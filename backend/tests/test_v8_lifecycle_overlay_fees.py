@@ -1156,6 +1156,47 @@ def test_adjusted_service_draft_preserves_pre_adjustment_revision(
     )
 
 
+def test_post_revision_adjustment_corruption_does_not_break_frozen_revision(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (
+        case_id,
+        original_obligation_id,
+        _replacement_obligation_id,
+        draft_id,
+        adjustment_activity_id,
+    ) = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        adjustment = transaction.get(CaseActivityEvent, adjustment_activity_id)
+        assert adjustment is not None
+        frozen_revision = adjustment.sequence - 1
+        payload = json.loads(adjustment.payload_json)
+        payload["original_obligation_id"] = "unrelated-obligation"
+        adjustment.payload_json = _canonical(payload)
+        transaction.commit()
+
+        result = read_lifecycle_overlay(
+            case_id=case_id,
+            after_sequence=0,
+            limit=200,
+            as_of_revision=frozen_revision,
+            transaction=transaction,
+        )
+
+    assert any(
+        fact.kind.value == "DRAFT" and fact.object_id == draft_id
+        for obligation in _overlay_obligations(result)
+        if obligation.obligation_id == original_obligation_id
+        for fact in obligation.related_facts
+    )
+
+
 def test_adjusted_service_draft_validation_runs_once_per_overlay_read(
     client,
     auth_headers,
@@ -1190,6 +1231,64 @@ def test_adjusted_service_draft_validation_runs_once_per_overlay_read(
         )
 
     assert calls == 1
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "authority_hash",
+        "approved_by",
+        "approved_at",
+        "row_source_hash",
+        "fixed_row_change",
+        "second_adjustable_row",
+    ),
+)
+def test_persisted_service_source_corruption_fails_closed(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+    corruption: str,
+) -> None:
+    case_id, original_obligation_id, *_rest = _create_adjusted_service_draft(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    with session_factory() as transaction:
+        original = transaction.get(FeeObligation, original_obligation_id)
+        assert original is not None
+        source = transaction.get(CaseActivityEvent, original.source_activity_id)
+        assert source is not None
+        payload = json.loads(source.payload_json)
+        fixed_row = next(row for row in payload["items"] if row["adjustable"] is False)
+        if corruption == "authority_hash":
+            payload["authority_sha256"] = "z" * 64
+        elif corruption == "approved_by":
+            payload["approved_by"] = ""
+        elif corruption == "approved_at":
+            payload["approved_at"] = "2026-08-16T12:00:00"
+        elif corruption == "row_source_hash":
+            fixed_row["source_sha256"] = "z" * 64
+        elif corruption == "fixed_row_change":
+            fixed_row["final_quantity"] += 1
+        else:
+            fixed_row["adjustable"] = True
+            fixed_row["final_quantity"] += 1
+        source.payload_json = _canonical(payload)
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as raised:
+            read_lifecycle_overlay(
+                case_id=case_id,
+                after_sequence=0,
+                limit=200,
+                as_of_revision=None,
+                transaction=transaction,
+            )
+
+    assert raised.value.code == "LIFECYCLE_OVERLAY_FEE_CONFLICT"
+    assert raised.value.status_code == 409
 
 
 @pytest.mark.parametrize(
