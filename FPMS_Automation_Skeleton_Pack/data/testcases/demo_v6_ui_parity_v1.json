@@ -399,8 +399,8 @@
           "value_rule": "2026-08-01 09:00:00",
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
-            "role": "textbox",
-            "label": "完成时间"
+            "role": "combobox",
+            "label": "人工递交时间"
           },
           "source_selector": "operator-entered manual submission completion time",
           "normalization": "ISO_LOCAL_DATETIME_SECONDS",
@@ -414,7 +414,7 @@
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
             "role": "textbox",
-            "label": "备注"
+            "label": "递交备注"
           },
           "source_selector": "operator-entered manual submission note",
           "normalization": "TRIM_EXACT",
@@ -427,8 +427,8 @@
           "value_rule": "current reviewed FILING_FINAL_SUBMISSION evidence",
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
-            "role": "combobox",
-            "label": "已复核递交文件"
+            "role": "button",
+            "label": "记录人工递交完成"
           },
           "source_selector": "visible same-case reviewed evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
@@ -442,7 +442,7 @@
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
             "role": "combobox",
-            "label": "已上传回执附件"
+            "label": "回执文件"
           },
           "source_selector": "visible same-case reviewed receipt evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
@@ -456,7 +456,7 @@
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
             "role": "textbox",
-            "label": "官方接收案件编号"
+            "label": "接收案件编号"
           },
           "source_selector": "operator-entered filing receipt number",
           "normalization": "TRIM_EXACT",
@@ -469,7 +469,7 @@
           "value_rule": "2026-08-02 10:00:00",
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
-            "role": "textbox",
+            "role": "combobox",
             "label": "接收时间"
           },
           "source_selector": "operator-entered receipt time",
@@ -484,7 +484,7 @@
           "ui_route": "/official-workflows/filing-preparation",
           "control": {
             "role": "textbox",
-            "label": "接收人"
+            "label": "提交人"
           },
           "source_selector": "operator-entered receiver",
           "normalization": "TRIM_EXACT",
@@ -498,7 +498,7 @@
           "ui_route": "/documents/:id",
           "control": {
             "role": "combobox",
-            "label": "已复核证据版本"
+            "label": "证据文件"
           },
           "source_selector": "visible same-case reviewed evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
@@ -512,7 +512,7 @@
           "ui_route": "/documents/:id",
           "control": {
             "role": "combobox",
-            "label": "已复核证据版本"
+            "label": "证据文件"
           },
           "source_selector": "visible same-case reviewed evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
@@ -526,7 +526,7 @@
           "ui_route": "/documents/:id",
           "control": {
             "role": "combobox",
-            "label": "已复核证据版本"
+            "label": "证据文件"
           },
           "source_selector": "visible same-case reviewed evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
@@ -540,7 +540,7 @@
           "ui_route": "/documents/:id",
           "control": {
             "role": "combobox",
-            "label": "已复核证据版本"
+            "label": "证据文件"
           },
           "source_selector": "visible same-case reviewed evidence from the current bundle",
           "normalization": "EVIDENCE_IDENTITY_AND_SHA256",

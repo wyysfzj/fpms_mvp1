@@ -111,17 +111,17 @@ function canonicalFixture() {
       {
         stage: '03',
         inputs: [
-          input('03', 'filing_submission_completed_at', 'EXPLICIT_INPUT', '2026-08-01 09:00:00', '/official-workflows/filing-preparation', label('textbox', '完成时间'), 'operator-entered manual submission completion time', 'ISO_LOCAL_DATETIME_SECONDS'),
-          input('03', 'filing_submission_note', 'EXPLICIT_INPUT', '已完成人工递交', '/official-workflows/filing-preparation', label('textbox', '备注'), 'operator-entered manual submission note', 'TRIM_EXACT'),
-          input('03', 'filing_final_submission_evidence', 'SOURCE_BOUND', 'current reviewed FILING_FINAL_SUBMISSION evidence', '/official-workflows/filing-preparation', label('combobox', '已复核递交文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
-          input('03', 'filing_receipt_evidence', 'SOURCE_BOUND', 'current reviewed FILING_RECEIPT evidence', '/official-workflows/filing-preparation', label('combobox', '已上传回执附件'), 'visible same-case reviewed receipt evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
-          input('03', 'filing_receipt_no', 'EXPLICIT_INPUT', 'CNIPA-20260802-001', '/official-workflows/filing-preparation', label('textbox', '官方接收案件编号'), 'operator-entered filing receipt number', 'TRIM_EXACT'),
-          input('03', 'filing_receipt_received_at', 'EXPLICIT_INPUT', '2026-08-02 10:00:00', '/official-workflows/filing-preparation', label('textbox', '接收时间'), 'operator-entered receipt time', 'ISO_LOCAL_DATETIME_SECONDS'),
-          input('03', 'filing_receipt_receiver', 'EXPLICIT_INPUT', '陈思远', '/official-workflows/filing-preparation', label('textbox', '接收人'), 'operator-entered receiver', 'TRIM_EXACT'),
-          input('03', 'acceptance_notice_evidence', 'SOURCE_BOUND', 'current reviewed ACCEPTANCE_NOTICE evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
-          input('03', 'preliminary_examination_evidence', 'SOURCE_BOUND', 'current reviewed PRELIMINARY_EXAMINATION_SOURCE evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
-          input('03', 'publication_notice_evidence', 'SOURCE_BOUND', 'current reviewed PUBLICATION_NOTICE evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
-          input('03', 'substantive_examination_evidence', 'SOURCE_BOUND', 'current reviewed SUBSTANTIVE_EXAMINATION_SOURCE evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'filing_submission_completed_at', 'EXPLICIT_INPUT', '2026-08-01 09:00:00', '/official-workflows/filing-preparation', label('combobox', '人工递交时间'), 'operator-entered manual submission completion time', 'ISO_LOCAL_DATETIME_SECONDS'),
+          input('03', 'filing_submission_note', 'EXPLICIT_INPUT', '已完成人工递交', '/official-workflows/filing-preparation', label('textbox', '递交备注'), 'operator-entered manual submission note', 'TRIM_EXACT'),
+          input('03', 'filing_final_submission_evidence', 'SOURCE_BOUND', 'current reviewed FILING_FINAL_SUBMISSION evidence', '/official-workflows/filing-preparation', label('button', '记录人工递交完成'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'filing_receipt_evidence', 'SOURCE_BOUND', 'current reviewed FILING_RECEIPT evidence', '/official-workflows/filing-preparation', label('combobox', '回执文件'), 'visible same-case reviewed receipt evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'filing_receipt_no', 'EXPLICIT_INPUT', 'CNIPA-20260802-001', '/official-workflows/filing-preparation', label('textbox', '接收案件编号'), 'operator-entered filing receipt number', 'TRIM_EXACT'),
+          input('03', 'filing_receipt_received_at', 'EXPLICIT_INPUT', '2026-08-02 10:00:00', '/official-workflows/filing-preparation', label('combobox', '接收时间'), 'operator-entered receipt time', 'ISO_LOCAL_DATETIME_SECONDS'),
+          input('03', 'filing_receipt_receiver', 'EXPLICIT_INPUT', '陈思远', '/official-workflows/filing-preparation', label('textbox', '提交人'), 'operator-entered receiver', 'TRIM_EXACT'),
+          input('03', 'acceptance_notice_evidence', 'SOURCE_BOUND', 'current reviewed ACCEPTANCE_NOTICE evidence', '/documents/:id', label('combobox', '证据文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'preliminary_examination_evidence', 'SOURCE_BOUND', 'current reviewed PRELIMINARY_EXAMINATION_SOURCE evidence', '/documents/:id', label('combobox', '证据文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'publication_notice_evidence', 'SOURCE_BOUND', 'current reviewed PUBLICATION_NOTICE evidence', '/documents/:id', label('combobox', '证据文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
+          input('03', 'substantive_examination_evidence', 'SOURCE_BOUND', 'current reviewed SUBSTANTIVE_EXAMINATION_SOURCE evidence', '/documents/:id', label('combobox', '证据文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
         ],
         outputs: [
           output('03', 'submission_and_receipt_lineage', 'APP_GENERATED', 'manual submission and filing receipt bind to the current reviewed filing evidence', '/official-workflows/filing-preparation', label('heading', '新申请递交准备'), 'current package submission and receipt panels', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'submission and receipt lineage is visible', 'one submission and one receipt consume the selected reviewed evidence', '新申请递交准备/递交与回执'),
@@ -379,6 +379,20 @@ function validateContract(actual) {
     }
   }
 
+  const actualStage03 = actual.stages.find((stage) => stage.stage === '03')
+  const expectedStage03 = expected.stages.find((stage) => stage.stage === '03')
+  assert.deepEqual(
+    Object.fromEntries(actualStage03.inputs.map(({ field_key, control }) => [field_key, control])),
+    Object.fromEntries(expectedStage03.inputs.map(({ field_key, control }) => [field_key, control])),
+    'Stage 03 visible locator contract drift',
+  )
+  const withoutControl = (stage) => stage.inputs.map(({ control: _control, ...row }) => row)
+  assert.deepEqual(
+    withoutControl(actualStage03),
+    withoutControl(expectedStage03),
+    'Stage 03 non-control contract drift',
+  )
+
   assert(Array.isArray(actual.strict_assertions), 'strict_assertions must be an array')
   const assertionKeys = new Set()
   for (const [index, row] of actual.strict_assertions.entries()) {
@@ -435,6 +449,10 @@ expectRejected('missing Stage 10 command idempotency key', (fixture) => {
 
 expectRejected('Stage 04 old document-date locator', (fixture) => {
   fixture.stages[3].inputs.find((row) => row.field_key === 'oa_notice_at').control.label = '文书日期'
+}, /control drift/)
+
+expectRejected('Stage 03 old filing completion locator', (fixture) => {
+  fixture.stages[2].inputs.find((row) => row.field_key === 'filing_submission_completed_at').control = label('textbox', '完成时间')
 }, /control drift/)
 
 expectRejected('Stage 05 old document-date locator', (fixture) => {
