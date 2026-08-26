@@ -5,9 +5,12 @@ import hashlib
 import importlib.util
 import json
 import runpy
+import struct
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from pathlib import Path
 from uuid import uuid4
 
@@ -218,6 +221,12 @@ PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8A"
     "AQUBAScY42YAAAAASUVORK5CYII="
 )
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _png_chunk(kind: bytes, content: bytes) -> bytes:
+    checksum = zlib.crc32(kind + content) & 0xFFFFFFFF
+    return struct.pack(">I", len(content)) + kind + content + struct.pack(">I", checksum)
 
 
 def _real_ui_context(
@@ -471,6 +480,46 @@ def test_observer_binding_accepts_only_exact_named_evidence_and_rejects_invalid_
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 
+def test_observer_binding_rejects_structurally_invalid_png_chunks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    iend = _png_chunk(b"IEND", b"")
+    ihdr = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+    bad_crc_ihdr = bytearray(ihdr)
+    bad_crc_ihdr[-1] ^= 1
+    malformed = (
+        PNG_SIGNATURE + iend,
+        PNG_SIGNATURE + _png_chunk(b"IDAT", b"") + iend,
+        PNG_SIGNATURE + _png_chunk(b"IHDR", b"\0" * 12) + iend,
+        PNG_SIGNATURE + bytes(bad_crc_ihdr) + iend,
+        PNG_SIGNATURE
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + b"\0" * 12
+        + b"\0" * 4
+        + iend,
+        PNG_1X1 + iend,
+        PNG_1X1 + b"trailing" + iend,
+    )
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        for stage, content in enumerate(malformed, start=1):
+            payload = _screenshot_payload(
+                session_tuple, f"observer-stage-{stage:02d}.png"
+            )
+            payload["content"] = base64.b64encode(content).decode()
+            assert _host_post(
+                binding.activation_url, "observer-artifact", payload
+            )[0] == 400
+
+    assert not list(observer_root.iterdir())
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
 def test_browser_finalization_requires_complete_evidence_and_cleans_exact_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -599,6 +648,85 @@ def test_malformed_host_evidence_records_failure_and_preserves_exact_run_and_art
         "run_id": context.run_id,
         "run_root_removed": False,
     }
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_unexpected_observer_io_failure_wakes_runner_and_preserves_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    artifact = (tmp_path / "artifact-io-failed").resolve()
+    args = module.parse_args(
+        ["--ui-session", "--actor", "CODEX", "--artifact", str(artifact)]
+    )
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    original_open = module.os.open
+
+    def launch_browser(command, _env):
+        page_query = urllib.parse.parse_qs(urllib.parse.urlsplit(command[-1]).query)
+        activation_url = page_query["fpmsObserverBinding"][0]
+
+        def fail_open(*_args, **_kwargs):
+            raise OSError("sensitive unexpected path")
+
+        monkeypatch.setattr(module.os, "open", fail_open)
+        try:
+            status, body = _host_post(
+                activation_url,
+                "observer-artifact",
+                _ledger_payload(session_tuple),
+            )
+        finally:
+            monkeypatch.setattr(module.os, "open", original_open)
+        assert status == 500
+        assert body == {"error": "OBSERVER_HOST_FAILURE"}
+        assert "sensitive" not in json.dumps(body)
+        return _BrowserProcess()
+
+    monkeypatch.setattr(module, "_start_headed_browser", launch_browser)
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="OBSERVER_HOST_FAILURE"):
+        module._run_ui_browser_session(args, context, artifact)
+    assert time.monotonic() - started < 2
+
+    assert context.run_root.is_dir()
+    final_status = json.loads(
+        (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
+    )
+    assert final_status["status"] == "FAILED"
+    assert final_status["run_root_removed"] is False
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_failed_finalize_response_never_signals_finalized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+    original_dumps = module.json.dumps
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        _upload_complete_evidence(binding.activation_url, session_tuple)
+
+        def fail_final_response(value, *args, **kwargs):
+            if isinstance(value, dict) and value.get("status") == "FINALIZED":
+                raise OSError("sensitive response failure")
+            return original_dumps(value, *args, **kwargs)
+
+        monkeypatch.setattr(module.json, "dumps", fail_final_response)
+        status, body = _host_post(
+            binding.activation_url, "finalize", session_tuple
+        )
+        assert status == 500
+        assert body == {"error": "OBSERVER_HOST_FAILURE"}
+        assert binding.errors == ["OBSERVER_HOST_FAILURE"]
+        assert binding.failed.is_set()
+        assert not binding.finalized.is_set()
+
+    assert context.run_root.is_dir()
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 

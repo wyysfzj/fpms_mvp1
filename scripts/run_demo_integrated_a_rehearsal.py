@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 import zipfile
+import zlib
 from contextlib import contextmanager
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,7 +69,6 @@ _UI_SESSION_TUPLE_KEYS = (
 )
 _UI_SESSION_INTERNAL_OBSERVER_FILES = frozenset({"finalize-binding.json"})
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-_PNG_END = b"IEND\xaeB`\x82"
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
     "route.fulfill(",
@@ -485,6 +485,37 @@ class ObserverBinding(NamedTuple):
     errors: list[str]
 
 
+def _valid_png(content: bytes) -> bool:
+    if not content.startswith(_PNG_SIGNATURE):
+        return False
+    offset = len(_PNG_SIGNATURE)
+    chunk_index = 0
+    while offset < len(content):
+        if len(content) - offset < 12:
+            return False
+        length = int.from_bytes(content[offset : offset + 4], "big")
+        chunk_type = content[offset + 4 : offset + 8]
+        data_start = offset + 8
+        crc_start = data_start + length
+        chunk_end = crc_start + 4
+        if chunk_end > len(content):
+            return False
+        expected_crc = int.from_bytes(content[crc_start:chunk_end], "big")
+        actual_crc = zlib.crc32(content[offset + 4 : crc_start]) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            return False
+        if chunk_index == 0:
+            if chunk_type != b"IHDR" or length != 13:
+                return False
+        elif chunk_type == b"IHDR":
+            return False
+        if chunk_type == b"IEND":
+            return length == 0 and chunk_end == len(content)
+        offset = chunk_end
+        chunk_index += 1
+    return False
+
+
 def _new_run_context(
     *,
     run_id: str,
@@ -626,6 +657,14 @@ def _observer_binding(
                 failed.set()
             self._response(status, {"error": error})
 
+        def _unexpected_failure(self) -> None:
+            errors.append("OBSERVER_HOST_FAILURE")
+            failed.set()
+            try:
+                self._response(500, {"error": "OBSERVER_HOST_FAILURE"})
+            except Exception:
+                pass
+
         def _payload(self) -> dict[str, object] | None:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -717,7 +756,7 @@ def _observer_binding(
                 except (ValueError, binascii.Error):
                     self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
                     return
-                if not content.startswith(_PNG_SIGNATURE) or not content.endswith(_PNG_END):
+                if not _valid_png(content):
                     self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
                     return
             if self._exclusive_write(target, content):
@@ -743,13 +782,18 @@ def _observer_binding(
             if not self._validate_ledger(ledger):
                 return False
             return all(
-                (observer_root / filename).read_bytes().startswith(_PNG_SIGNATURE)
-                and (observer_root / filename).read_bytes().endswith(_PNG_END)
+                _valid_png((observer_root / filename).read_bytes())
                 for filename in UI_SESSION_OBSERVER_FILES
                 if filename.endswith(".png")
             )
 
         def do_OPTIONS(self) -> None:  # noqa: N802
+            try:
+                self._handle_options()
+            except Exception:
+                self._unexpected_failure()
+
+        def _handle_options(self) -> None:
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -757,6 +801,12 @@ def _observer_binding(
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
+            try:
+                self._handle_post()
+            except Exception:
+                self._unexpected_failure()
+
+        def _handle_post(self) -> None:
             parsed = urlsplit(self.path)
             if parse_qs(parsed.query, keep_blank_values=True).get("capability") != [
                 capability
@@ -784,8 +834,8 @@ def _observer_binding(
             if not self._evidence_complete():
                 self._reject(409, "OBSERVER_EVIDENCE_INCOMPLETE")
                 return
-            finalized.set()
             self._response(200, {"status": "FINALIZED"})
+            finalized.set()
 
         def log_message(self, _format: str, *_args: object) -> None:
             return
