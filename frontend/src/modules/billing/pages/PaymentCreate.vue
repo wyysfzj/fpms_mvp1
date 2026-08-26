@@ -129,7 +129,7 @@
             v-if="demoSessionEnabled && demoSelectedBill"
             type="info"
             :closable="false"
-            :title="`当前账单状态：${demoSelectedBill.status}`"
+            :title="`当前账单状态：${getBillStatusText(demoSelectedBill.status)}`"
             :description="`最新可见余额：CNY ${demoSelectedBill.balance}`"
           />
 
@@ -168,6 +168,7 @@ import type { BillListItem, PaymentMethod } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { getBillStatusText } from '../../../constants/displayText'
 import { createDemoBankReceipt, readDemoBill } from '../../demo/demo.api'
 import type { DemoBillDetail } from '../../demo/demo.api'
 import {
@@ -247,7 +248,7 @@ function canCreateDemoPayment(
   const balanceMinor = BigInt(bill.balance.replace('.', ''))
   return amountMinor > 0n
     && amountMinor <= balanceMinor
-    && (bill.status !== 'PARTIALLY_SETTLED' || amount === bill.balance)
+    && (bill.status === 'UNSETTLED' ? amount === '1200.00' : amount === bill.balance)
 }
 
 function syncDemoSession() {

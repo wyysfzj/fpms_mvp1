@@ -202,6 +202,22 @@ assert.equal(
   paymentUi.canCreateDemoPayment(true, session, unsettledBill, ids.bill, '1200.00', 'SERVICE-PAY-1', '2026-08-26', 'BANK-1', '首次回款', false),
   true,
 )
+let rejectedUnsettledMutations = 0
+for (const amount of ['1000.00', '1800.00']) {
+  if (paymentUi.canCreateDemoPayment(
+    true,
+    session,
+    unsettledBill,
+    ids.bill,
+    amount,
+    'SERVICE-PAY-1',
+    '2026-08-26',
+    'BANK-1',
+    '首次回款',
+    false,
+  )) rejectedUnsettledMutations += 1
+}
+assert.equal(rejectedUnsettledMutations, 0)
 assert.equal(
   paymentUi.canCreateDemoPayment(true, session, partiallySettledBill, ids.bill, '600.00', 'SERVICE-PAY-2', '2026-08-26', 'BANK-2', '尾款', false),
   true,
@@ -359,7 +375,25 @@ assert.match(billPage, /账单编号/)
 assert.match(billPage, /账单日期/)
 assert.match(billPage, /到期日期/)
 assert.match(paymentPage, /银行流水参考号/)
-assert.match(paymentListPage, /核销日期/)
+assert.match(paymentPage, /getBillStatusText\(demoSelectedBill\.status\)/)
+assert.match(paymentListPage, /getBillStatusText\(demoOffsetResult\.bill\.status\)/)
+assert.doesNotMatch(paymentPage, /\$\{demoSelectedBill\.status\}/)
+assert.doesNotMatch(paymentListPage, /\$\{demoOffsetResult\.bill\.status\}/)
+assert.match(
+  paymentListPage,
+  /<el-form-item\s+v-if="demoSessionEnabled"\s+label="核销日期"/,
+)
+
+const displayTextSource = await readSource('src/constants/displayText.ts')
+const compiledDisplayText = ts.transpileModule(displayTextSource, {
+  compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
+}).outputText
+const displayText = await import(
+  `data:text/javascript;base64,${Buffer.from(compiledDisplayText).toString('base64')}`
+)
+assert.equal(displayText.getBillStatusText('UNSETTLED'), '未结清')
+assert.equal(displayText.getBillStatusText('PARTIALLY_SETTLED'), '部分结清')
+assert.equal(displayText.getBillStatusText('SETTLED'), '已结清')
 assert.doesNotMatch(billPage + paymentPage + paymentListPage, /<el-input[^>]+(?:bill_id|draft_id|payment_line_id)/i)
 
 delete globalThis.__ordinal07ApiHarness

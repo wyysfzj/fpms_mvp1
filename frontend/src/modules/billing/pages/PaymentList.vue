@@ -219,7 +219,7 @@
       v-if="demoOffsetResult"
       type="success"
       :closable="false"
-      :title="`账单状态：${demoOffsetResult.bill.status}`"
+      :title="`账单状态：${getBillStatusText(demoOffsetResult.bill.status)}`"
       :description="`最新余额：CNY ${demoOffsetResult.bill.balance}`"
     />
     <router-link
@@ -371,7 +371,7 @@
           />
         </el-form-item>
 
-        <el-form-item label="核销日期" prop="offset_date">
+        <el-form-item v-if="demoSessionEnabled" label="核销日期" prop="offset_date">
           <el-date-picker
             v-model="offsetForm.offset_date"
             type="date"
@@ -420,7 +420,10 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
-import { getPrepaymentStatusText as getPrepaymentStatusLabel } from '../../../constants/displayText'
+import {
+  getBillStatusText,
+  getPrepaymentStatusText as getPrepaymentStatusLabel,
+} from '../../../constants/displayText'
 import {
   createDemoFullOffset,
   readDemoPaymentCommand,
