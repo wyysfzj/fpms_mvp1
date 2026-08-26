@@ -12,6 +12,25 @@ const inputsPage = readFileSync(join(root, 'src/modules/demo/pages/DemoInputs.vu
 const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
 const menu = readFileSync(join(root, 'src/constants/menu.ts'), 'utf8')
 const runbook = readFileSync(join(root, '../docs/postdemo/demo-lifecycle-customer-v5-runbook.md'), 'utf8')
+const contractSource = readFileSync(join(root, 'src/modules/demo/demo.contract.ts'), 'utf8')
+
+const contractModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(
+  contractSource,
+  { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
+).outputText).toString('base64')}`)
+const parsedDefaultA = contractModule.parseDemoPreflight({
+  classification: 'DEMO_ONLY', bundle_id: 'integrated-a', bundle_version: 'v2',
+  manifest_sha256: '1'.repeat(64), template_code: 'DEMO', template_sha256: '2'.repeat(64),
+  template_required_variables: [], item_code: 'SERVICE', name_zh_cn: '演示服务费',
+  currency: 'CNY', amount: '1200.00', source_ref: 'synthetic', source_version: 'v1',
+  source_sha256: '3'.repeat(64), disclaimer_zh_cn: '仅用于合成演示',
+  authority_classification: 'CUSTOMER_AUTHORIZED', customer_activation_eligible: true,
+  readiness: 'READY', run_id: null, candidate_commit: null, candidate_tree: null,
+  authority_sha256: '4'.repeat(64), contract_version: null,
+  business_counts: Object.fromEntries(contractModule.DEMO_BUSINESS_COUNT_KEYS.map((key) => [key, 0])),
+})
+assert.equal(parsedDefaultA.authority_classification, 'CUSTOMER_AUTHORIZED')
+assert.deepEqual(Object.keys(parsedDefaultA.business_counts).sort(), [...contractModule.DEMO_BUSINESS_COUNT_KEYS])
 
 function importFunctions(source, names) {
   const sourceFile = ts.createSourceFile(
@@ -86,9 +105,8 @@ for (const readOnlyField of [
   'source_version',
   'source_sha256',
 ]) assert.ok(inputsPage.includes(readOnlyField), `missing read-only input field ${readOnlyField}`)
-for (const businessCount of [
-  'client', 'contact', 'case', 'package', 'task', 'obligation', 'draft', 'bill', 'payment', 'offset',
-]) assert.ok(inputsPage.includes(`key: '${businessCount}'`), `missing business count ${businessCount}`)
+assert.ok(inputsPage.includes('DEMO_BUSINESS_COUNT_KEYS.map'), 'inputs page must render the canonical backend projection')
+assert.ok(inputsPage.includes('business_counts[key]'), 'inputs page must use the canonical count-key type')
 for (const forbiddenControl of [
   'createDemoServiceObligation',
   'recordDemoPayInstruction',

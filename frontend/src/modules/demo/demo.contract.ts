@@ -203,19 +203,7 @@ export interface DemoPreflight extends DemoServiceItem {
   candidate_tree: string | null
   authority_sha256: string
   contract_version: typeof DEMO_UI_PARITY_SCHEMA_ID | null
-  business_counts: {
-    [key: string]: number
-    client: number
-    contact: number
-    case: number
-    package: number
-    task: number
-    obligation: number
-    draft: number
-    bill: number
-    payment: number
-    offset: number
-  }
+  business_counts: Record<DemoBusinessCountKey, number>
 }
 
 export interface DemoUiSessionPreflight extends DemoPreflight {

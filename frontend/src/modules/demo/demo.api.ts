@@ -9,46 +9,17 @@ import {
   parseDemoPreflight,
   parseDemoServiceItem,
 } from './demo.contract'
+import type {
+  DemoFeeObligationResponse,
+  DemoPreflight,
+  DemoServiceItem,
+} from './demo.contract'
+export type { DemoFeeObligationResponse, DemoPreflight, DemoServiceItem } from './demo.contract'
 import {
   reconcileThenRetryMutationOnce,
   reconcileUnknownMutationResult,
   resolveCommandMutationResponse,
 } from './command-reconcile'
-
-export interface DemoServiceItem {
-  classification: 'DEMO_ONLY'
-  bundle_id: string
-  bundle_version: string
-  manifest_sha256: string
-  template_code: string
-  template_sha256: string
-  template_required_variables: string[]
-  item_code: string
-  name_zh_cn: string
-  currency: 'CNY'
-  amount: string
-  source_ref: string
-  source_version: string
-  source_sha256: string
-  disclaimer_zh_cn: string
-}
-
-export interface DemoFeeObligationResponse extends DemoServiceItem {
-  obligation: { id: string }
-  source_activity_id: string
-  idempotency_key: string
-  reused: boolean
-}
-
-export interface DemoPreflight extends DemoServiceItem {
-  authority_classification: 'SYNTHETIC_TEST_ONLY' | 'CUSTOMER_AUTHORIZED'
-  customer_activation_eligible: boolean
-  readiness: 'READY'
-  business_counts: Record<
-    'client' | 'contact' | 'case' | 'package' | 'task' | 'obligation' | 'draft' | 'bill' | 'payment' | 'offset',
-    number
-  >
-}
 
 export interface DemoDraft {
   id: string

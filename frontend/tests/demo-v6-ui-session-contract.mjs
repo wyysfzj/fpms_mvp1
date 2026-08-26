@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { deflateSync } from 'node:zlib'
 import ts from 'typescript'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -10,6 +12,7 @@ const contractPath = join(frontendRoot, 'src/modules/demo/demo.contract.ts')
 const sessionPath = join(frontendRoot, 'src/modules/demo/demoUiSession.ts')
 const httpPath = join(frontendRoot, 'src/api/http.ts')
 const appPath = join(frontendRoot, 'src/App.vue')
+const apiPath = join(frontendRoot, 'src/modules/demo/demo.api.ts')
 const inputsPath = join(frontendRoot, 'src/modules/demo/pages/DemoInputs.vue')
 const bannerPath = join(frontendRoot, 'src/components/demo/DemoBoundaryBanner.vue')
 
@@ -21,111 +24,58 @@ function walk(directory) {
 }
 
 function frozenBackendBusinessKeys() {
-  const systemRuntimeKeys = new Set([
-    't_user',
-    't_role',
-    't_role_perm',
-    't_user_role',
-    't_doc_template',
-    't_task_template',
-    't_fee_rate_book',
-    't_fee_rate',
-  ])
-  const tableKeys = new Set()
+  const runtime = new Set(['t_user', 't_role', 't_role_perm', 't_user_role', 't_doc_template', 't_task_template', 't_fee_rate_book', 't_fee_rate'])
+  const keys = new Set()
   for (const path of walk(join(repoRoot, 'backend/app'))) {
     if (extname(path) !== '.py') continue
-    for (const match of readFileSync(path, 'utf8').matchAll(/__tablename__\s*=\s*["']([^"']+)["']/g)) {
-      tableKeys.add(match[1])
-    }
+    for (const match of readFileSync(path, 'utf8').matchAll(/__tablename__\s*=\s*["']([^"']+)["']/g)) keys.add(match[1])
   }
-  return [...tableKeys].filter((key) => !systemRuntimeKeys.has(key)).sort()
+  return [...keys].filter((key) => !runtime.has(key)).sort()
 }
 
-function typeScriptDataUrl(path, replacements = {}) {
+function tsUrl(path, replacements = {}) {
   let source = readFileSync(path, 'utf8')
   for (const [from, to] of Object.entries(replacements)) source = source.replaceAll(from, to)
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
+  const js = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
     fileName: path,
   }).outputText
-  return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
+  return `data:text/javascript;base64,${Buffer.from(js).toString('base64')}#${Math.random()}`
 }
 
-const contractUrl = typeScriptDataUrl(contractPath)
+const contractUrl = tsUrl(contractPath)
 const contract = await import(contractUrl)
-const expectedBusinessKeys = frozenBackendBusinessKeys()
-assert.equal(
-  contract.DEMO_UI_PARITY_SCHEMA_ID,
-  'fpms.demo-v6-ui-parity/v1',
-  'missing canonical UI-session schema parser',
-)
-assert.deepEqual(
-  contract.DEMO_BUSINESS_COUNT_KEYS,
-  expectedBusinessKeys,
-  'missing exact complete Ordinal 02 business-count projection',
-)
+const exactKeys = frozenBackendBusinessKeys()
+assert.deepEqual(contract.DEMO_BUSINESS_COUNT_KEYS, exactKeys)
 
-const zeroCounts = Object.fromEntries(expectedBusinessKeys.map((key) => [key, 0]))
-const validPreflight = {
-  classification: 'DEMO_ONLY',
-  bundle_id: 'integrated-a',
-  bundle_version: 'v2',
-  manifest_sha256: '1'.repeat(64),
-  template_code: 'DEMO',
-  template_sha256: '2'.repeat(64),
-  template_required_variables: [],
-  item_code: 'SERVICE',
-  name_zh_cn: '演示服务费',
-  currency: 'CNY',
-  amount: '1200.00',
-  source_ref: 'synthetic',
-  source_version: 'v1',
-  source_sha256: '3'.repeat(64),
-  disclaimer_zh_cn: '仅用于合成演示',
-  authority_classification: 'SYNTHETIC_TEST_ONLY',
-  customer_activation_eligible: false,
-  readiness: 'READY',
-  run_id: 'ui-human-contract',
-  candidate_commit: '4'.repeat(40),
-  candidate_tree: '5'.repeat(40),
-  authority_sha256: '6'.repeat(64),
+const preflight = {
+  classification: 'DEMO_ONLY', bundle_id: 'integrated-a', bundle_version: 'v2',
+  manifest_sha256: '1'.repeat(64), template_code: 'DEMO', template_sha256: '2'.repeat(64),
+  template_required_variables: [], item_code: 'SERVICE', name_zh_cn: '演示服务费', currency: 'CNY',
+  amount: '1200.00', source_ref: 'synthetic', source_version: 'v1', source_sha256: '3'.repeat(64),
+  disclaimer_zh_cn: '仅用于合成演示', authority_classification: 'SYNTHETIC_TEST_ONLY',
+  customer_activation_eligible: false, readiness: 'READY', run_id: 'ui-human-contract',
+  candidate_commit: '4'.repeat(40), candidate_tree: '5'.repeat(40), authority_sha256: '6'.repeat(64),
   contract_version: 'fpms.demo-v6-ui-parity/v1',
-  business_counts: zeroCounts,
+  business_counts: Object.fromEntries(exactKeys.map((key) => [key, 0])),
 }
-
-assert.equal(contract.parseDemoUiSessionPreflight(validPreflight).run_id, validPreflight.run_id)
+assert.equal(contract.parseDemoUiSessionPreflight(preflight).run_id, preflight.run_id)
 for (const mutate of [
-  (value) => { delete value.business_counts[expectedBusinessKeys[0]] },
-  (value) => { value.business_counts.unfrozen_table = 0 },
-  (value) => { value.business_counts[expectedBusinessKeys[0]] = 1 },
-  (value) => { value.authority_classification = 'CUSTOMER_AUTHORIZED' },
-  (value) => { value.contract_version = 'fpms.demo-v6-ui-parity/v0' },
-  (value) => { value.candidate_commit = 'not-a-commit' },
+  (row) => { delete row.business_counts[exactKeys[0]] },
+  (row) => { row.business_counts.extra = 0 },
+  (row) => { row.business_counts[exactKeys[0]] = 1 },
+  (row) => { row.authority_classification = 'CUSTOMER_AUTHORIZED' },
+  (row) => { row.contract_version = 'fpms.demo-v6-ui-parity/v0' },
 ]) {
-  const changed = structuredClone(validPreflight)
-  mutate(changed)
-  assert.throws(() => contract.parseDemoUiSessionPreflight(changed), /FinanceContractError/)
+  const row = structuredClone(preflight); mutate(row)
+  assert.throws(() => contract.parseDemoUiSessionPreflight(row), /FinanceContractError/)
 }
+const defaultA = structuredClone(preflight)
+Object.assign(defaultA, { authority_classification: 'CUSTOMER_AUTHORIZED', customer_activation_eligible: true, run_id: null, candidate_commit: null, candidate_tree: null, contract_version: null })
+assert.equal(contract.parseDemoPreflight(defaultA).authority_classification, 'CUSTOMER_AUTHORIZED')
 
-const defaultAPreflight = structuredClone(validPreflight)
-defaultAPreflight.authority_classification = 'CUSTOMER_AUTHORIZED'
-defaultAPreflight.customer_activation_eligible = true
-defaultAPreflight.run_id = null
-defaultAPreflight.candidate_commit = null
-defaultAPreflight.candidate_tree = null
-defaultAPreflight.contract_version = null
-assert.equal(
-  contract.parseDemoPreflight(defaultAPreflight).authority_classification,
-  'CUSTOMER_AUTHORIZED',
-  'the V6-only decoder must not absorb /demo/abc',
-)
-
-const session = await import(typeScriptDataUrl(sessionPath, {
-  "'./demo.contract'": `'${contractUrl}'`,
-}))
+const sessionImport = () => import(tsUrl(sessionPath, { "'./demo.contract'": `'${contractUrl}'` }))
+const session = await sessionImport()
 
 class MemoryStorage {
   values = new Map()
@@ -133,111 +83,262 @@ class MemoryStorage {
   setItem(key, value) { this.values.set(key, value) }
   removeItem(key) { this.values.delete(key) }
 }
+class MemoryStages {
+  rows = []
+  async put(runId, stage, png) { this.rows.push({ runId, stage, png }) }
+  async list(runId) { return this.rows.filter((row) => row.runId === runId).map(({ stage, png }) => ({ stage, png })).sort((a, b) => a.stage - b.stage) }
+  async clear(runId) { this.rows = this.rows.filter((row) => row.runId !== runId) }
+}
 
+const tuple = {
+  contract_version: preflight.contract_version, run_id: preflight.run_id,
+  candidate_commit: preflight.candidate_commit, candidate_tree: preflight.candidate_tree,
+  authority_sha256: preflight.authority_sha256, actor: 'HUMAN',
+}
+const capability = 'unguessable_test_capability_0123456789ABCDEF'
+const binding = `http://127.0.0.1:43123/observer-artifact?capability=${capability}&actor=HUMAN`
+const pageUrl = `http://127.0.0.1:5173/?fpmsObserverBinding=${encodeURIComponent(binding)}`
+assert.equal(session.configureDemoObserverBinding(pageUrl), true)
+for (const bad of [
+  'http://example.test/?fpmsObserverBinding=x',
+  `http://127.0.0.1:5173/?fpmsObserverBinding=${encodeURIComponent('http://127.0.0.1:43123/observer-artifact?actor=HUMAN')}`,
+  `http://127.0.0.1:5173/?fpmsObserverBinding=${encodeURIComponent(`http://127.0.0.1:43123/observer-artifact?capability=${capability}&actor=ROBOT`)}`,
+]) assert.equal(session.configureDemoObserverBinding(bad), false)
+assert.equal(session.configureDemoObserverBinding(pageUrl), true)
+
+const requests = []
+const hostFetch = async (url, init) => {
+  const body = JSON.parse(init.body)
+  requests.push({ url, body })
+  for (const [key, value] of Object.entries(tuple)) assert.equal(body[key], value, `host tuple ${key}`)
+  const pathname = new URL(url).pathname
+  assert.equal(new URL(url).searchParams.get('capability'), capability)
+  assert.equal(new URL(url).searchParams.has('actor'), false)
+  return { ok: true, status: pathname === '/observer-artifact' ? 201 : 200 }
+}
 const storage = new MemoryStorage()
-assert.equal(
-  session.configureDemoObserverBinding(
-    'http://127.0.0.1:5173/demo/inputs?fpmsObserverBinding=http%3A%2F%2F127.0.0.1%3A43123%2Fobserver-artifact',
-  ),
-  true,
-)
-assert.equal(session.activateDemoUiSession(validPreflight, storage), true)
-const persisted = JSON.parse(storage.getItem(session.DEMO_UI_SESSION_STORAGE_KEY))
-assert.deepEqual(Object.keys(persisted).sort(), [
-  'authority_classification',
-  'authority_sha256',
-  'candidate_commit',
-  'candidate_tree',
-  'contract_version',
-  'run_id',
-])
-assert.equal(session.restoreDemoUiSession(validPreflight, storage), true)
+assert.equal(await session.activateDemoUiSession(preflight, storage, hostFetch), true)
+assert.deepEqual(requests[0], { url: `http://127.0.0.1:43123/revalidate?capability=${capability}`, body: tuple })
+const stored = JSON.parse(storage.getItem(session.DEMO_UI_SESSION_STORAGE_KEY))
+assert.equal(stored.binding, binding)
+assert.deepEqual(stored.tuple, tuple)
+assert.ok(!JSON.stringify(session.getDemoObserverLedger()).includes(capability))
 
-const drifted = structuredClone(validPreflight)
-drifted.candidate_tree = '7'.repeat(40)
-assert.equal(session.restoreDemoUiSession(drifted, storage), false)
-assert.equal(storage.getItem(session.DEMO_UI_SESSION_STORAGE_KEY), null)
-assert.equal(session.isDemoUiSessionActive(), false)
-assert.equal(session.getDemoObserverLedger().at(-1).kind, 'STOP')
+const reloaded = await sessionImport()
+assert.equal(await reloaded.restoreDemoUiSession(storage, hostFetch), true)
+assert.equal(requests.filter((entry) => new URL(entry.url).pathname === '/revalidate').length, 2)
+assert.ok(!readFileSync(appPath, 'utf8').includes('readDemoPreflight'))
 
-assert.equal(session.activateDemoUiSession(validPreflight, storage), true)
-const actionId = session.recordVisibleAction({
-  route: '/clients/new',
-  role: 'button',
-  label_or_testid: '保存',
-})
-const requestConfig = {
-  method: 'post',
-  url: '/clients?leak=customer@example.test',
-  baseURL: 'http://127.0.0.1:8000/api/v1',
-  data: {
-    customer_name: '应被摘要',
-    password: 'never-store-this',
-    nested: { token: 'never-store-this-either', value: 3 },
-  },
+function crc32(bytes) {
+  let crc = 0xffffffff
+  for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0) }
+  return (crc ^ 0xffffffff) >>> 0
 }
-assert.equal(
-  session.observeMutationRequest(requestConfig),
-  requestConfig,
-  'passive observer must return the identical Axios config synchronously',
-)
-await session.waitForObserverDigests()
-session.observeMutationResponse(requestConfig, 201)
-const mutation = session.getDemoObserverLedger().find((entry) => entry.kind === 'mutation')
-assert.equal(mutation.action_id, actionId, 'mutation must correlate the immediately preceding action')
-assert.equal(mutation.method, 'POST')
-assert.equal(mutation.path, '/clients')
-assert.equal(mutation.status, 201)
-assert.match(mutation.payload_sha256, /^[0-9a-f]{64}$/)
-const serializedLedger = JSON.stringify(session.getDemoObserverLedger())
-for (const forbidden of [
-  '应被摘要',
-  'never-store-this',
-  'customer@example.test',
-  'password',
-  'token',
+function chunk(name, data) {
+  const type = Buffer.from(name)
+  const length = Buffer.alloc(4); length.writeUInt32BE(data.length)
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([type, data])))
+  return Buffer.concat([length, type, data, crc])
+}
+function png(stage) {
+  const width = 640; const height = 360
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2
+  const row = Buffer.alloc(1 + width * 3); row[0] = 0
+  for (let x = 0; x < width; x += 1) { row[1 + x * 3] = stage * 17; row[2 + x * 3] = x % 251; row[3 + x * 3] = (stage * 29 + x) % 251 }
+  const raw = Buffer.concat(Array.from({ length: height }, () => row))
+  return new Blob([Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])], { type: 'image/png' })
+}
+
+const stageStore = new MemoryStages()
+let stage = 0
+reloaded.setDemoStageEvidenceAdaptersForTest(stageStore, async () => png(++stage))
+for (let value = 1; value <= 11; value += 1) await reloaded.captureDemoStageScreenshot(value)
+assert.equal(await reloaded.getNextDemoScreenshotStage(), null)
+assert.equal(new Set(await Promise.all(stageStore.rows.map(async (row) => createHash('sha256').update(Buffer.from(await row.png.arrayBuffer())).digest('hex')))).size, 11)
+await reloaded.finalizeDemoUiSessionEvidence(hostFetch)
+const finalPaths = requests.slice(2).map((entry) => new URL(entry.url).pathname)
+assert.deepEqual(finalPaths, ['/observer-artifact', ...Array(11).fill('/observer-artifact'), '/finalize'])
+assert.equal(requests.at(-13).body.filename, 'observer-ui-ledger.json')
+for (let value = 1; value <= 11; value += 1) assert.equal(requests.at(-13 + value).body.filename, `observer-stage-${String(value).padStart(2, '0')}.png`)
+assert.equal(storage.getItem(reloaded.DEMO_UI_SESSION_STORAGE_KEY), null)
+
+const stopped = await sessionImport()
+const stopStorage = new MemoryStorage()
+assert.equal(stopped.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await stopped.activateDemoUiSession(preflight, stopStorage, hostFetch), true)
+stopped.handleDemoUiRoute('/demo/abc', hostFetch)
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(stopped.isDemoUiSessionActive(), false)
+assert.equal(stopped.getDemoObserverLedger().at(-1).kind, 'STOP')
+assert.equal(requests.at(-1).body.filename, 'observer-ui-ledger.json')
+assert.equal(requests.at(-1).body.content.events.at(-1).kind, 'STOP')
+
+for (const [reason, trigger] of [
+  ['manual preflight', async (module, localStorage) => {
+    const invalid = structuredClone(preflight)
+    invalid.business_counts[exactKeys[0]] = 1
+    assert.equal(await module.activateDemoUiSession(invalid, localStorage, hostFetch), false)
+  }],
+  ['unmatched mutation', async (module) => {
+    module.observeMutationRequest({ method: 'patch', url: '/cases/1', data: { value: 1 } })
+  }],
 ]) {
-  assert.ok(!serializedLedger.includes(forbidden), `observer leaked ${forbidden}`)
+  const module = await sessionImport()
+  const localStorage = new MemoryStorage()
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  if (reason !== 'manual preflight') assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  const beforeStop = requests.length
+  await trigger(module, localStorage)
+  await module.waitForObserverDigests()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(module.isDemoUiSessionActive(), false, `${reason} must STOP`)
+  assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP', `${reason} must be auditable`)
+  const stopExport = requests.slice(beforeStop).findLast((entry) => entry.body.filename === 'observer-ui-ledger.json')
+  assert.equal(stopExport?.body.content.events.at(-1).kind, 'STOP', `${reason} must export STOP`)
 }
 
-const handlers = { request: [], response: [] }
-const fakeAxios = {
-  interceptors: {
-    request: { use(onFulfilled, onRejected) { handlers.request.push({ onFulfilled, onRejected }) } },
-    response: { use(onFulfilled, onRejected) { handlers.response.push({ onFulfilled, onRejected }) } },
-  },
+const revalidationSession = await sessionImport()
+const revalidationStorage = new MemoryStorage()
+assert.equal(revalidationSession.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await revalidationSession.activateDemoUiSession(preflight, revalidationStorage, hostFetch), true)
+const rejectRevalidationFetch = async (url, init) => {
+  if (new URL(url).pathname === '/revalidate') return { ok: false, status: 409 }
+  return hostFetch(url, init)
 }
-session.installDemoUiObserver(fakeAxios)
-assert.equal(handlers.request.length, 1)
-assert.equal(handlers.response.length, 1)
-assert.equal(handlers.request[0].onFulfilled({ method: 'get', url: '/cases' }).method, 'get')
-assert.equal(fakeAxios.request, undefined, 'installing the observer must not issue a request')
+const revalidationReload = await sessionImport()
+assert.equal(await revalidationReload.restoreDemoUiSession(revalidationStorage, rejectRevalidationFetch), false)
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(revalidationReload.getDemoObserverLedger().at(-1).kind, 'STOP')
 
-const observerWrites = []
-await session.finalizeDemoUiSessionEvidence(async (url, init) => {
-  observerWrites.push({ url, init })
-  return { ok: true, status: 201 }
-})
-assert.equal(observerWrites.length, 1)
-assert.equal(observerWrites[0].url, 'http://127.0.0.1:43123/observer-artifact')
-assert.equal(observerWrites[0].init.method, 'POST')
-const observerBody = JSON.parse(observerWrites[0].init.body)
-assert.equal(observerBody.filename, 'observer-ui-ledger.json')
-assert.equal(observerBody.encoding, 'json')
-assert.ok(Array.isArray(observerBody.content.events))
+const rejectedFinalize = await sessionImport()
+const rejectedStorage = new MemoryStorage()
+const rejectedStages = new MemoryStages()
+let rejectedStage = 0
+assert.equal(rejectedFinalize.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await rejectedFinalize.activateDemoUiSession(preflight, rejectedStorage, hostFetch), true)
+rejectedFinalize.setDemoStageEvidenceAdaptersForTest(rejectedStages, async () => png(++rejectedStage))
+for (let value = 1; value <= 11; value += 1) await rejectedFinalize.captureDemoStageScreenshot(value)
+const rejectedCalls = []
+const rejectPngFetch = async (url, init) => {
+  const body = JSON.parse(init.body)
+  rejectedCalls.push({ url, body })
+  if (body.filename === 'observer-stage-01.png') return { ok: false, status: 409 }
+  return { ok: true, status: new URL(url).pathname === '/observer-artifact' ? 201 : 200 }
+}
+await assert.rejects(rejectedFinalize.finalizeDemoUiSessionEvidence(rejectPngFetch), /OBSERVER_PNG_409/)
+assert.equal(rejectedFinalize.getDemoObserverLedger().at(-1).kind, 'STOP')
+assert.notEqual(rejectedStorage.getItem(rejectedFinalize.DEMO_UI_SESSION_STORAGE_KEY), null)
+assert.equal(rejectedStages.rows.length, 11)
+assert.deepEqual(rejectedCalls.map((entry) => entry.body.filename ?? new URL(entry.url).pathname), ['observer-ui-ledger.json', 'observer-stage-01.png'])
 
-const httpSource = readFileSync(httpPath, 'utf8')
-const appSource = readFileSync(appPath, 'utf8')
-const inputsSource = readFileSync(inputsPath, 'utf8')
-const bannerSource = readFileSync(bannerPath, 'utf8')
-assert.ok(httpSource.includes('installDemoUiObserver(http)'))
-assert.ok(appSource.includes('<DemoBoundaryBanner'))
-assert.ok(bannerSource.includes('合成演示数据｜仅用于技术展示，非客户、生产或官方事实'))
-assert.ok(inputsSource.includes('完成并导出本轮证据'))
-assert.ok(inputsSource.includes('finalizeDemoUiSessionEvidence'))
-assert.ok(!inputsSource.includes("http.post"))
-assert.ok(!inputsSource.includes("http.put"))
-assert.ok(!inputsSource.includes("http.patch"))
-assert.ok(!inputsSource.includes("http.delete"))
+const interceptorState = { request: new Map(), response: new Map(), requestEjects: 0, responseEjects: 0, next: 0 }
+const fakeAxios = { interceptors: {
+  request: { use(ok, bad) { const id = interceptorState.next++; interceptorState.request.set(id, { ok, bad }); return id }, eject(id) { interceptorState.request.delete(id); interceptorState.requestEjects++ } },
+  response: { use(ok, bad) { const id = interceptorState.next++; interceptorState.response.set(id, { ok, bad }); return id }, eject(id) { interceptorState.response.delete(id); interceptorState.responseEjects++ } },
+} }
+const axiosSession = await sessionImport()
+assert.equal(axiosSession.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await axiosSession.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+let dispose = axiosSession.installDemoUiObserver(fakeAxios)
+assert.deepEqual([interceptorState.request.size, interceptorState.response.size], [1, 1])
+dispose = axiosSession.installDemoUiObserver(fakeAxios)
+assert.deepEqual([interceptorState.request.size, interceptorState.response.size, interceptorState.requestEjects, interceptorState.responseEjects], [1, 1, 1, 1])
+const requestConfig = { method: 'post', url: '/clients', data: { password: 'secret', customer_name: '张三' } }
+axiosSession.recordVisibleAction({ route: '/clients', role: 'button', label_or_testid: '保存' })
+interceptorState.request.values().next().value.ok(requestConfig)
+const responseHandler = interceptorState.response.values().next().value
+const conflict = { config: requestConfig, response: { status: 409 }, name: 'AxiosError', code: 'ERR_BAD_RESPONSE' }
+await assert.rejects(responseHandler.bad(conflict), (error) => error === conflict)
+assert.equal(axiosSession.getDemoObserverLedger().find((event) => event.kind === 'mutation').status, 409)
+assert.equal(axiosSession.isDemoUiSessionActive(), true)
+axiosSession.recordVisibleAction({ route: '/clients', role: 'button', label_or_testid: '保存' })
+const transportConfig = { method: 'delete', url: '/clients/1', data: null }
+interceptorState.request.values().next().value.ok(transportConfig)
+const transport = { config: transportConfig, name: 'AxiosError', code: 'ERR_NETWORK' }
+await assert.rejects(responseHandler.bad(transport), (error) => error === transport)
+assert.equal(axiosSession.getDemoObserverLedger().findLast((event) => event.kind === 'mutation').status, 0)
+assert.equal(axiosSession.isDemoUiSessionActive(), false)
+dispose()
+assert.deepEqual([interceptorState.request.size, interceptorState.response.size], [0, 0])
+
+class FakeTarget {
+  listeners = new Map()
+  addEventListener(name, handler) { this.listeners.set(`${name}:${String(handler)}`, { name, handler }) }
+  removeEventListener(name, handler) { this.listeners.delete(`${name}:${String(handler)}`) }
+  dispatchEvent(event) {
+    for (const entry of this.listeners.values()) if (entry.name === event.type) entry.handler(event)
+    return true
+  }
+  count(name) { return [...this.listeners.values()].filter((entry) => entry.name === name).length }
+}
+const savedWindow = globalThis.window
+const savedDocument = globalThis.document
+const savedCustomEvent = globalThis.CustomEvent
+const savedFetch = globalThis.fetch
+const fakeWindow = new FakeTarget()
+fakeWindow.location = { pathname: '/', href: pageUrl, origin: 'http://127.0.0.1:5173' }
+const fakeDocument = new FakeTarget()
+globalThis.window = fakeWindow
+globalThis.document = fakeDocument
+globalThis.CustomEvent = class { constructor(type) { this.type = type } }
+globalThis.fetch = hostFetch
+const domSession = await sessionImport()
+assert.equal(domSession.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await domSession.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+const originalConsoleError = console.error
+let disposeDom = domSession.installDemoUiDomObserver()
+assert.notEqual(console.error, originalConsoleError)
+assert.deepEqual([fakeDocument.count('click'), fakeDocument.count('submit'), fakeWindow.count('error'), fakeWindow.count('unhandledrejection')], [1, 1, 1, 1])
+fakeWindow.location.pathname = '/login'
+fakeWindow.dispatchEvent({ type: 'error', message: 'ignored login error', error: new Error('ignored login error') })
+assert.equal(domSession.isDemoUiSessionActive(), true, '/login must not be observed')
+fakeWindow.location.pathname = '/'
+disposeDom()
+assert.equal(console.error, originalConsoleError)
+assert.deepEqual([fakeDocument.count('click'), fakeDocument.count('submit'), fakeWindow.count('error'), fakeWindow.count('unhandledrejection')], [0, 0, 0, 0])
+disposeDom = domSession.installDemoUiDomObserver()
+assert.deepEqual([fakeDocument.count('click'), fakeWindow.count('error')], [1, 1])
+disposeDom()
+
+for (const [source, fire] of [
+  ['console error', () => console.error('dynamic observer failure')],
+  ['window error', () => fakeWindow.dispatchEvent({ type: 'error', message: 'window failure', error: new Error('window failure') })],
+  ['unhandled rejection', () => fakeWindow.dispatchEvent({ type: 'unhandledrejection', reason: new Error('rejection failure') })],
+]) {
+  const module = await sessionImport()
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+  const beforeInstall = console.error
+  const disposeFailureObserver = module.installDemoUiDomObserver()
+  fire()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(module.isDemoUiSessionActive(), false, `${source} must STOP`)
+  assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP')
+  assert.equal(requests.at(-1).body.content.events.at(-1).kind, 'STOP')
+  disposeFailureObserver()
+  assert.equal(console.error, beforeInstall, `${source} disposer restores console`)
+}
+globalThis.window = savedWindow
+globalThis.document = savedDocument
+globalThis.CustomEvent = savedCustomEvent
+globalThis.fetch = savedFetch
+
+const sessionSource = readFileSync(sessionPath, 'utf8')
+const sources = {
+  session: sessionSource, http: readFileSync(httpPath, 'utf8'), app: readFileSync(appPath, 'utf8'),
+  api: readFileSync(apiPath, 'utf8'), inputs: readFileSync(inputsPath, 'utf8'), banner: readFileSync(bannerPath, 'utf8'),
+}
+assert.match(sources.api, /import type \{[\s\S]*DemoPreflight/)
+assert.match(sources.session, /console\.error = originalConsoleError/)
+assert.match(sources.session, /removeEventListener\('click'/)
+assert.match(sources.session, /getDisplayMedia/)
+assert.match(sources.session, /stream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
+assert.match(sources.app, /\/demo\/abc/)
+assert.match(sources.app, /\/login/)
+assert.ok(sources.http.includes('installDemoUiObserver(http)'))
+assert.ok(sources.banner.includes('合成演示数据｜仅用于技术展示，非客户、生产或官方事实'))
+assert.ok(sources.banner.includes('记录阶段'))
+assert.ok(sources.inputs.includes('完成并导出本轮证据'))
+assert.ok(!/http\.(post|put|patch|delete)/.test(sources.inputs))
 
 console.log('demo V6 UI session contract: PASS')

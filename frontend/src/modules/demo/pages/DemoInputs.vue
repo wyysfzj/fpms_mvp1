@@ -96,6 +96,7 @@ import {
   DEMO_UI_SESSION_CHANGE_EVENT,
   finalizeDemoUiSessionEvidence,
   isDemoUiSessionActive,
+  stopDemoUiSession,
 } from '../demoUiSession'
 
 type BusinessCountKey = (typeof DEMO_BUSINESS_COUNT_KEYS)[number]
@@ -116,8 +117,7 @@ function syncDemoSession(): void {
 }
 
 function businessCount(key: BusinessCountKey): number {
-  const counts = preflight.value?.business_counts as unknown as Record<string, number> | undefined
-  return counts?.[key] ?? 0
+  return preflight.value?.business_counts[key] ?? 0
 }
 
 async function loadPreflight(): Promise<void> {
@@ -127,13 +127,14 @@ async function loadPreflight(): Promise<void> {
   sessionMessage.value = null
   try {
     preflight.value = await readDemoPreflight()
-    if (activateDemoUiSession(preflight.value)) {
+    if (await activateDemoUiSession(preflight.value)) {
       sessionMessage.value = '合成演示会话已通过当前预检绑定。'
     } else {
       sessionMessage.value = '预检绑定与当前会话不一致，已停止本轮演示。'
     }
   } catch (caught) {
     error.value = caught as ApiError
+    stopDemoUiSession('PREFLIGHT_FAILED')
   } finally {
     loading.value = false
   }
