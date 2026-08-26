@@ -100,6 +100,26 @@
                 <small>{{ getReplyDocumentDateText(oaPackage.reply_document) }}</small>
               </div>
             </div>
+            <el-form label-position="top" class="reply-selector">
+              <el-form-item label="答复文书">
+                <el-select v-model="selectedReplyKey" placeholder="请选择当前案件已复核答复文书">
+                  <el-option
+                    v-for="option in replyOptions"
+                    :key="replyKey(option)"
+                    :value="replyKey(option)"
+                    :label="`${option.title}｜${option.role}｜${option.filename}`"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-button
+                type="primary"
+                :disabled="!selectedReply"
+                :loading="linkingReply"
+                @click="handleLinkReplyDocument"
+              >
+                关联所选答复文书
+              </el-button>
+            </el-form>
           </section>
 
           <section class="case-panel">
@@ -122,6 +142,7 @@
           />
           <ReceiptArchivePanel
             :package-id="oaPackage.package.id"
+            :case-id="oaPackage.package.case_id"
             :package-kind="oaPackage.package.package_kind"
             :package-status="oaPackage.package.status"
             :archive-status="oaPackage.package.status"
@@ -198,10 +219,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getOaReplyPackage,
+  linkReviewedOaReplyDocument,
   refreshOaReplyPackage,
   resolveOaReplyPackage,
   updateOaReplyChecklist,
 } from '../../../api/officialWorkflows'
+import {
+  getCaseDocumentsWithEvidence,
+  selectReviewedReplyDocumentOptions,
+} from '../../../api/documents'
+import type { ReviewedReplyDocumentOption } from '../../../api/documents.types'
 import type {
   OaReplyDocument,
   OaReplyPackage,
@@ -222,11 +249,17 @@ const refreshing = ref(false)
 const reviewingCode = ref('')
 const experimentUpdating = ref(false)
 const error = ref<ApiError | null>(null)
+const replyOptions = ref<ReviewedReplyDocumentOption[]>([])
+const selectedReplyKey = ref('')
+const linkingReply = ref(false)
 
 const packageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 const documentId = computed(() => String(route.query.document_id || route.query.documentId || '').trim())
 
 const receiptEvidenceReady = computed(() => isDone(oaPackage.value?.package.status))
+const selectedReply = computed(() =>
+  replyOptions.value.find((option) => replyKey(option) === selectedReplyKey.value) || null
+)
 const receiptEvidenceStatus = computed(() => {
   if (!oaPackage.value) return '待生成'
   return receiptEvidenceReady.value ? '已归档' : '待回执归档'
@@ -265,6 +298,7 @@ async function initializePackage() {
   try {
     const resolved = await resolveOaReplyPackage(documentId.value)
     oaPackage.value = resolved
+    await loadReplyCandidates()
     const query = { ...route.query }
     delete query.document_id
     delete query.documentId
@@ -291,6 +325,7 @@ async function fetchPackage() {
   error.value = null
   try {
     oaPackage.value = await getOaReplyPackage(packageId.value)
+    await loadReplyCandidates()
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -305,6 +340,7 @@ async function handleRefresh() {
   error.value = null
   try {
     oaPackage.value = await refreshOaReplyPackage(packageId.value)
+    await loadReplyCandidates()
     ElMessage.success('工作包已刷新')
   } catch (err) {
     error.value = err as ApiError
@@ -329,6 +365,46 @@ async function handleChecklistDone(itemCode: string, evidenceNote: string) {
     error.value = err as ApiError
   } finally {
     reviewingCode.value = ''
+  }
+}
+
+async function loadReplyCandidates() {
+  const current = oaPackage.value
+  const sourceDocumentId = current?.source_document?.id
+  if (!current || !sourceDocumentId) {
+    replyOptions.value = []
+    selectedReplyKey.value = ''
+    return
+  }
+  const documents = await getCaseDocumentsWithEvidence(current.package.case_id)
+  replyOptions.value = selectReviewedReplyDocumentOptions(
+    documents,
+    current.package.case_id,
+    sourceDocumentId,
+  )
+  if (!replyOptions.value.some((option) => replyKey(option) === selectedReplyKey.value)) {
+    selectedReplyKey.value = ''
+  }
+}
+
+async function handleLinkReplyDocument() {
+  if (!oaPackage.value || !selectedReply.value) {
+    ElMessage.warning('请选择当前案件已复核答复文书')
+    return
+  }
+  linkingReply.value = true
+  error.value = null
+  try {
+    oaPackage.value = await linkReviewedOaReplyDocument(
+      oaPackage.value.package.id,
+      oaPackage.value.package.case_id,
+      selectedReply.value,
+    )
+    ElMessage.success('答复文书已关联')
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    linkingReply.value = false
   }
 }
 
@@ -379,6 +455,10 @@ function getReplyDocumentDateText(document?: OaReplyDocument | null): string {
   if (!document) return '待关联答复文书'
   if (document.reply_date) return `内部回复日期：${document.reply_date}`
   return document.doc_date ? `文书日期：${document.doc_date}` : '内部回复日期待维护'
+}
+
+function replyKey(option: ReviewedReplyDocumentOption): string {
+  return `${option.document_id}:${option.evidence_version_id}:${option.content_hash}`
 }
 
 function goBack() {
@@ -535,6 +615,10 @@ function getPackageStatusTagType(status?: string | null): 'success' | 'warning' 
 .review-actions {
   display: grid;
   gap: 8px;
+}
+
+.reply-selector {
+  margin-top: 14px;
 }
 
 .review-actions .el-button {

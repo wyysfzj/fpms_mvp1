@@ -224,6 +224,48 @@ export interface AttachmentEvidenceProjection {
     is_final: boolean
 }
 
+export type DocumentLifecycleActionCode =
+    | 'ACCEPTANCE_NOTICE'
+    | 'PRELIMINARY_START'
+    | 'PRELIMINARY_PASS'
+    | 'PUBLICATION_NOTICE'
+    | 'SUBSTANTIVE_START'
+
+export interface ReviewedDocumentEvidenceOption {
+    document_id: string
+    case_id: string
+    title: string
+    attachment_id: string
+    filename: string
+    role: string
+    evidence_version_id: string
+    content_hash: string
+}
+
+export interface ReviewedReplyDocumentOption extends ReviewedDocumentEvidenceOption {
+    ref_no?: string
+    doc_date?: string
+}
+
+export interface DocumentLifecycleEvidenceTiming {
+    effective_at: string
+    occurred_at: string | null
+    idempotency_key: string
+}
+
+export interface DocumentLifecycleEvidenceResult {
+    case_id: string
+    document_id: string
+    evidence_version_id: string
+    activity_id: string
+    activity_sequence: number
+    lifecycle_revision: number
+    effective_at: string
+    occurred_at: string | null
+    idempotency_key: string
+    reused: boolean
+}
+
 export interface DocumentEvidenceReviewPayload {
     case_id: string
     decision: 'APPROVE' | 'REJECT'

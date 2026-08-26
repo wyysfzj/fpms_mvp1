@@ -17,6 +17,9 @@ import type {
     DocumentMailingBatchOut,
     DocumentCreatePayload,
     DocumentEvidenceReviewPayload,
+    DocumentLifecycleActionCode,
+    DocumentLifecycleEvidenceResult,
+    DocumentLifecycleEvidenceTiming,
     DocumentImpactPreviewPayload,
     DocumentImpactPreviewResult,
     DocumentListParams,
@@ -33,6 +36,8 @@ import type {
     GrantEvidenceCandidate,
     GrantEvidenceReviewPayload,
     GrantEvidenceReviewResult,
+    ReviewedDocumentEvidenceOption,
+    ReviewedReplyDocumentOption,
 } from './documents.types'
 
 interface BackendAttachment {
@@ -156,6 +161,110 @@ function mapDocument(input: BackendDocument): Document {
         official_due_date_status: input.official_due_date_status ?? null,
         attachments: (input.attachments || []).map(mapAttachment),
     }
+}
+
+export function selectReviewedEvidenceOptions(
+    documents: Document[],
+    caseId: string,
+): ReviewedDocumentEvidenceOption[] {
+    if (!caseId.trim()) return []
+    return documents.flatMap((document) => {
+        if (document.case_id !== caseId) return []
+        return (document.attachments || []).flatMap((attachment) => {
+            const role = String(attachment.role || attachment.official_file_role || '').trim()
+            if (
+                attachment.document_id && attachment.document_id !== document.id
+                || attachment.review_state !== 'APPROVED'
+                || attachment.is_current !== true
+                || attachment.is_final !== true
+                || !attachment.evidence_version_id
+                || !attachment.content_hash
+                || !/^sha256:[0-9a-f]{64}$/.test(attachment.content_hash)
+                || !role
+            ) return []
+            return [{
+                document_id: document.id,
+                case_id: caseId,
+                title: document.title,
+                attachment_id: attachment.id,
+                filename: attachment.filename,
+                role,
+                evidence_version_id: attachment.evidence_version_id,
+                content_hash: attachment.content_hash,
+            }]
+        })
+    })
+}
+
+export function selectReviewedReplyDocumentOptions(
+    documents: Document[],
+    caseId: string,
+    sourceDocumentId: string,
+): ReviewedReplyDocumentOption[] {
+    if (!sourceDocumentId.trim()) return []
+    const byDocument = new Map(documents.map((document) => [document.id, document]))
+    return selectReviewedEvidenceOptions(documents, caseId).flatMap((option) => {
+        const document = byDocument.get(option.document_id)
+        if (!document || document.direction !== 'OUT' || document.reply_to_id !== sourceDocumentId) return []
+        return [{ ...option, ref_no: document.ref_no, doc_date: document.doc_date }]
+    })
+}
+
+export function selectReviewedReceiptEvidenceOptions(
+    documents: Document[],
+    caseId: string,
+): ReviewedDocumentEvidenceOption[] {
+    const receiptRoles = new Set(['ELECTRONIC_RECEIPT', 'RECEIPT_PDF', 'MERGED_PDF'])
+    const attachments = new Map(
+        documents.flatMap((document) => (document.attachments || []).map((attachment) => [attachment.id, attachment] as const)),
+    )
+    return selectReviewedEvidenceOptions(documents, caseId).filter((option) => {
+        const attachment = attachments.get(option.attachment_id)
+        return Boolean(
+            attachment
+            && (attachment.is_receipt_evidence || attachment.is_archive_evidence || receiptRoles.has(option.role))
+        )
+    })
+}
+
+export async function getCaseDocumentsWithEvidence(caseId: string): Promise<Document[]> {
+    if (!caseId.trim()) return []
+    const page = await getDocuments({ case_id: caseId, page: 1, page_size: 100 })
+    const documents = await Promise.all(page.items.map((document) => getDocument(document.id)))
+    return documents.filter((document) => document.case_id === caseId)
+}
+
+export async function recordDocumentLifecycleEvidence(
+    action: DocumentLifecycleActionCode,
+    caseId: string,
+    evidence: ReviewedDocumentEvidenceOption,
+    timing: DocumentLifecycleEvidenceTiming,
+): Promise<DocumentLifecycleEvidenceResult> {
+    const paths: Record<DocumentLifecycleActionCode, string> = {
+        ACCEPTANCE_NOTICE: 'acceptance-notice',
+        PRELIMINARY_START: 'preliminary-start',
+        PRELIMINARY_PASS: 'preliminary-pass',
+        PUBLICATION_NOTICE: 'publication-notice',
+        SUBSTANTIVE_START: 'substantive-start',
+    }
+    if (
+        evidence.case_id !== caseId
+        || !evidence.document_id
+        || !evidence.evidence_version_id
+        || !/^sha256:[0-9a-f]{64}$/.test(evidence.content_hash)
+        || !timing.effective_at
+        || !timing.idempotency_key
+    ) throw new Error('请选择当前案件已复核证据')
+    const response = await http.post<DocumentLifecycleEvidenceResult>(
+        `/documents/${evidence.document_id}/lifecycle/${paths[action]}`,
+        {
+            evidence_version_id: evidence.evidence_version_id,
+            effective_at: timing.effective_at,
+            occurred_at: timing.occurred_at,
+            idempotency_key: timing.idempotency_key,
+        },
+    )
+    return response.data
 }
 
 function toCreatePayload(data: DocumentCreatePayload): Record<string, unknown> {

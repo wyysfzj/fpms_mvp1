@@ -44,8 +44,19 @@
             <el-option label="其他归档证明" value="OTHER_ARCHIVE_EVIDENCE" />
           </el-select>
         </el-form-item>
-        <el-form-item label="回执 / 合并PDF附件ID">
-          <el-input v-model.trim="receiptForm.receiptAttachmentId" placeholder="引用已上传附件ID" />
+        <el-form-item label="回执文件">
+          <el-select
+            v-model="selectedReceiptKey"
+            :loading="loadingCandidates"
+            placeholder="请选择当前案件已复核回执文件"
+          >
+            <el-option
+              v-for="option in receiptOptions"
+              :key="receiptKey(option)"
+              :value="receiptKey(option)"
+              :label="`${option.filename}｜${option.role}`"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="接收案件编号">
           <el-input v-model.trim="receiptForm.receivingCaseNo" placeholder="请输入官方接收案件编号" />
@@ -185,12 +196,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   archiveOfficialWorkPackage,
-  createOfficialWorkPackageReceipt,
+  createReviewedOfficialWorkPackageReceipt,
 } from '../../../api/officialWorkflows'
+import {
+  getCaseDocumentsWithEvidence,
+  selectReviewedReceiptEvidenceOptions,
+} from '../../../api/documents'
+import type { ReviewedDocumentEvidenceOption } from '../../../api/documents.types'
 import type {
   OfficialWorkPackageReceipt,
   OfficialWorkPackageStatusEvaluation,
@@ -199,6 +215,7 @@ import type { ApiError } from '../../../api/types'
 
 const props = withDefaults(defineProps<{
   packageId: string
+  caseId: string
   packageKind: string
   packageStatus: string
   archiveStatus?: string | null
@@ -223,10 +240,12 @@ const overrideReason = ref('')
 const followUpOwner = ref('')
 const followUpDueDate = ref('')
 const followUpNote = ref('')
+const receiptOptions = ref<ReviewedDocumentEvidenceOption[]>([])
+const selectedReceiptKey = ref('')
+const loadingCandidates = ref(false)
 
 const receiptForm = reactive({
   receiptKind: 'ELECTRONIC_APPLICATION_RECEIPT',
-  receiptAttachmentId: '',
   receivingCaseNo: '',
   submitter: '',
   receivedAt: '',
@@ -240,12 +259,15 @@ const archiveEvidenceReady = computed(() => props.receiptEvidenceReady || isArch
 const overrideClosed = computed(() => normalize(props.packageStatus) === 'OVERRIDE')
 const receiptFormComplete = computed(() =>
   Boolean(
-    receiptForm.receiptAttachmentId
+    selectedReceipt.value
     && receiptForm.receivingCaseNo
     && receiptForm.submitter
     && receiptForm.receivedAt
     && receiptForm.receivedFileList.trim()
   )
+)
+const selectedReceipt = computed(() =>
+  receiptOptions.value.find((option) => receiptKey(option) === selectedReceiptKey.value) || null
 )
 const overrideReady = computed(() => Boolean(overrideReason.value.trim() && followUpOwner.value.trim()))
 const showReceiptFormWarning = computed(() => !receiptFormComplete.value && !archiveEvidenceReady.value && !overrideClosed.value)
@@ -270,6 +292,26 @@ const archiveWarning = computed(() => {
   return ''
 })
 
+watch(() => props.caseId, () => { void loadReceiptCandidates() })
+onMounted(() => { void loadReceiptCandidates() })
+
+async function loadReceiptCandidates() {
+  loadingCandidates.value = true
+  try {
+    const documents = await getCaseDocumentsWithEvidence(props.caseId)
+    receiptOptions.value = selectReviewedReceiptEvidenceOptions(documents, props.caseId)
+    if (!receiptOptions.value.some((option) => receiptKey(option) === selectedReceiptKey.value)) {
+      selectedReceiptKey.value = ''
+    }
+  } catch (error) {
+    receiptOptions.value = []
+    selectedReceiptKey.value = ''
+    emit('error', error as ApiError)
+  } finally {
+    loadingCandidates.value = false
+  }
+}
+
 async function handleCreateReceipt() {
   if (!receiptFormComplete.value) {
     ElMessage.warning('请先补齐回执附件、接收案件编号、提交人、接收时间和收到文件清单')
@@ -278,16 +320,21 @@ async function handleCreateReceipt() {
 
   savingReceipt.value = true
   try {
-    latestReceipt.value = await createOfficialWorkPackageReceipt(props.packageId, {
+    if (!selectedReceipt.value) return
+    latestReceipt.value = await createReviewedOfficialWorkPackageReceipt(
+      props.packageId,
+      props.caseId,
+      selectedReceipt.value,
+      {
       receipt_kind: receiptForm.receiptKind,
-      receipt_attachment_id: receiptForm.receiptAttachmentId,
       receiving_case_no: receiptForm.receivingCaseNo,
       submitter: receiptForm.submitter,
       received_at: receiptForm.receivedAt,
       received_file_list: receiptForm.receivedFileList,
       archive_status: receiptForm.archiveStatus,
       note: receiptForm.note || null,
-    })
+      },
+    )
     ElMessage.success('回执元数据已记录')
   } catch (err) {
     emit('error', err as ApiError)
@@ -336,6 +383,10 @@ async function handleOverrideArchive() {
 
 function normalize(value?: string | null): string {
   return String(value || '').trim().toUpperCase()
+}
+
+function receiptKey(option: ReviewedDocumentEvidenceOption): string {
+  return `${option.attachment_id}:${option.evidence_version_id}:${option.content_hash}`
 }
 
 function isArchiveReady(value?: string | null): boolean {

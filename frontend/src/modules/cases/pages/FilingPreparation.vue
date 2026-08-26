@@ -95,6 +95,7 @@
           />
           <ReceiptArchivePanel
             :package-id="filingPackage.package.id"
+            :case-id="filingPackage.package.case_id"
             :package-kind="filingPackage.package.package_kind"
             :package-status="filingPackage.package.status"
             :archive-status="filingPackage.merged_pdf_archive_status"
@@ -126,12 +127,32 @@
               </el-button>
               <el-button
                 size="small"
+                type="success"
+                :disabled="!submissionForm.occurredAt || !submissionForm.note.trim()"
                 :loading="recordingOperation"
-                @click="handleRecordExternalOperation"
+                @click="handleRecordExternalSubmission"
               >
-                记录导入时间
+                记录人工递交完成
               </el-button>
             </div>
+            <el-form label-position="top" class="submission-form">
+              <el-form-item label="人工递交时间">
+                <el-date-picker
+                  v-model="submissionForm.occurredAt"
+                  type="datetime"
+                  value-format="YYYY-MM-DDTHH:mm:ss"
+                  placeholder="请选择实际递交完成时间"
+                />
+              </el-form-item>
+              <el-form-item label="递交备注">
+                <el-input
+                  v-model="submissionForm.note"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="请输入人工递交记录"
+                />
+              </el-form-item>
+            </el-form>
           </section>
 
           <section class="case-panel side-widget">
@@ -161,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -190,6 +211,7 @@ const refreshing = ref(false)
 const recordingOperation = ref(false)
 const reviewingCode = ref('')
 const error = ref<ApiError | null>(null)
+const submissionForm = reactive({ occurredAt: '', note: '' })
 
 const packageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 const caseId = computed(() => String(route.query.case_id || route.query.caseId || '').trim())
@@ -293,20 +315,22 @@ async function handleChecklistDone(itemCode: string, evidenceNote: string) {
   }
 }
 
-async function handleRecordExternalOperation() {
-  if (!packageId.value) return
+async function handleRecordExternalSubmission() {
+  if (!packageId.value || !submissionForm.occurredAt || !submissionForm.note.trim()) {
+    ElMessage.warning('请填写人工递交时间和备注')
+    return
+  }
 
   recordingOperation.value = true
   error.value = null
-  const occurredAt = new Date().toISOString()
   try {
     const result = await recordFilingPreparationExternalOperation(packageId.value, {
-      operation_code: 'CNIPA_IMPORT_STARTED',
-      occurred_at: occurredAt,
-      note: '专利业务办理系统导入请求类表格',
+      operation_code: 'EXTERNAL_SUBMISSION_RECORDED',
+      occurred_at: submissionForm.occurredAt,
+      note: submissionForm.note.trim(),
     })
     replaceChecklistItem(result.checklist_item)
-    ElMessage.success('导入时间已记录')
+    ElMessage.success('人工递交完成记录已保存')
   } catch (err) {
     error.value = err as ApiError
   } finally {

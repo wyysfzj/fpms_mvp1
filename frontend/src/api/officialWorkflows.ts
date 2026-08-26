@@ -1,5 +1,9 @@
 import { http } from './http'
 import type {
+    ReviewedDocumentEvidenceOption,
+    ReviewedReplyDocumentOption,
+} from './documents.types'
+import type {
     FilingPreparationChecklistResult,
     FilingPreparationExternalOperationPayload,
     FilingPreparationPackage,
@@ -110,6 +114,20 @@ export async function linkOaReplyDocument(
     return response.data
 }
 
+export async function linkReviewedOaReplyDocument(
+    packageId: string,
+    caseId: string,
+    candidate: ReviewedReplyDocumentOption,
+): Promise<OaReplyPackage> {
+    if (
+        candidate.case_id !== caseId
+        || !candidate.document_id
+        || !candidate.evidence_version_id
+        || !/^sha256:[0-9a-f]{64}$/.test(candidate.content_hash)
+    ) throw new Error('请选择当前案件已复核答复文书')
+    return linkOaReplyDocument(packageId, { reply_document_id: candidate.document_id })
+}
+
 export async function updateOaReplyChecklist(
     packageId: string,
     itemCode: string,
@@ -140,6 +158,24 @@ export async function createOfficialWorkPackageReceipt(
         payload
     )
     return response.data
+}
+
+export async function createReviewedOfficialWorkPackageReceipt(
+    packageId: string,
+    caseId: string,
+    evidence: ReviewedDocumentEvidenceOption,
+    payload: Omit<OfficialWorkPackageReceiptCreatePayload, 'receipt_attachment_id'>,
+): Promise<OfficialWorkPackageReceipt> {
+    if (
+        evidence.case_id !== caseId
+        || !evidence.attachment_id
+        || !evidence.evidence_version_id
+        || !/^sha256:[0-9a-f]{64}$/.test(evidence.content_hash)
+    ) throw new Error('请选择当前案件已复核附件')
+    return createOfficialWorkPackageReceipt(packageId, {
+        ...payload,
+        receipt_attachment_id: evidence.attachment_id,
+    })
 }
 
 export async function archiveOfficialWorkPackage(
