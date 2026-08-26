@@ -148,13 +148,16 @@ function normalizeLineageStatus(input: string): GrantFeeTaskLineageStatus {
 }
 
 function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListItem {
+    const status = normalizeStatus(input.status)
+    const clientInstruction = normalizeInstruction(input.client_instruction)
+    const lineageStatus = normalizeLineageStatus(input.lineage_status)
     return {
         task_id: input.task_id,
         case_id: input.case_id,
         case_no: input.case_no || undefined,
-        status: normalizeStatus(input.status),
+        status,
         due_date: input.due_date,
-        client_instruction: normalizeInstruction(input.client_instruction),
+        client_instruction: clientInstruction,
         gov_fee_amt: input.gov_fee_amt,
         service_fee_amt: input.service_fee_amt,
         currency: input.currency,
@@ -169,12 +172,15 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
         fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
         fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
-        lineage_status: normalizeLineageStatus(input.lineage_status),
+        lineage_status: lineageStatus,
         source_document_id: input.source_document_id || null,
         deadline_source: input.deadline_source || null,
         deadline_confirmed_at: input.deadline_confirmed_at || null,
         allowed_actions: [],
         state_binding_current: false,
+        projection_valid: input.status === status
+            && input.client_instruction === clientInstruction
+            && input.lineage_status === lineageStatus,
     }
 }
 
@@ -212,28 +218,39 @@ function normalizeAction(input: string): GrantFeeTaskStateAction | null {
 function mapGrantFeeTaskStateResult(
     input: BackendGrantFeeTaskStateResponse,
 ): GrantFeeTaskStateResult {
+    const state = normalizeStatus(input.state)
+    const clientInstruction = normalizeInstruction(input.client_instruction)
+    const lineageStatus = normalizeLineageStatus(input.lineage_status)
+    const actionsAreArray = Array.isArray(input.allowed_actions)
+    const rawActions = actionsAreArray ? input.allowed_actions : []
+    const allowedActions = rawActions
+        .map(normalizeAction)
+        .filter((action): action is GrantFeeTaskStateAction => action !== null)
     return {
         task_id: input.task_id,
         case_id: input.case_id,
-        state: normalizeStatus(input.state),
-        client_instruction: normalizeInstruction(input.client_instruction),
+        state,
+        client_instruction: clientInstruction,
         notify_count: Number(input.notify_count || 0),
         draft_generated: Boolean(input.draft_generated),
         notice_sent: Boolean(input.notice_sent),
         is_overdue: Boolean(input.is_overdue),
-        allowed_actions: Array.isArray(input.allowed_actions)
-            ? input.allowed_actions
-                .map(normalizeAction)
-                .filter((action): action is GrantFeeTaskStateAction => action !== null)
-            : [],
+        allowed_actions: allowedActions,
         trigger_rule: input.trigger_rule || '收到办理登记手续通知书/授权通知书',
         deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
         fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
         fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
-        lineage_status: normalizeLineageStatus(input.lineage_status),
+        lineage_status: lineageStatus,
         source_document_id: input.source_document_id || null,
         deadline_source: input.deadline_source || null,
         deadline_confirmed_at: input.deadline_confirmed_at || null,
+        projection_valid: input.state === state
+            && input.client_instruction === clientInstruction
+            && input.lineage_status === lineageStatus
+            && actionsAreArray
+            && rawActions.length === allowedActions.length
+            && new Set(rawActions).size === rawActions.length
+            && rawActions.every((action, index) => action === allowedActions[index]),
     }
 }
 
@@ -242,7 +259,21 @@ export function bindGrantFeeTaskState(
     state: GrantFeeTaskStateResult,
     taskIdOccurrences: number,
 ): GrantFeeTaskListItem {
+    const canonicalActions: Record<GrantFeeTaskStatus, GrantFeeTaskStateAction[]> = {
+        OPEN: ['mark_waiting_client'],
+        WAITING_CLIENT: ['record_pay_instruction', 'record_abandon_instruction'],
+        READY_TO_DRAFT: ['mark_draft_generated'],
+        DRAFT_GENERATED: ['mark_done'],
+        DONE: [],
+    }
+    const expectedActions = canonicalActions[state.state]
+    const exactActions = state.allowed_actions.length === expectedActions.length
+        && new Set(state.allowed_actions).size === state.allowed_actions.length
+        && expectedActions.every((action) => state.allowed_actions.includes(action))
     const exactCurrentBinding = taskIdOccurrences === 1
+        && task.projection_valid
+        && state.projection_valid
+        && exactActions
         && task.task_id === state.task_id
         && task.case_id === state.case_id
         && task.status === state.state

@@ -82,6 +82,7 @@ export interface GrantFeeTaskListItem {
     deadline_confirmed_at: string | null
     allowed_actions: GrantFeeTaskStateAction[]
     state_binding_current: boolean
+    projection_valid: boolean
 }
 
 export interface GrantFeeTaskListResponse {
@@ -129,6 +130,7 @@ export interface GrantFeeTaskStateResult {
     source_document_id: string | null
     deadline_source: string | null
     deadline_confirmed_at: string | null
+    projection_valid: boolean
 }
 
 export interface GrantNoticeLifecycleTiming {

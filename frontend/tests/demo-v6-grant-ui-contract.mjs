@@ -32,6 +32,7 @@ globalThis.__ordinal05Http = {
     httpCalls.push({ method: 'GET', url })
     if (rejectedError) throw rejectedError
     if (url.endsWith('/official-fee-preview')) return { data: { preview_digest: 'preview-digest' } }
+    if (url === '/grant-fee-tasks/list') return { data: globalThis.__ordinal05List }
     return { data: globalThis.__ordinal05State }
   },
   async post(url, payload) {
@@ -45,21 +46,35 @@ globalThis.__ordinal05Http = {
     }
     return { data: { event_type: 'GRANT_REGISTRATION_NOTICE_RECORDED', reused: false } }
   },
+  async put(url, payload) {
+    httpCalls.push({ method: 'PUT', url, payload })
+    if (rejectedError) throw rejectedError
+    return { data: globalThis.__ordinal05State }
+  },
 }
 
 const grant = await importFunctions(
   grantApi,
   [
+    'normalizeBoolean',
+    'normalizeStatus',
+    'normalizeInstruction',
+    'normalizeLineageStatus',
+    'mapGrantFeeTask',
+    'normalizeAction',
+    'mapGrantFeeTaskStateResult',
     'bindGrantFeeTaskState',
     'isCurrentGrantFeeTask',
     'grantFeeTaskAllowsAction',
+    'getGrantFeeTasks',
     'getGrantFeeTaskState',
     'recordGrantNoticeLifecycle',
     'createGrantFeeTaskReplacementNotice',
     'getGrantOfficialFeePreview',
+    'applyGrantFeeTaskAction',
     'applyGrantFeeBatchInstruction',
   ],
-  'const http = globalThis.__ordinal05Http; const mapGrantFeeTaskStateResult = (input) => input; const mapGrantFeeTask = (input) => input',
+  'const http = globalThis.__ordinal05Http',
 )
 const documents = await importFunctions(documentsApi, ['selectReviewedEvidenceOptions'])
 
@@ -72,21 +87,70 @@ const baseTask = {
   deadline_rule: '通知期限', fee_basis: '官费依据', fee_node_explanation: '授权阶段', lineage_status: 'CONFIRMED',
   source_document_id: 'document-original', deadline_source: 'IMPORTED_OFFICIAL_NOTICE',
   deadline_confirmed_at: '2026-08-26T10:00:00', allowed_actions: [], state_binding_current: false,
+  projection_valid: true,
 }
 const baseState = {
   task_id: 'task-original', case_id: 'case-a', state: 'OPEN', client_instruction: 'NONE', notify_count: 0,
   draft_generated: false, notice_sent: false, is_overdue: false,
-  allowed_actions: ['mark_waiting_client', 'record_pay_instruction'], lineage_status: 'CONFIRMED',
+  allowed_actions: ['mark_waiting_client'], lineage_status: 'CONFIRMED',
   source_document_id: 'document-original', deadline_source: 'IMPORTED_OFFICIAL_NOTICE',
   deadline_confirmed_at: '2026-08-26T10:00:00', trigger_rule: '授权通知', deadline_rule: '通知期限',
   fee_basis: '官费依据', fee_node_explanation: '授权阶段',
+  projection_valid: true,
 }
 
 const currentTask = grant.bindGrantFeeTaskState(baseTask, baseState, 1)
 assert.equal(grant.isCurrentGrantFeeTask(currentTask), true)
 assert.equal(grant.grantFeeTaskAllowsAction(currentTask, 'mark_waiting_client'), true)
-assert.equal(grant.grantFeeTaskAllowsAction(currentTask, 'record_pay_instruction'), true)
+assert.equal(grant.grantFeeTaskAllowsAction(currentTask, 'record_pay_instruction'), false)
 assert.equal(grant.grantFeeTaskAllowsAction({ ...currentTask, client_instruction: 'PAY' }, 'record_pay_instruction'), false)
+
+const earlyPayState = { ...baseState, allowed_actions: ['mark_waiting_client', 'record_pay_instruction'] }
+const earlyPayTask = grant.bindGrantFeeTaskState(baseTask, earlyPayState, 1)
+const callsBeforeEarlyPay = httpCalls.length
+if (grant.grantFeeTaskAllowsAction(earlyPayTask, 'record_pay_instruction')) {
+  await grant.applyGrantFeeBatchInstruction({ task_ids: [earlyPayTask.task_id], action: 'record_pay_instruction' })
+}
+assert.equal(httpCalls.length, callsBeforeEarlyPay)
+
+const canonicalStateActions = {
+  OPEN: ['mark_waiting_client'],
+  WAITING_CLIENT: ['record_pay_instruction', 'record_abandon_instruction'],
+  READY_TO_DRAFT: ['mark_draft_generated'],
+  DRAFT_GENERATED: ['mark_done'],
+  DONE: [],
+}
+const stateFacts = {
+  OPEN: { client_instruction: 'NONE', draft_generated: false },
+  WAITING_CLIENT: { client_instruction: 'NONE', draft_generated: false },
+  READY_TO_DRAFT: { client_instruction: 'PAY', draft_generated: false },
+  DRAFT_GENERATED: { client_instruction: 'PAY', draft_generated: true },
+  DONE: { client_instruction: 'ABANDON', draft_generated: false },
+}
+const boundByState = {}
+for (const [state, allowedActions] of Object.entries(canonicalStateActions)) {
+  const facts = stateFacts[state]
+  globalThis.__ordinal05State = { ...baseState, state, allowed_actions: allowedActions, ...facts }
+  boundByState[state] = grant.bindGrantFeeTaskState(
+    { ...baseTask, status: state, ...facts },
+    await grant.getGrantFeeTaskState(baseTask.task_id),
+    1,
+  )
+  assert.equal(grant.isCurrentGrantFeeTask(boundByState[state]), true)
+  assert.deepEqual(boundByState[state].allowed_actions, allowedActions)
+}
+for (const mismatchedState of [
+  { ...baseState, allowed_actions: ['mark_waiting_client', 'record_pay_instruction'] },
+  { ...baseState, allowed_actions: [] },
+  { ...baseState, allowed_actions: ['mark_waiting_client', 'mark_waiting_client'] },
+  { ...baseState, allowed_actions: ['mark_waiting_client', 'unknown_action'] },
+  { ...baseState, state: 'WAITING_CLIENT', allowed_actions: ['record_pay_instruction'] },
+]) {
+  const task = { ...baseTask, status: mismatchedState.state }
+  const bound = grant.bindGrantFeeTaskState(task, mismatchedState, 1)
+  assert.equal(grant.isCurrentGrantFeeTask(bound), false)
+  assert.deepEqual(bound.allowed_actions, [])
+}
 
 for (const invalid of [
   grant.bindGrantFeeTaskState(baseTask, baseState, 2),
@@ -102,6 +166,37 @@ for (const invalid of [
 globalThis.__ordinal05State = baseState
 assert.deepEqual(await grant.getGrantFeeTaskState('task-original'), baseState)
 assert.deepEqual(httpCalls.at(-1), { method: 'GET', url: '/grant-fee-tasks/task-original/state' })
+
+const backendListTask = {
+  task_id: baseTask.task_id, case_id: baseTask.case_id, case_no: baseTask.case_no, status: baseTask.status,
+  due_date: baseTask.due_date, client_instruction: baseTask.client_instruction, gov_fee_amt: baseTask.gov_fee_amt,
+  service_fee_amt: baseTask.service_fee_amt, currency: baseTask.currency, draft_generated: baseTask.draft_generated,
+  notice_sent: baseTask.notice_sent, notify_count: baseTask.notify_count, is_overdue: baseTask.is_overdue,
+  billed: baseTask.billed, trigger_rule: baseTask.trigger_rule, deadline_rule: baseTask.deadline_rule,
+  fee_basis: baseTask.fee_basis, fee_node_explanation: baseTask.fee_node_explanation,
+  lineage_status: baseTask.lineage_status, source_document_id: baseTask.source_document_id,
+  deadline_source: baseTask.deadline_source, deadline_confirmed_at: baseTask.deadline_confirmed_at,
+}
+for (const [rawListOverrides, rawStateOverrides] of [
+  [{ status: 'UNKNOWN_STATE', client_instruction: 'UNKNOWN_INSTRUCTION' }, { state: 'UNKNOWN_STATE', client_instruction: 'UNKNOWN_INSTRUCTION' }],
+  [{}, { allowed_actions: ['mark_waiting_client', 'unknown_action'] }],
+  [{}, { allowed_actions: ['mark_waiting_client', 'mark_waiting_client'] }],
+  [{ status: 'DONE', client_instruction: 'ABANDON' }, { state: 'DONE', client_instruction: 'ABANDON', allowed_actions: null }],
+]) {
+  globalThis.__ordinal05List = { items: [{ ...backendListTask, ...rawListOverrides }], page: 1, page_size: 20, total: 1 }
+  globalThis.__ordinal05State = { ...baseState, ...rawStateOverrides }
+  const mappedTask = (await grant.getGrantFeeTasks()).items[0]
+  const mappedState = await grant.getGrantFeeTaskState(mappedTask.task_id)
+  const bound = grant.bindGrantFeeTaskState(mappedTask, mappedState, 1)
+  const mutationCallsBefore = httpCalls.filter((call) => call.method !== 'GET').length
+  if (grant.grantFeeTaskAllowsAction(bound, 'mark_waiting_client')) {
+    await grant.applyGrantFeeTaskAction(bound.task_id, 'mark_waiting_client')
+  }
+  assert.equal(grant.isCurrentGrantFeeTask(bound), false)
+  assert.deepEqual(bound.allowed_actions, [])
+  assert.equal(httpCalls.filter((call) => call.method !== 'GET').length, mutationCallsBefore)
+}
+globalThis.__ordinal05State = baseState
 
 const approvedAttachment = (overrides = {}) => ({
   id: 'attachment-original', filename: '原始授权通知书.pdf', file_size: 12, created_at: '2026-08-20',
@@ -201,13 +296,14 @@ assert.deepEqual(httpCalls.at(-1), {
 assert.deepEqual(await grant.getGrantOfficialFeePreview('task-original'), { preview_digest: 'preview-digest' })
 assert.deepEqual(httpCalls.at(-1), { method: 'GET', url: '/grant-fee-tasks/task-original/official-fee-preview' })
 const payCallsBefore = httpCalls.length
-await grant.applyGrantFeeBatchInstruction({ task_ids: ['task-original'], action: 'record_pay_instruction' })
+assert.equal(grant.grantFeeTaskAllowsAction(boundByState.WAITING_CLIENT, 'record_pay_instruction'), true)
+await grant.applyGrantFeeBatchInstruction({ task_ids: [boundByState.WAITING_CLIENT.task_id], action: 'record_pay_instruction' })
 assert.deepEqual(httpCalls.at(-1), {
   method: 'POST', url: '/grant-fee-tasks/batch-instruction',
   payload: { task_ids: ['task-original'], action: 'record_pay_instruction' },
 })
 assert.equal(httpCalls.length, payCallsBefore + 1)
-assert.equal(grant.grantFeeTaskAllowsAction({ ...currentTask, client_instruction: 'PAY' }, 'record_pay_instruction'), false)
+assert.equal(grant.grantFeeTaskAllowsAction(boundByState.READY_TO_DRAFT, 'record_pay_instruction'), false)
 
 assert.match(page, /<DocumentLifecycleEvidenceActions/)
 assert.match(page, /选择授权通知证据/)
@@ -222,4 +318,5 @@ for (const unchanged of ['预览官费', '更正通知', "record_pay_instruction
 
 delete globalThis.__ordinal05Http
 delete globalThis.__ordinal05State
+delete globalThis.__ordinal05List
 console.log('demo V6 grant UI contract: PASS')
