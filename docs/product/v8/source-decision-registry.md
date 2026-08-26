@@ -448,8 +448,8 @@ dispatch lane.
 
 ### `DEC-DEMO-V6-UI-PARITY-20260826`
 
-- Status: `APPROVED_DESIGN_SCOPE`; written-spec acceptance, implementation, customer-site display
-  and release remain subject to later explicit gates.
+- Status: `APPROVED_WRITTEN_SPEC_AND_PLAN_PREPARATION`; implementation, customer-site display and
+  release remain subject to later explicit gates.
 - Exact source/version: the customer's requirement that both manual and Codex execution succeed,
   the UI-only boundary presented for confirmation, and the customer's exact confirmation in Codex
   task `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved as a labelled UTF-8/LF transcript with one
@@ -478,6 +478,16 @@ dispatch lane.
   parity design and implementation plan. Product implementation begins only after independent
   zero-finding spec review, the customer's explicit written-spec approval, and independent
   zero-finding plan review. It does not authorize release-ref promotion.
+- Written-spec acceptance: after the same independent reviewer reported `APPROVED` on exact design
+  commit `5d48d0aed4356e7a1bd2d958301afe6ffab12b4d`, the customer explicitly sent
+  `` `批准书面规格 5d48d0a，继续制定实施计划` `` in Codex task
+  `019ffc07-14a5-7dc2-9536-f2047327e14a` on `2026-08-26` Asia/Shanghai. The exact UTF-8/LF bytes
+  with one terminal LF are preserved at
+  `docs/product/v8/customer-decisions/2026-08-26-demo-v6-ui-parity-written-spec-acceptance.txt`;
+  exact size `56` bytes and SHA-256
+  `3098b691dd9637f7c514976933eb6a76719fb0acde131a74c4ece88c92a99015`. This accepts the
+  written design and authorizes plan preparation/review only; implementation still waits for an
+  independently approved exact plan and the next explicit execution gate.
 - Rollback impact: reverting this design decision returns the work to the existing hybrid automated
   rehearsal and blocks the new HUMAN/CODEX UI-only lane. It performs no data mutation and must not
   delete or reinterpret existing runtime, lifecycle, fee, billing or rehearsal evidence.
