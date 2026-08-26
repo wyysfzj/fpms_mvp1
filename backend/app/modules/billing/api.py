@@ -1763,6 +1763,24 @@ def get_case_receipt(
     receipts = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).all()
     if not receipts:
         if not bill_overview_rows:
+            case = db.query(Case).filter(Case.id == case_id).first()
+            client = (
+                db.query(Client).filter(Client.id == case.client_id).first()
+                if case and case.client_id
+                else None
+            )
+            if client and client.default_currency.strip():
+                return CaseReceiptResponse(
+                    id=case_id,
+                    case_id=case_id,
+                    currency=client.default_currency,
+                    receivable_amt=Decimal("0.00"),
+                    received_amt=Decimal("0.00"),
+                    is_arrears=False,
+                    is_prepayment=False,
+                    is_commissionable=False,
+                    bills=[],
+                )
             raise_business_error(
                 "CASE_RECEIPT_NOT_FOUND",
                 "Case receipt not found",
