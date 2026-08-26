@@ -80,6 +80,8 @@ export interface GrantFeeTaskListItem {
     source_document_id: string | null
     deadline_source: string | null
     deadline_confirmed_at: string | null
+    allowed_actions: GrantFeeTaskStateAction[]
+    state_binding_current: boolean
 }
 
 export interface GrantFeeTaskListResponse {
@@ -127,6 +129,16 @@ export interface GrantFeeTaskStateResult {
     source_document_id: string | null
     deadline_source: string | null
     deadline_confirmed_at: string | null
+}
+
+export interface GrantNoticeLifecycleTiming {
+    recorded_at: string
+    idempotency_key: string
+}
+
+export interface GrantNoticeLifecycleResult {
+    event_type: string
+    reused: boolean
 }
 
 export interface GrantFeeTaskBatchInstructionPayload {

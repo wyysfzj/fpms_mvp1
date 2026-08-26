@@ -2,7 +2,7 @@
   <section class="case-panel lifecycle-evidence-actions">
     <div class="panel-toolbar">
       <div>
-        <h3 class="panel-heading">生命周期证据动作</h3>
+        <h3 class="panel-heading">{{ grantTask ? '授权通知证据' : '生命周期证据动作' }}</h3>
         <p>仅可选择当前案件、当前版本且已复核通过的证据。</p>
       </div>
     </div>
@@ -29,7 +29,17 @@
         <span>证据版本：{{ selectedEvidence.evidence_version_id }}</span>
         <span>内容摘要：{{ selectedEvidence.content_hash }}</span>
       </div>
-      <div class="time-grid">
+      <div v-if="grantTask" class="time-grid">
+        <el-form-item label="授权通知记录时间">
+          <el-date-picker
+            v-model="recordedAt"
+            type="datetime"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            placeholder="请选择授权通知记录时间"
+          />
+        </el-form-item>
+      </div>
+      <div v-else class="time-grid">
         <el-form-item label="生效时间">
           <el-date-picker
             v-model="effectiveAt"
@@ -49,7 +59,15 @@
       </div>
       <div class="action-row">
         <el-button
-          v-for="action in actions"
+          v-if="grantTask"
+          :loading="runningAction === 'GRANT_NOTICE'"
+          :disabled="!selectedEvidence || !recordedAt || Boolean(runningAction)"
+          @click="handleGrantNotice"
+        >
+          确认授权通知证据
+        </el-button>
+        <el-button
+          v-for="action in grantTask ? [] : actions"
           :key="action.code"
           :loading="runningAction === action.code"
           :disabled="!selectedEvidence || !effectiveAt || Boolean(runningAction)"
@@ -69,20 +87,26 @@ import {
   recordDocumentLifecycleEvidence,
   selectReviewedEvidenceOptions,
 } from '../../../api/documents'
+import { recordGrantNoticeLifecycle } from '../../../api/grantFees'
 import type {
   Document,
   DocumentLifecycleActionCode,
   ReviewedDocumentEvidenceOption,
 } from '../../../api/documents.types'
+import type { GrantFeeTaskListItem } from '../../../api/grantFees.types'
 import type { ApiError } from '../../../api/types'
 
-const props = defineProps<{ document: Document }>()
-const emit = defineEmits<{ (event: 'error', error: ApiError): void }>()
+const props = defineProps<{ document: Document; grantTask?: GrantFeeTaskListItem }>()
+const emit = defineEmits<{
+  (event: 'error', error: ApiError): void
+  (event: 'recorded'): void
+}>()
 
 const selectedEvidenceKey = ref('')
 const effectiveAt = ref('')
 const occurredAt = ref('')
-const runningAction = ref<DocumentLifecycleActionCode | ''>('')
+const recordedAt = ref('')
+const runningAction = ref<DocumentLifecycleActionCode | 'GRANT_NOTICE' | ''>('')
 
 const actions: Array<{ code: DocumentLifecycleActionCode; label: string }> = [
   { code: 'ACCEPTANCE_NOTICE', label: '记录受理通知' },
@@ -116,6 +140,26 @@ async function handleAction(action: DocumentLifecycleActionCode, label: string) 
       idempotency_key: crypto.randomUUID(),
     })
     ElMessage.success(`${label}已记录`)
+  } catch (error) {
+    emit('error', error as ApiError)
+  } finally {
+    runningAction.value = ''
+  }
+}
+
+async function handleGrantNotice() {
+  if (!props.grantTask || !selectedEvidence.value || !recordedAt.value) {
+    ElMessage.warning('请选择已复核授权通知证据和记录时间')
+    return
+  }
+  runningAction.value = 'GRANT_NOTICE'
+  try {
+    await recordGrantNoticeLifecycle(props.grantTask, selectedEvidence.value, {
+      recorded_at: recordedAt.value,
+      idempotency_key: crypto.randomUUID(),
+    })
+    ElMessage.success('授权通知证据已记录')
+    emit('recorded')
   } catch (error) {
     emit('error', error as ApiError)
   } finally {

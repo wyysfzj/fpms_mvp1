@@ -17,10 +17,13 @@ import type {
     GrantFeeTaskStateAction,
     GrantFeeTaskStateResult,
     GrantFeeTaskStatus,
+    GrantNoticeLifecycleResult,
+    GrantNoticeLifecycleTiming,
     GrantOfficialFeeConfirmationPayload,
     GrantOfficialFeeConfirmationResult,
     GrantOfficialFeePreview,
 } from './grantFees.types'
+import type { ReviewedDocumentEvidenceOption } from './documents.types'
 
 interface BackendGrantFeeTaskListItem {
     task_id: string
@@ -170,6 +173,8 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         source_document_id: input.source_document_id || null,
         deadline_source: input.deadline_source || null,
         deadline_confirmed_at: input.deadline_confirmed_at || null,
+        allowed_actions: [],
+        state_binding_current: false,
     }
 }
 
@@ -190,7 +195,7 @@ function mapGrantFeeDraftGenerateResult(
     }
 }
 
-function normalizeAction(input: string): GrantFeeTaskStateAction {
+function normalizeAction(input: string): GrantFeeTaskStateAction | null {
     const normalized = (input || '').trim()
     const valid: GrantFeeTaskStateAction[] = [
         'mark_waiting_client',
@@ -201,7 +206,7 @@ function normalizeAction(input: string): GrantFeeTaskStateAction {
     ]
     return valid.includes(normalized as GrantFeeTaskStateAction)
         ? (normalized as GrantFeeTaskStateAction)
-        : 'mark_done'
+        : null
 }
 
 function mapGrantFeeTaskStateResult(
@@ -217,7 +222,9 @@ function mapGrantFeeTaskStateResult(
         notice_sent: Boolean(input.notice_sent),
         is_overdue: Boolean(input.is_overdue),
         allowed_actions: Array.isArray(input.allowed_actions)
-            ? input.allowed_actions.map(normalizeAction)
+            ? input.allowed_actions
+                .map(normalizeAction)
+                .filter((action): action is GrantFeeTaskStateAction => action !== null)
             : [],
         trigger_rule: input.trigger_rule || '收到办理登记手续通知书/授权通知书',
         deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
@@ -228,6 +235,48 @@ function mapGrantFeeTaskStateResult(
         deadline_source: input.deadline_source || null,
         deadline_confirmed_at: input.deadline_confirmed_at || null,
     }
+}
+
+export function bindGrantFeeTaskState(
+    task: GrantFeeTaskListItem,
+    state: GrantFeeTaskStateResult,
+    taskIdOccurrences: number,
+): GrantFeeTaskListItem {
+    const exactCurrentBinding = taskIdOccurrences === 1
+        && task.task_id === state.task_id
+        && task.case_id === state.case_id
+        && task.status === state.state
+        && task.client_instruction === state.client_instruction
+        && task.draft_generated === state.draft_generated
+        && task.notice_sent === state.notice_sent
+        && task.notify_count === state.notify_count
+        && task.is_overdue === state.is_overdue
+        && task.lineage_status === 'CONFIRMED'
+        && state.lineage_status === 'CONFIRMED'
+        && Boolean(task.source_document_id)
+        && task.source_document_id === state.source_document_id
+        && task.deadline_source === state.deadline_source
+        && task.deadline_confirmed_at === state.deadline_confirmed_at
+    return {
+        ...task,
+        allowed_actions: exactCurrentBinding ? [...state.allowed_actions] : [],
+        state_binding_current: exactCurrentBinding,
+    }
+}
+
+export function isCurrentGrantFeeTask(task: GrantFeeTaskListItem): boolean {
+    return task.state_binding_current
+        && task.lineage_status === 'CONFIRMED'
+        && Boolean(task.source_document_id)
+}
+
+export function grantFeeTaskAllowsAction(
+    task: GrantFeeTaskListItem,
+    action: GrantFeeTaskStateAction,
+): boolean {
+    if (!isCurrentGrantFeeTask(task) || !task.allowed_actions.includes(action)) return false
+    if (action === 'record_pay_instruction' && task.client_instruction !== 'NONE') return false
+    return true
 }
 
 /**
@@ -268,6 +317,42 @@ export async function getGrantFeeTasks(
         ...response.data,
         items: response.data.items.map(mapGrantFeeTask),
     }
+}
+
+export async function getGrantFeeTaskState(taskId: string): Promise<GrantFeeTaskStateResult> {
+    const response = await http.get<BackendGrantFeeTaskStateResponse>(`/grant-fee-tasks/${taskId}/state`)
+    return mapGrantFeeTaskStateResult(response.data)
+}
+
+export async function recordGrantNoticeLifecycle(
+    task: GrantFeeTaskListItem,
+    evidence: ReviewedDocumentEvidenceOption,
+    timing: GrantNoticeLifecycleTiming,
+): Promise<GrantNoticeLifecycleResult> {
+    const exactEvidence = isCurrentGrantFeeTask(task)
+        && evidence.case_id === task.case_id
+        && evidence.document_id === task.source_document_id
+        && Boolean(evidence.evidence_version_id)
+        && evidence.evidence_version_id === evidence.evidence_version_id.trim()
+        && evidence.evidence_version_id.length <= 36
+        && /^sha256:[0-9a-f]{64}$/.test(evidence.content_hash)
+    const exactTiming = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(timing.recorded_at)
+        && Boolean(timing.idempotency_key)
+        && timing.idempotency_key === timing.idempotency_key.trim()
+        && timing.idempotency_key.length <= 102
+    if (!exactEvidence || !exactTiming) {
+        throw new Error('只能记录当前任务的同案已复核授权通知证据')
+    }
+    const response = await http.post<GrantNoticeLifecycleResult>(
+        `/grant-fee-tasks/${task.task_id}/lifecycle/grant-notice`,
+        {
+            reviewed_evidence_version_id: evidence.evidence_version_id,
+            expected_content_hash: evidence.content_hash,
+            recorded_at: timing.recorded_at,
+            idempotency_key: timing.idempotency_key,
+        },
+    )
+    return response.data
 }
 
 /**

@@ -240,55 +240,64 @@
         <el-table-column label="动作入口" min-width="240" fixed="right">
           <template #default="{ row }">
             <el-space wrap>
-              <span v-if="row.lineage_status !== 'CONFIRMED'" class="ordinary-mutation-unavailable">
-                来源未确认或已被替代，不能执行授权费操作
-              </span>
-              <el-button
-                size="small"
-                type="warning"
-                :loading="previewLoadingTaskId === row.task_id"
-                :disabled="row.lineage_status !== 'CONFIRMED'"
-                @click="openOfficialFeePreview(row)"
-              >
-                预览官费
-              </el-button>
-              <el-button
-                size="small"
-                type="primary"
-                :loading="generatingTaskId === row.task_id"
-                :disabled="!canGenerateDraft(row)"
-                @click="handleGenerateDraft(row)"
-              >
-                生成草单
-              </el-button>
-              <el-button
-                size="small"
-                type="success"
-                :loading="completingTaskId === row.task_id"
-                :disabled="!canMarkDone(row)"
-                @click="handleMarkDone(row)"
-              >
-                标记完成
-              </el-button>
-              <template v-if="canSeeReplacementAction(row)">
+              <template v-if="isCurrentGrantFeeTask(row)">
                 <el-button
-                  type="warning"
                   size="small"
-                  :title="replacementDisabledReason"
-                  :disabled="Boolean(replacementDisabledReason)"
-                  @click="openReplacementDialog(row)"
+                  @click="openGrantEvidenceDialog(row)"
                 >
-                  更正通知
+                  选择授权通知证据
                 </el-button>
-                <span v-if="replacementDisabledReason" class="replacement-unavailable">
-                  {{ replacementDisabledReason }}
-                </span>
+                <el-button
+                  v-if="grantFeeTaskAllowsAction(row, 'mark_waiting_client')"
+                  size="small"
+                  :loading="waitingTaskId === row.task_id"
+                  @click="handleMarkWaitingClient(row)"
+                >
+                  标记等待客户
+                </el-button>
+                <el-button
+                  size="small"
+                  type="warning"
+                  :loading="previewLoadingTaskId === row.task_id"
+                  @click="openOfficialFeePreview(row)"
+                >
+                  预览官费
+                </el-button>
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="generatingTaskId === row.task_id"
+                  :disabled="!canGenerateDraft(row)"
+                  @click="handleGenerateDraft(row)"
+                >
+                  生成草单
+                </el-button>
+                <el-button
+                  size="small"
+                  type="success"
+                  :loading="completingTaskId === row.task_id"
+                  :disabled="!canMarkDone(row)"
+                  @click="handleMarkDone(row)"
+                >
+                  标记完成
+                </el-button>
+                <template v-if="canSeeReplacementAction(row)">
+                  <el-button
+                    type="warning"
+                    size="small"
+                    :title="replacementDisabledReason"
+                    :disabled="Boolean(replacementDisabledReason)"
+                    @click="openReplacementDialog(row)"
+                  >
+                    更正通知
+                  </el-button>
+                  <span v-if="replacementDisabledReason" class="replacement-unavailable">
+                    {{ replacementDisabledReason }}
+                  </span>
+                </template>
               </template>
-              <span v-else-if="row.lineage_status === 'LEGACY_UNVERIFIED'" class="replacement-unavailable">
-                历史数据待核验，不能发起更正通知
-              </span>
-              <span v-else-if="row.lineage_status === 'SUPERSEDED'" class="replacement-unavailable">
-                该任务已被替代，不能再次发起更正通知
+              <span v-else class="ordinary-mutation-unavailable">
+                来源未确认、已被替代或状态已变化，仅可查看
               </span>
             </el-space>
           </template>
@@ -297,6 +306,22 @@
 
       <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[20, 50, 100]" />
     </div>
+
+    <el-dialog
+      v-model="grantEvidenceDialogVisible"
+      title="选择授权通知证据"
+      width="760px"
+      :close-on-click-modal="false"
+    >
+      <LoadingBlock v-if="grantEvidenceLoading" :rows="4" />
+      <DocumentLifecycleEvidenceActions
+        v-else-if="grantEvidenceTask && grantEvidenceDocument"
+        :document="grantEvidenceDocument"
+        :grant-task="grantEvidenceTask"
+        @error="handleGrantEvidenceError"
+        @recorded="handleGrantEvidenceRecorded"
+      />
+    </el-dialog>
 
     <el-dialog
       v-model="officialFeeDialogVisible"
@@ -466,15 +491,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   applyGrantFeeBatchInstruction,
   applyGrantFeeTaskAction,
+  bindGrantFeeTaskState,
   createGrantFeeTaskReplacementNotice,
   confirmGrantOfficialFees,
   generateGrantFeeDraft,
   generateGrantFeeNoticeDocuments,
+  getGrantFeeTaskState,
   getGrantOfficialFeePreview,
   getGrantFeeTasks,
+  grantFeeTaskAllowsAction,
+  isCurrentGrantFeeTask,
 } from '../../../api/grantFees'
-import { getDocTemplates } from '../../../api/documents'
-import type { DocTemplate } from '../../../api/documents.types'
+import { getDocTemplates, getDocument } from '../../../api/documents'
+import type { DocTemplate, Document } from '../../../api/documents.types'
 import type {
   GrantFeeTaskBatchInstructionAction,
   GrantFeeTaskClientInstruction,
@@ -486,6 +515,7 @@ import type {
 } from '../../../api/grantFees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import DocumentLifecycleEvidenceActions from '../../documents/components/DocumentLifecycleEvidenceActions.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
@@ -510,6 +540,7 @@ const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const generatingTaskId = ref<string | null>(null)
 const completingTaskId = ref<string | null>(null)
+const waitingTaskId = ref<string | null>(null)
 const batchActionLoading = ref<GrantFeeTaskBatchInstructionAction | null>(null)
 const batchNoticeLoading = ref(false)
 const page = ref(1)
@@ -527,6 +558,10 @@ const officialFeeDialogVisible = ref(false)
 const officialFeePreview = ref<GrantOfficialFeePreview | null>(null)
 const officialFeeConfirming = ref(false)
 const officialFeeIdempotencyKey = ref(crypto.randomUUID())
+const grantEvidenceDialogVisible = ref(false)
+const grantEvidenceLoading = ref(false)
+const grantEvidenceTask = ref<GrantFeeTaskListItem | null>(null)
+const grantEvidenceDocument = ref<Document | null>(null)
 const replacementForm = reactive<ReplacementForm>(emptyReplacementForm())
 const filters = reactive<{
   status: '' | GrantFeeTaskStatus
@@ -598,7 +633,7 @@ function formatAmount(input: number | string, currency: string): string {
 }
 
 async function openOfficialFeePreview(row: GrantFeeTaskListItem) {
-  if (row.lineage_status !== 'CONFIRMED') return
+  if (!isCurrentGrantFeeTask(row)) return
   previewLoadingTaskId.value = row.task_id
   error.value = null
   try {
@@ -714,24 +749,25 @@ function formatBillDisplay(row: GrantFeeTaskListItem): string {
 }
 
 function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
-  return row.lineage_status === 'CONFIRMED'
+  return isCurrentGrantFeeTask(row)
     && row.status === 'READY_TO_DRAFT'
     && !row.draft_generated
     && generatingTaskId.value !== row.task_id
 }
 
 function canMarkDone(row: GrantFeeTaskListItem): boolean {
-  return row.lineage_status === 'CONFIRMED'
+  return isCurrentGrantFeeTask(row)
     && row.status === 'DRAFT_GENERATED'
     && completingTaskId.value !== row.task_id
 }
 
 function isOrdinaryMutationSelectable(row: GrantFeeTaskListItem): boolean {
-  return row.lineage_status === 'CONFIRMED'
+  return grantFeeTaskAllowsAction(row, 'record_pay_instruction')
+    || grantFeeTaskAllowsAction(row, 'record_abandon_instruction')
 }
 
 function canSeeReplacementAction(row: GrantFeeTaskListItem): boolean {
-  return row.lineage_status === 'CONFIRMED'
+  return isCurrentGrantFeeTask(row)
     && authStore.hasPermission('GrantFeeTask.Write')
     && authStore.hasPermission('Doc.Create')
 }
@@ -846,7 +882,19 @@ async function fetchTasks() {
   error.value = null
   try {
     const response: GrantFeeTaskListResponse = await getGrantFeeTasks(buildParams())
-    tasks.value = response.items
+    const taskIdCounts = new Map<string, number>()
+    for (const task of response.items) {
+      taskIdCounts.set(task.task_id, (taskIdCounts.get(task.task_id) || 0) + 1)
+    }
+    tasks.value = await Promise.all(response.items.map(async (task) => {
+      const occurrences = taskIdCounts.get(task.task_id) || 0
+      if (occurrences !== 1 || task.lineage_status !== 'CONFIRMED') return task
+      try {
+        return bindGrantFeeTaskState(task, await getGrantFeeTaskState(task.task_id), occurrences)
+      } catch {
+        return task
+      }
+    }))
     total.value = response.total
     selectedTaskIds.value = []
   } catch (err) {
@@ -857,7 +905,37 @@ async function fetchTasks() {
 }
 
 function handleSelectionChange(rows: GrantFeeTaskListItem[]) {
-  selectedTaskIds.value = rows.map((row) => row.task_id)
+  selectedTaskIds.value = rows
+    .filter((row) => isOrdinaryMutationSelectable(row))
+    .map((row) => row.task_id)
+}
+
+async function openGrantEvidenceDialog(row: GrantFeeTaskListItem) {
+  if (!isCurrentGrantFeeTask(row) || !row.source_document_id) return
+  grantEvidenceTask.value = row
+  grantEvidenceDocument.value = null
+  grantEvidenceDialogVisible.value = true
+  grantEvidenceLoading.value = true
+  try {
+    const document = await getDocument(row.source_document_id)
+    if (document.id !== row.source_document_id || document.case_id !== row.case_id) {
+      throw new Error('授权通知文书与当前任务不匹配')
+    }
+    grantEvidenceDocument.value = document
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    grantEvidenceLoading.value = false
+  }
+}
+
+function handleGrantEvidenceError(err: ApiError) {
+  error.value = err
+}
+
+function handleGrantEvidenceRecorded() {
+  grantEvidenceDialogVisible.value = false
+  void fetchTasks()
 }
 
 async function handleGenerateDraft(row: GrantFeeTaskListItem) {
@@ -881,6 +959,7 @@ async function handleGenerateDraft(row: GrantFeeTaskListItem) {
 }
 
 async function handleMarkDone(row: GrantFeeTaskListItem) {
+  if (!canMarkDone(row)) return
   completingTaskId.value = row.task_id
   error.value = null
   try {
@@ -891,6 +970,21 @@ async function handleMarkDone(row: GrantFeeTaskListItem) {
     error.value = err as ApiError
   } finally {
     completingTaskId.value = null
+  }
+}
+
+async function handleMarkWaitingClient(row: GrantFeeTaskListItem) {
+  if (!grantFeeTaskAllowsAction(row, 'mark_waiting_client')) return
+  waitingTaskId.value = row.task_id
+  error.value = null
+  try {
+    await applyGrantFeeTaskAction(row.task_id, 'mark_waiting_client')
+    ElMessage.success('授权费任务已标记为等待客户')
+    await fetchTasks()
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    waitingTaskId.value = null
   }
 }
 
@@ -905,6 +999,14 @@ async function handleBatchInstruction(action: GrantFeeTaskBatchInstructionAction
   }
 
   const actionText = batchInstructionText(action)
+  const eligibleTaskIds = tasks.value
+    .filter((task) => selectedTaskIds.value.includes(task.task_id))
+    .filter((task) => grantFeeTaskAllowsAction(task, action))
+    .map((task) => task.task_id)
+  if (eligibleTaskIds.length !== selectedTaskIds.value.length) {
+    ElMessage.warning('已选任务状态已变化，请刷新后重试。')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       `确认将已选 ${selectedTaskIds.value.length} 条授权费任务批量标记为${actionText}吗？`,
@@ -923,7 +1025,7 @@ async function handleBatchInstruction(action: GrantFeeTaskBatchInstructionAction
   error.value = null
   try {
     const result = await applyGrantFeeBatchInstruction({
-      task_ids: selectedTaskIds.value,
+      task_ids: eligibleTaskIds,
       action,
     })
     ElMessage.success(`已批量更新 ${result.success_count} 条授权费任务为${actionText}`)
