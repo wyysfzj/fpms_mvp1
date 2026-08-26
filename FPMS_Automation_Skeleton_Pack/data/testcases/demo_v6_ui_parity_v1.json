@@ -1,0 +1,2069 @@
+{
+  "schema_id": "fpms.demo-v6-ui-parity/v1",
+  "actors": [
+    "HUMAN",
+    "CODEX",
+    "STRICT_UI_TECHNICAL"
+  ],
+  "bindings": [
+    {
+      "field_key": "candidate_commit",
+      "classification": "SOURCE_BOUND",
+      "value_rule": "exact 40-character lowercase Git commit from the fresh-run candidate",
+      "required": true
+    },
+    {
+      "field_key": "bundle_manifest_sha256",
+      "classification": "SOURCE_BOUND",
+      "value_rule": "exact 64-character lowercase SHA-256 from the validated runtime bundle manifest",
+      "required": true
+    },
+    {
+      "field_key": "authority_sha256",
+      "classification": "SOURCE_BOUND",
+      "value_rule": "exact 64-character lowercase SHA-256 from the validated runtime authority decision",
+      "required": true
+    },
+    {
+      "field_key": "actor",
+      "classification": "EXPLICIT_INPUT",
+      "value_rule": "exactly one of HUMAN, CODEX, STRICT_UI_TECHNICAL",
+      "required": true
+    },
+    {
+      "field_key": "run_id",
+      "classification": "APP_GENERATED",
+      "value_rule": "unique run ID generated for this fresh run",
+      "required": true
+    },
+    {
+      "field_key": "run_root",
+      "classification": "APP_GENERATED",
+      "value_rule": "validated absolute root dedicated to this fresh run",
+      "required": true
+    }
+  ],
+  "allowed_differences": [
+    "RUN_SUFFIX",
+    "UUID_OR_AUTOINCREMENT_ID",
+    "DATABASE_OR_FILE_PATH",
+    "DYNAMIC_CREDENTIAL",
+    "IDEMPOTENCY_KEY",
+    "SYSTEM_TIMESTAMP"
+  ],
+  "stages": [
+    {
+      "stage": "01",
+      "inputs": [
+        {
+          "stage": "01",
+          "field_key": "customer_name",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "澄岳智造技术（苏州）有限公司",
+          "ui_route": "/clients/new",
+          "control": {
+            "role": "textbox",
+            "label": "客户名称"
+          },
+          "source_selector": "operator-entered fixed customer name",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "customer_code",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "CYZN-<run suffix>",
+          "ui_route": "/clients/new",
+          "control": {
+            "role": "textbox",
+            "label": "客户代码"
+          },
+          "source_selector": "operator-entered run-scoped customer code",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "customer_email",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "service@chengyue-ip.example",
+          "ui_route": "/clients/new",
+          "control": {
+            "role": "textbox",
+            "label": "邮箱"
+          },
+          "source_selector": "operator-entered fixed customer email",
+          "normalization": "LOWERCASE_EMAIL",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "contact_name",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "周岚",
+          "ui_route": "/clients/:id",
+          "control": {
+            "role": "textbox",
+            "label": "姓名"
+          },
+          "source_selector": "operator-entered primary contact name",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "contact_title",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "知识产权经理",
+          "ui_route": "/clients/:id",
+          "control": {
+            "role": "textbox",
+            "label": "职务"
+          },
+          "source_selector": "operator-entered primary contact title",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "contact_email",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "zhou.lan@chengyue-ip.example",
+          "ui_route": "/clients/:id",
+          "control": {
+            "role": "textbox",
+            "label": "邮箱"
+          },
+          "source_selector": "operator-entered primary contact email",
+          "normalization": "LOWERCASE_EMAIL",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "contact_is_primary",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "true",
+          "ui_route": "/clients/:id",
+          "control": {
+            "role": "switch",
+            "label": "主联系人"
+          },
+          "source_selector": "operator selects the primary-contact switch",
+          "normalization": "BOOLEAN_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "case_no",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "CYIP-CN-INV-<run suffix>",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "textbox",
+            "label": "案号"
+          },
+          "source_selector": "operator-entered run-scoped case number",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "case_title",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "一种柔性制造产线中视觉检测工位的自适应标定方法",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "textbox",
+            "label": "标题"
+          },
+          "source_selector": "operator-entered fixed invention title",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "case_type",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "NORMAL",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "combobox",
+            "label": "案件类型"
+          },
+          "source_selector": "operator selects 普通案件",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "patent_category",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "INV",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "combobox",
+            "label": "专利类别"
+          },
+          "source_selector": "operator selects 发明",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "flow_direction",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "CN_DOMESTIC",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "combobox",
+            "label": "流程方向"
+          },
+          "source_selector": "operator selects 中国国内",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "fee_reduction",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "0",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "combobox",
+            "label": "费用减缓比例"
+          },
+          "source_selector": "operator selects 不减免（0）",
+          "normalization": "DECIMAL_CANONICAL",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "client_binding",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique customer created earlier in Stage 01",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "combobox",
+            "label": "客户"
+          },
+          "source_selector": "visible customer option matching customer_name and customer_code",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "01",
+          "field_key": "first_applicant",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "same customer backfilled as the first applicant",
+          "ui_route": "/cases/new",
+          "control": {
+            "role": "checkbox",
+            "label": "第一申请人"
+          },
+          "source_selector": "visible applicant row backfilled from current customer master data",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "01",
+          "field_key": "unique_customer_and_primary_contact",
+          "classification": "APP_GENERATED",
+          "value_rule": "exactly one customer and one primary contact with the canonical values",
+          "ui_route": "/clients/:id",
+          "control": {
+            "role": "tab",
+            "label": "联系人"
+          },
+          "source_selector": "current customer detail and contact table",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "customer and primary contact are visible",
+          "expected_rule": "customer_count=1 and primary_contact_count=1",
+          "ui_evidence_point": "客户详情/联系人"
+        },
+        {
+          "stage": "01",
+          "field_key": "unique_case",
+          "classification": "APP_GENERATED",
+          "value_rule": "exactly one case with the canonical case number and title",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "current case detail",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "the created case is visible",
+          "expected_rule": "case_count=1",
+          "ui_evidence_point": "案件详情"
+        },
+        {
+          "stage": "01",
+          "field_key": "same_case_primary_contact_and_first_applicant",
+          "classification": "APP_GENERATED",
+          "value_rule": "the case primary contact and first applicant both bind to the Stage 01 customer/contact identities",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "current case parties projection",
+          "normalization": "IDENTITY_EXACT",
+          "required": true,
+          "observable": "case party relationships are visible",
+          "expected_rule": "primary contact and first applicant are unique and same-case",
+          "ui_evidence_point": "案件详情/当事人"
+        }
+      ]
+    },
+    {
+      "stage": "02",
+      "inputs": [
+        {
+          "stage": "02",
+          "field_key": "current_case",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique Stage 01 case",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "heading",
+            "label": "新申请递交准备"
+          },
+          "source_selector": "current case selected from visible case context",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "02",
+          "field_key": "filing_catalog_60",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "exactly 60 current runtime filing-catalog entries",
+          "ui_route": "/documents/wizard",
+          "control": {
+            "role": "combobox",
+            "label": "文书模板"
+          },
+          "source_selector": "visible OFFICIAL_NOTICE_ catalog options from the validated runtime bundle",
+          "normalization": "SORTED_IDENTITY_SET",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "02",
+          "field_key": "same_filing_package",
+          "classification": "APP_GENERATED",
+          "value_rule": "initial resolve and exact replay return one identical filing package",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "heading",
+            "label": "新申请递交准备"
+          },
+          "source_selector": "current filing-preparation package",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "filing package identity is visible",
+          "expected_rule": "package_count=1 and replayed_package_id=package_id",
+          "ui_evidence_point": "新申请递交准备/递交准备总览"
+        },
+        {
+          "stage": "02",
+          "field_key": "catalog_execution_boundary",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "executable catalog rows are enabled and reference-only rows are disabled",
+          "ui_route": "/documents/wizard",
+          "control": {
+            "role": "combobox",
+            "label": "文书模板"
+          },
+          "source_selector": "visible current 60-row filing catalog",
+          "normalization": "ORDER_AND_STATE_EXACT",
+          "required": true,
+          "observable": "catalog execution boundary is visible",
+          "expected_rule": "OFFICIAL_NOTICE_001 is executable and OFFICIAL_NOTICE_010 is reference-only",
+          "ui_evidence_point": "中间文件向导/文书模板"
+        }
+      ]
+    },
+    {
+      "stage": "03",
+      "inputs": [
+        {
+          "stage": "03",
+          "field_key": "filing_submission_completed_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-01 09:00:00",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "textbox",
+            "label": "完成时间"
+          },
+          "source_selector": "operator-entered manual submission completion time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_submission_note",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "已完成人工递交",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "textbox",
+            "label": "备注"
+          },
+          "source_selector": "operator-entered manual submission note",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_final_submission_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed FILING_FINAL_SUBMISSION evidence",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "combobox",
+            "label": "已复核递交文件"
+          },
+          "source_selector": "visible same-case reviewed evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_receipt_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed FILING_RECEIPT evidence",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "combobox",
+            "label": "已上传回执附件"
+          },
+          "source_selector": "visible same-case reviewed receipt evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_receipt_no",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "CNIPA-20260802-001",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "textbox",
+            "label": "官方接收案件编号"
+          },
+          "source_selector": "operator-entered filing receipt number",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_receipt_received_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-02 10:00:00",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "textbox",
+            "label": "接收时间"
+          },
+          "source_selector": "operator-entered receipt time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "filing_receipt_receiver",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "陈思远",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "textbox",
+            "label": "接收人"
+          },
+          "source_selector": "operator-entered receiver",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "acceptance_notice_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed ACCEPTANCE_NOTICE evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case reviewed evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "preliminary_examination_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed PRELIMINARY_EXAMINATION_SOURCE evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case reviewed evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "publication_notice_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed PUBLICATION_NOTICE evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case reviewed evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "03",
+          "field_key": "substantive_examination_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed SUBSTANTIVE_EXAMINATION_SOURCE evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case reviewed evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "03",
+          "field_key": "submission_and_receipt_lineage",
+          "classification": "APP_GENERATED",
+          "value_rule": "manual submission and filing receipt bind to the current reviewed filing evidence",
+          "ui_route": "/official-workflows/filing-preparation",
+          "control": {
+            "role": "heading",
+            "label": "新申请递交准备"
+          },
+          "source_selector": "current package submission and receipt panels",
+          "normalization": "EVIDENCE_CONSUMER_IDENTITY_EXACT",
+          "required": true,
+          "observable": "submission and receipt lineage is visible",
+          "expected_rule": "one submission and one receipt consume the selected reviewed evidence",
+          "ui_evidence_point": "新申请递交准备/递交与回执"
+        },
+        {
+          "stage": "03",
+          "field_key": "acceptance_projection",
+          "classification": "APP_GENERATED",
+          "value_rule": "acceptance binds to current reviewed ACCEPTANCE_NOTICE evidence",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "current lifecycle overlay",
+          "normalization": "EVIDENCE_CONSUMER_IDENTITY_EXACT",
+          "required": true,
+          "observable": "acceptance is visible",
+          "expected_rule": "acceptance evidence identity and digest match",
+          "ui_evidence_point": "案件详情/生命周期"
+        },
+        {
+          "stage": "03",
+          "field_key": "preliminary_projection",
+          "classification": "APP_GENERATED",
+          "value_rule": "preliminary start and pass both bind to current reviewed PRELIMINARY_EXAMINATION_SOURCE evidence",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "current lifecycle overlay",
+          "normalization": "EVIDENCE_CONSUMER_IDENTITY_EXACT",
+          "required": true,
+          "observable": "preliminary start and pass are visible",
+          "expected_rule": "both transitions consume the same selected preliminary evidence version",
+          "ui_evidence_point": "案件详情/生命周期"
+        },
+        {
+          "stage": "03",
+          "field_key": "publication_and_substantive_projection",
+          "classification": "APP_GENERATED",
+          "value_rule": "publication and substantive examination bind to their current reviewed evidence",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "current lifecycle overlay",
+          "normalization": "EVIDENCE_CONSUMER_IDENTITY_EXACT",
+          "required": true,
+          "observable": "publication and substantive examination are visible",
+          "expected_rule": "each transition consumes its selected evidence identity and digest",
+          "ui_evidence_point": "案件详情/生命周期"
+        }
+      ]
+    },
+    {
+      "stage": "04",
+      "inputs": [
+        {
+          "stage": "04",
+          "field_key": "oa_sequence",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "1",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "combobox",
+            "label": "文件模板"
+          },
+          "source_selector": "operator selects first OA notice template",
+          "normalization": "INTEGER_EXACT",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_notice_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-07 09:00:00",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "textbox",
+            "label": "文书日期"
+          },
+          "source_selector": "operator-entered first OA notice time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_due_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-09-22",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "textbox",
+            "label": "官方截止日"
+          },
+          "source_selector": "operator-entered first OA due date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_notice_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed OA_NOTICE_1 evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case OA_NOTICE_1 evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_reply_output_roles",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "OA_STATEMENT_WORD, OA_STATEMENT_PDF, OA_MODIFIED_CLAIMS for oa_sequence=1",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "heading",
+            "label": "OA答复工作包"
+          },
+          "source_selector": "visible current-bundle reply outputs for OA sequence 1",
+          "normalization": "SORTED_IDENTITY_SET",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_receipt_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed OA_RECEIPT_1 evidence",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "combobox",
+            "label": "已上传回执附件"
+          },
+          "source_selector": "visible same-case OA_RECEIPT_1 evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "04",
+          "field_key": "oa_receipt_received_at",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "2026-08-08 10:00:00 from current OA_RECEIPT_1 bundle metadata",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "textbox",
+            "label": "接收时间"
+          },
+          "source_selector": "current reviewed OA_RECEIPT_1 metadata",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "04",
+          "field_key": "oa1_unique_chain",
+          "classification": "APP_GENERATED",
+          "value_rule": "one OA1 package, one task, one linked reply, one receipt, and one archive result",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "heading",
+            "label": "OA答复工作包"
+          },
+          "source_selector": "current OA1 package and task history",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "OA1 chain is visible",
+          "expected_rule": "each OA1 chain object count equals one and all are same-case",
+          "ui_evidence_point": "OA答复工作包/源官文与回复链"
+        },
+        {
+          "stage": "04",
+          "field_key": "oa1_reply_output_bindings",
+          "classification": "APP_GENERATED",
+          "value_rule": "all three current-bundle OA1 output roles bind to the OA1 reply",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "heading",
+            "label": "OA答复工作包"
+          },
+          "source_selector": "visible OA file-role checklist",
+          "normalization": "SORTED_IDENTITY_SET",
+          "required": true,
+          "observable": "OA1 reply role bindings are visible",
+          "expected_rule": "exactly OA_STATEMENT_WORD, OA_STATEMENT_PDF, OA_MODIFIED_CLAIMS are present",
+          "ui_evidence_point": "OA答复工作包/回复文件角色"
+        }
+      ]
+    },
+    {
+      "stage": "05",
+      "inputs": [
+        {
+          "stage": "05",
+          "field_key": "oa_sequence",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "combobox",
+            "label": "文件模板"
+          },
+          "source_selector": "operator selects second OA notice template",
+          "normalization": "INTEGER_EXACT",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_notice_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-09 09:00:00",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "textbox",
+            "label": "文书日期"
+          },
+          "source_selector": "operator-entered second OA notice time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_due_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-10-23",
+          "ui_route": "/documents/new",
+          "control": {
+            "role": "textbox",
+            "label": "官方截止日"
+          },
+          "source_selector": "operator-entered second OA due date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_notice_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed OA_NOTICE_2 evidence",
+          "ui_route": "/documents/:id",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case OA_NOTICE_2 evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_reply_output_roles",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "OA_STATEMENT_WORD, OA_STATEMENT_PDF, OA_MODIFIED_CLAIMS for oa_sequence=2",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "heading",
+            "label": "OA答复工作包"
+          },
+          "source_selector": "visible current-bundle reply outputs for OA sequence 2",
+          "normalization": "SORTED_IDENTITY_SET",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_receipt_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed OA_RECEIPT_2 evidence",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "combobox",
+            "label": "已上传回执附件"
+          },
+          "source_selector": "visible same-case OA_RECEIPT_2 evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_receipt_received_at",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "2026-08-10 10:00:00 from current OA_RECEIPT_2 bundle metadata",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "textbox",
+            "label": "接收时间"
+          },
+          "source_selector": "current reviewed OA_RECEIPT_2 metadata",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "05",
+          "field_key": "oa2_unique_chain",
+          "classification": "APP_GENERATED",
+          "value_rule": "one OA2 package, one task, one linked reply, one receipt, and one archive result",
+          "ui_route": "/official-workflows/oa-reply",
+          "control": {
+            "role": "heading",
+            "label": "OA答复工作包"
+          },
+          "source_selector": "current OA2 package and task history",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "OA2 chain is visible",
+          "expected_rule": "each OA2 chain object count equals one and all are same-case",
+          "ui_evidence_point": "OA答复工作包/源官文与回复链"
+        },
+        {
+          "stage": "05",
+          "field_key": "oa_round_identity_separation",
+          "classification": "APP_GENERATED",
+          "value_rule": "OA2 source, package, task, reply, and receipt identities all differ from OA1",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "same-case OA history",
+          "normalization": "IDENTITY_DISJOINT",
+          "required": true,
+          "observable": "both OA rounds are visible",
+          "expected_rule": "OA1 and OA2 histories remain present and identity-disjoint",
+          "ui_evidence_point": "案件详情/OA历史"
+        }
+      ]
+    },
+    {
+      "stage": "06",
+      "inputs": [
+        {
+          "stage": "06",
+          "field_key": "original_grant_notice_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-11 09:00:00",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "文书日期"
+          },
+          "source_selector": "operator-entered original grant notice time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "original_grant_due_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-11-23",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "官方期限"
+          },
+          "source_selector": "operator-entered original grant due date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "original_grant_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed GRANT_NOTICE_ORIGINAL evidence",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case original grant evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "replacement_grant_notice_at",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-12 09:00:00",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "文书日期"
+          },
+          "source_selector": "operator-entered replacement grant notice time",
+          "normalization": "ISO_LOCAL_DATETIME_SECONDS",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "replacement_grant_due_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-11-24",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "官方期限"
+          },
+          "source_selector": "operator-entered replacement grant due date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "replacement_grant_reason",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "依据更正通知更新办理登记手续期限",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "替换原因"
+          },
+          "source_selector": "operator-entered fixed replacement reason",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "replacement_grant_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed GRANT_NOTICE_REPLACEMENT evidence",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "combobox",
+            "label": "已复核证据版本"
+          },
+          "source_selector": "visible same-case replacement grant evidence from the current bundle",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "current_task_waiting_client",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique actionable replacement task in WAITING_CLIENT",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "combobox",
+            "label": "客户指示"
+          },
+          "source_selector": "visible current replacement task row",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true
+        },
+        {
+          "stage": "06",
+          "field_key": "current_task_instruction",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "PAY",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "记录缴费指示"
+          },
+          "source_selector": "operator records PAY on the current task only",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "06",
+          "field_key": "original_task_superseded_read_only",
+          "classification": "APP_GENERATED",
+          "value_rule": "the original grant task is superseded and exposes no writable action",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "heading",
+            "label": "授权费任务看板"
+          },
+          "source_selector": "visible original task row",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true,
+          "observable": "original task supersession is visible",
+          "expected_rule": "original task is read-only and non-actionable",
+          "ui_evidence_point": "授权费任务看板/原任务"
+        },
+        {
+          "stage": "06",
+          "field_key": "current_task_pay_once",
+          "classification": "APP_GENERATED",
+          "value_rule": "the replacement task transitions WAITING_CLIENT to PAY exactly once",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "heading",
+            "label": "授权费任务看板"
+          },
+          "source_selector": "visible current replacement task row",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "current PAY instruction is visible",
+          "expected_rule": "PAY instruction count=1",
+          "ui_evidence_point": "授权费任务看板/当前任务"
+        },
+        {
+          "stage": "06",
+          "field_key": "no_gov_before_confirmation",
+          "classification": "APP_GENERATED",
+          "value_rule": "no GOV FeeObligation, FeeDraft, or FeeItem exists before Stage 07 confirmation",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "same-case fee overview",
+          "normalization": "COUNT_EXACT",
+          "required": true,
+          "observable": "absence of premature GOV objects is visible",
+          "expected_rule": "GOV obligation=0, draft=0, item=0 before confirmation",
+          "ui_evidence_point": "案件详情/同案双轨费用概览"
+        }
+      ]
+    },
+    {
+      "stage": "07",
+      "inputs": [
+        {
+          "stage": "07",
+          "field_key": "current_grant_task",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique current PAY replacement grant task",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "textbox",
+            "label": "案件编号"
+          },
+          "source_selector": "visible current replacement task row",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "reviewed_replacement_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "current reviewed GRANT_NOTICE_REPLACEMENT evidence bound to the task",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "预览官费"
+          },
+          "source_selector": "visible current task evidence lineage",
+          "normalization": "EVIDENCE_IDENTITY_AND_SHA256",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "rate_book_digest",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "exact active rate-book SHA-256 shown by the current preview",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "预览官费"
+          },
+          "source_selector": "visible preview source facts",
+          "normalization": "SHA256_LOWERCASE",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "rate_row_digests",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "exact per-line rate-row SHA-256 values shown by the current preview",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "预览官费"
+          },
+          "source_selector": "visible preview rows",
+          "normalization": "ORDERED_SHA256_LIST",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "preview_digest",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "exact preview SHA-256 returned for the current read-only preview",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "预览官费"
+          },
+          "source_selector": "visible preview digest",
+          "normalization": "SHA256_LOWERCASE",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "preview_line_amounts",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "900.00 CNY and 50.00 CNY from the current preview rows",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "预览官费"
+          },
+          "source_selector": "visible preview line amounts",
+          "normalization": "ORDERED_DECIMAL_2_LIST",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "confirmation_time",
+          "classification": "APP_GENERATED",
+          "value_rule": "system timestamp generated for the confirmation",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "确认并生成官费草单"
+          },
+          "source_selector": "confirmation response and visible result",
+          "normalization": "ISO_SYSTEM_TIMESTAMP",
+          "required": true
+        },
+        {
+          "stage": "07",
+          "field_key": "confirmation_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for this confirmation action",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "button",
+            "label": "确认并生成官费草单"
+          },
+          "source_selector": "current browser action ledger",
+          "normalization": "OPAQUE_IDENTITY",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "07",
+          "field_key": "gov_preview_total",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "900.00+50.00=950.00 CNY",
+          "ui_route": "/grant-fee/tasks",
+          "control": {
+            "role": "dialog",
+            "label": "授权登记官费预览"
+          },
+          "source_selector": "visible official-fee preview rows and total",
+          "normalization": "DECIMAL_EQUATION_EXACT",
+          "required": true,
+          "observable": "GOV preview amounts are visible",
+          "expected_rule": "two lines total exactly 950.00 CNY",
+          "ui_evidence_point": "授权登记官费预览"
+        },
+        {
+          "stage": "07",
+          "field_key": "unique_gov_obligation_and_draft",
+          "classification": "APP_GENERATED",
+          "value_rule": "confirmation creates exactly one GOV obligation and one GOV draft",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "testid": "draft-source-facts"
+          },
+          "source_selector": "current GOV draft source facts",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "GOV draft and obligation lineage are visible",
+          "expected_rule": "GOV obligation_count=1 and GOV draft_count=1",
+          "ui_evidence_point": "费用草稿详情/计算与来源"
+        },
+        {
+          "stage": "07",
+          "field_key": "gov_lines_read_only",
+          "classification": "APP_GENERATED",
+          "value_rule": "all GOV draft lines are read-only",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "testid": "draft-source-facts"
+          },
+          "source_selector": "current GOV draft source facts",
+          "normalization": "STATE_EXACT",
+          "required": true,
+          "observable": "GOV read-only boundary is visible",
+          "expected_rule": "no GOV line exposes an edit or adjustment action",
+          "ui_evidence_point": "费用草稿详情/官费草单：全部明细只读"
+        }
+      ]
+    },
+    {
+      "stage": "08",
+      "inputs": [
+        {
+          "stage": "08",
+          "field_key": "service_item_1",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "FWSQDJ001",
+          "ui_route": "/fees/drafts/new",
+          "control": {
+            "role": "combobox",
+            "label": "服务费项目"
+          },
+          "source_selector": "operator selects current runtime service item FWSQDJ001",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "08",
+          "field_key": "service_item_2",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "FWSQDJ002",
+          "ui_route": "/fees/drafts/new",
+          "control": {
+            "role": "combobox",
+            "label": "服务费项目"
+          },
+          "source_selector": "operator selects current runtime service item FWSQDJ002",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "08",
+          "field_key": "service_item_2_quantity_before",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "1",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "role": "spinbutton",
+            "label": "数量"
+          },
+          "source_selector": "visible current quantity before adjustment",
+          "normalization": "INTEGER_EXACT",
+          "required": true
+        },
+        {
+          "stage": "08",
+          "field_key": "service_item_2_quantity_after",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "role": "spinbutton",
+            "label": "数量"
+          },
+          "source_selector": "operator-entered replacement quantity",
+          "normalization": "INTEGER_EXACT",
+          "required": true
+        },
+        {
+          "stage": "08",
+          "field_key": "service_adjustment_reason",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "客户确认增加一份附加文件处理",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "role": "textbox",
+            "label": "调整原因"
+          },
+          "source_selector": "operator-entered fixed Chinese reason",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "08",
+          "field_key": "one_gov_and_one_service_draft",
+          "classification": "APP_GENERATED",
+          "value_rule": "same case has exactly one domain-pure GOV draft and one domain-pure SERVICE draft",
+          "ui_route": "/fees/drafts",
+          "control": {
+            "role": "heading",
+            "label": "费用草稿"
+          },
+          "source_selector": "visible same-case draft list",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "both fee-domain drafts are visible",
+          "expected_rule": "GOV draft_count=1 and SERVICE draft_count=1 with no mixed lines",
+          "ui_evidence_point": "费用草稿列表"
+        },
+        {
+          "stage": "08",
+          "field_key": "service_adjustment_total",
+          "classification": "APP_GENERATED",
+          "value_rule": "SERVICE total changes once from 1500.00 to 1800.00 CNY",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "testid": "draft-source-facts"
+          },
+          "source_selector": "visible SERVICE before/after source facts",
+          "normalization": "DECIMAL_TRANSITION_EXACT",
+          "required": true,
+          "observable": "SERVICE adjustment is visible",
+          "expected_rule": "one adjustment activity and total 1500.00→1800.00 CNY",
+          "ui_evidence_point": "费用草稿详情/计算与来源"
+        },
+        {
+          "stage": "08",
+          "field_key": "both_drafts_locked",
+          "classification": "APP_GENERATED",
+          "value_rule": "GOV and SERVICE drafts both reach LOCKED and remain read-only",
+          "ui_route": "/fees/drafts/:id",
+          "control": {
+            "role": "tab",
+            "label": "概览"
+          },
+          "source_selector": "visible draft status and controls",
+          "normalization": "STATE_EXACT",
+          "required": true,
+          "observable": "both lock states are visible",
+          "expected_rule": "GOV=LOCKED and SERVICE=LOCKED with no write control",
+          "ui_evidence_point": "费用草稿详情/概览"
+        }
+      ]
+    },
+    {
+      "stage": "09",
+      "inputs": [
+        {
+          "stage": "09",
+          "field_key": "planned_pay_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-25",
+          "ui_route": "/fee-management/pay-lists",
+          "control": {
+            "role": "textbox",
+            "label": "计划缴费日期"
+          },
+          "source_selector": "operator-entered planned payment date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "09",
+          "field_key": "pay_list_remark",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "授权登记官费清单",
+          "ui_route": "/fee-management/pay-lists",
+          "control": {
+            "role": "textbox",
+            "label": "备注"
+          },
+          "source_selector": "operator-entered fixed pay-list remark",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "09",
+          "field_key": "gov_line_amounts",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the two current GOV draft line amounts 900.00 and 50.00 CNY",
+          "ui_route": "/fee-management/pay-lists/:id",
+          "control": {
+            "role": "heading",
+            "label": "官费清单详情"
+          },
+          "source_selector": "visible selected GOV draft lines",
+          "normalization": "ORDERED_DECIMAL_2_LIST",
+          "required": true
+        },
+        {
+          "stage": "09",
+          "field_key": "official_receipt_fields",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "empty for every GovPayment",
+          "ui_route": "/fee-management/gov-payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "收据号"
+          },
+          "source_selector": "visible disabled evidence field in demo command mode",
+          "normalization": "EMPTY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "09",
+          "field_key": "voucher_fields",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "empty for every GovPayment",
+          "ui_route": "/fee-management/pay-lists/:id",
+          "control": {
+            "role": "heading",
+            "label": "官费清单详情"
+          },
+          "source_selector": "visible GovPayment evidence projection",
+          "normalization": "EMPTY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "09",
+          "field_key": "invoice_fields",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "empty for every GovPayment",
+          "ui_route": "/fee-management/pay-lists/:id",
+          "control": {
+            "role": "heading",
+            "label": "官费清单详情"
+          },
+          "source_selector": "visible GovPayment evidence projection",
+          "normalization": "EMPTY_EXACT",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "09",
+          "field_key": "one_two_line_pay_list",
+          "classification": "APP_GENERATED",
+          "value_rule": "exactly one PayList contains exactly the two GOV lines",
+          "ui_route": "/fee-management/pay-lists/:id",
+          "control": {
+            "role": "heading",
+            "label": "官费清单详情"
+          },
+          "source_selector": "current PayList detail",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "two-line PayList is visible",
+          "expected_rule": "PayList_count=1 and line_count=2",
+          "ui_evidence_point": "官费清单详情/费用行"
+        },
+        {
+          "stage": "09",
+          "field_key": "pending_official_evidence_per_line",
+          "classification": "APP_GENERATED",
+          "value_rule": "each GOV line has exactly one REGISTERED_PENDING_OFFICIAL_EVIDENCE GovPayment with empty receipt, voucher, and invoice",
+          "ui_route": "/fee-management/pay-lists/:id",
+          "control": {
+            "role": "alert",
+            "label": "已登记，待官方凭证核验"
+          },
+          "source_selector": "visible GovPayment list",
+          "normalization": "IDENTITY_COUNT_AND_STATE_EXACT",
+          "required": true,
+          "observable": "pending-evidence boundary is visible",
+          "expected_rule": "GovPayment_count_per_line=1 and all evidence fields empty",
+          "ui_evidence_point": "官费清单详情/已登记，待官方凭证核验"
+        }
+      ]
+    },
+    {
+      "stage": "10",
+      "inputs": [
+        {
+          "stage": "10",
+          "field_key": "bill_no",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "AR-CYZN-<run suffix>",
+          "ui_route": "/billing/bills/new",
+          "control": {
+            "role": "textbox",
+            "label": "账单编号"
+          },
+          "source_selector": "operator-entered run-scoped bill number",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "bill_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-25",
+          "ui_route": "/billing/bills/new",
+          "control": {
+            "role": "textbox",
+            "label": "账单日期"
+          },
+          "source_selector": "operator-entered bill date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "bill_due_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-09-24",
+          "ui_route": "/billing/bills/new",
+          "control": {
+            "role": "textbox",
+            "label": "到期日"
+          },
+          "source_selector": "operator-entered bill due date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "service_locked_draft",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique locked SERVICE draft from Stage 08",
+          "ui_route": "/billing/bills/new",
+          "control": {
+            "role": "combobox",
+            "label": "费用草稿"
+          },
+          "source_selector": "visible domain-labelled SERVICE draft option",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_amount",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "1200.00",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "spinbutton",
+            "label": "回款金额"
+          },
+          "source_selector": "operator-entered first payment amount",
+          "normalization": "DECIMAL_2",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-25",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "收款日期"
+          },
+          "source_selector": "operator-entered first payment date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_method",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "BANK_TRANSFER",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "付款方式"
+          },
+          "source_selector": "operator selects 银行转账",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_no",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "RCPT-CYZN-<run suffix>-01",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "收款编号"
+          },
+          "source_selector": "operator-entered first payment reference",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_bank_ref",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "BTR-CYZN-<run suffix>-01",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "银行流水号"
+          },
+          "source_selector": "operator-entered first bank reference",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_amount",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "600.00 read after refreshing the partially settled bill",
+          "ui_route": "/billing/bills/:id",
+          "control": {
+            "role": "button",
+            "label": "刷新"
+          },
+          "source_selector": "visible authoritative bill balance after first offset",
+          "normalization": "DECIMAL_2",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-26",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "收款日期"
+          },
+          "source_selector": "operator-entered second payment date",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_method",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "BANK_TRANSFER",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "付款方式"
+          },
+          "source_selector": "operator selects 银行转账",
+          "normalization": "ENUM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_no",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "RCPT-CYZN-<run suffix>-02",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "收款编号"
+          },
+          "source_selector": "operator-entered second payment reference",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_bank_ref",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "BTR-CYZN-<run suffix>-02",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "银行流水号"
+          },
+          "source_selector": "operator-entered second bank reference",
+          "normalization": "RUN_SUFFIX_TEMPLATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-25",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "textbox",
+            "label": "核销日期"
+          },
+          "source_selector": "operator-entered first offset date matching payment 1",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_2_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-26",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "textbox",
+            "label": "核销日期"
+          },
+          "source_selector": "operator-entered second offset date matching payment 2",
+          "normalization": "ISO_DATE",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "stage": "10",
+          "field_key": "bill_settlement_transition",
+          "classification": "APP_GENERATED",
+          "value_rule": "UNSETTLED→PARTIALLY_SETTLED/600.00→SETTLED/0.00",
+          "ui_route": "/billing/bills/:id",
+          "control": {
+            "role": "heading",
+            "label": "账单详情"
+          },
+          "source_selector": "visible authoritative bill status and balance",
+          "normalization": "STATE_AND_DECIMAL_TRANSITION_EXACT",
+          "required": true,
+          "observable": "bill settlement transition is visible",
+          "expected_rule": "initial UNSETTLED, after offset 1 PARTIALLY_SETTLED/600.00, after offset 2 SETTLED/0.00",
+          "ui_evidence_point": "账单详情/账单结清状态"
+        },
+        {
+          "stage": "10",
+          "field_key": "two_payments_and_offsets",
+          "classification": "APP_GENERATED",
+          "value_rule": "exactly two Payment objects and two non-reversed valid Offset objects",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "heading",
+            "label": "预收款管理报表"
+          },
+          "source_selector": "visible payment and offset records",
+          "normalization": "IDENTITY_AND_COUNT_EXACT",
+          "required": true,
+          "observable": "two payments and two offsets are visible",
+          "expected_rule": "Payment_count=2 and valid_Offset_count=2",
+          "ui_evidence_point": "预收款管理报表/核销记录"
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_offset_bill_equation",
+          "classification": "APP_GENERATED",
+          "value_rule": "1200.00+600.00=1800.00 for Payments, valid Offsets, and Bill",
+          "ui_route": "/billing/bills/:id",
+          "control": {
+            "role": "heading",
+            "label": "账单详情"
+          },
+          "source_selector": "visible bill items and offset records",
+          "normalization": "DECIMAL_EQUATION_EXACT",
+          "required": true,
+          "observable": "settlement amount equation is visible",
+          "expected_rule": "sum(Payment)=sum(valid Offset)=Bill=1800.00 CNY",
+          "ui_evidence_point": "账单详情/抵扣记录"
+        }
+      ]
+    },
+    {
+      "stage": "11",
+      "inputs": [],
+      "outputs": [
+        {
+          "stage": "11",
+          "field_key": "same_case_gov_pending_evidence",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "same-case GOV draft, PayList, and GovPayments remain pending official evidence",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "same-case dual-track fee overview",
+          "normalization": "IDENTITY_TOTAL_AND_STATE_EXACT",
+          "required": true,
+          "observable": "GOV pending-evidence track is visible",
+          "expected_rule": "GOV identities and 950.00 total remain intact and pending official evidence",
+          "ui_evidence_point": "案件详情/同案双轨费用概览"
+        },
+        {
+          "stage": "11",
+          "field_key": "same_case_service_settled",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "same-case SERVICE obligation, draft, Bill, Payments, and Offsets remain fully settled",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "same-case dual-track fee overview",
+          "normalization": "IDENTITY_TOTAL_AND_STATE_EXACT",
+          "required": true,
+          "observable": "SERVICE settled track is visible",
+          "expected_rule": "SERVICE identities and 1800.00 total remain intact and Bill is SETTLED/0.00",
+          "ui_evidence_point": "案件详情/同案双轨费用概览"
+        },
+        {
+          "stage": "11",
+          "field_key": "cross_track_consistency",
+          "classification": "APP_GENERATED",
+          "value_rule": "all same-case identities, amounts, and statuses agree without merging GOV and SERVICE facts",
+          "ui_route": "/cases/:id",
+          "control": {
+            "role": "heading",
+            "label": "案件详情"
+          },
+          "source_selector": "same-case dual-track fee overview and linked normal pages",
+          "normalization": "CROSS_PAGE_IDENTITY_TOTAL_AND_STATE_EXACT",
+          "required": true,
+          "observable": "cross-track summary is visible",
+          "expected_rule": "GOV and SERVICE chains are internally complete, same-case, and domain-separated",
+          "ui_evidence_point": "案件详情/同案双轨费用概览"
+        }
+      ]
+    }
+  ],
+  "strict_assertions": [
+    {
+      "stage": "07",
+      "assertion_key": "preview_line_count_at_least_two",
+      "expected_rule": "preview_line_count>=2",
+      "ui_evidence_point": "授权登记官费预览/费用行",
+      "required": true
+    },
+    {
+      "stage": "07",
+      "assertion_key": "preview_source_digests_exact",
+      "expected_rule": "rate_book_digest, every rate_row_digest, and preview_digest are exact",
+      "ui_evidence_point": "授权登记官费预览/来源摘要",
+      "required": true
+    },
+    {
+      "stage": "07",
+      "assertion_key": "preview_read_only_transaction_snapshot",
+      "expected_rule": "before and after preview, one read-only transaction view shows exact unchanged identities/counts for CaseActivityEvent, demo command carrier, FeeObligation, FeeObligationLine, obligation draft/item links, FeeDraft, FeeItem, PayList, and GovPayment",
+      "ui_evidence_point": "授权登记官费预览/只读快照",
+      "required": true
+    },
+    {
+      "stage": "07",
+      "assertion_key": "one_gov_obligation_and_draft_after_confirmation",
+      "expected_rule": "after confirmation exactly one GOV obligation and one GOV draft exist",
+      "ui_evidence_point": "费用草稿详情/计算与来源",
+      "required": true
+    },
+    {
+      "stage": "07",
+      "assertion_key": "gov_preview_amount_equation",
+      "expected_rule": "900.00+50.00=950.00",
+      "ui_evidence_point": "授权登记官费预览/合计",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "one_domain_pure_gov_and_service",
+      "expected_rule": "same case has exactly one GOV and one SERVICE obligation/draft chain and each domain is pure",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "one_adjustment_and_superseding_chain",
+      "expected_rule": "exactly one adjustment activity, one superseding PAY instruction, and one superseding SERVICE obligation exist",
+      "ui_evidence_point": "费用草稿详情/计算与来源",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "original_service_header_exact",
+      "expected_rule": "original header is exactly SUPERSEDED/PAY/NOT_CREATED/UNPAID/NOT_APPLICABLE",
+      "ui_evidence_point": "费用草稿详情/计算与来源",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "new_service_header_exact",
+      "expected_rule": "new header is exactly RECOGNIZED/PAY/CREATED/UNPAID/NOT_APPLICABLE",
+      "ui_evidence_point": "费用草稿详情/计算与来源",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "adjustment_snapshots_and_digests_exact",
+      "expected_rule": "adjustment_before_snapshot/digest equals the original obligation complete line set and adjustment_after_snapshot/digest equals the new obligation complete line set",
+      "ui_evidence_point": "费用草稿详情/调整记录",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "current_link_ownership_exact",
+      "expected_rule": "original obligation has no current draft/item links and new obligation owns every current link in one-to-one correspondence",
+      "ui_evidence_point": "费用草稿详情/关联缴费义务",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "service_adjustment_amount_transition",
+      "expected_rule": "1500.00→1800.00",
+      "ui_evidence_point": "费用草稿详情/计算与来源",
+      "required": true
+    },
+    {
+      "stage": "08",
+      "assertion_key": "both_locked_drafts_read_only",
+      "expected_rule": "both drafts are read-only after LOCKED",
+      "ui_evidence_point": "费用草稿详情/概览",
+      "required": true
+    },
+    {
+      "stage": "09",
+      "assertion_key": "one_pay_list_with_two_gov_lines",
+      "expected_rule": "exactly one PayList exists and line count equals the two GOV lines",
+      "ui_evidence_point": "官费清单详情/费用行",
+      "required": true
+    },
+    {
+      "stage": "09",
+      "assertion_key": "one_pending_gov_payment_per_line",
+      "expected_rule": "each line has exactly one REGISTERED_PENDING_OFFICIAL_EVIDENCE GovPayment and receipt/voucher/invoice are all empty",
+      "ui_evidence_point": "官费清单详情/已登记，待官方凭证核验",
+      "required": true
+    },
+    {
+      "stage": "09",
+      "assertion_key": "gov_pay_list_payment_totals_equal",
+      "expected_rule": "GOV draft total = PayList total = GovPayment total = 950.00",
+      "ui_evidence_point": "官费清单详情/清单金额",
+      "required": true
+    },
+    {
+      "stage": "09",
+      "assertion_key": "gov_registration_replay_stable",
+      "expected_rule": "replay leaves identities and counts unchanged",
+      "ui_evidence_point": "官费清单详情/登记结果",
+      "required": true
+    },
+    {
+      "stage": "09",
+      "assertion_key": "service_excluded_from_pay_list",
+      "expected_rule": "SERVICE lines do not enter PayList",
+      "ui_evidence_point": "官费清单详情/费用行",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "service_bill_chain_totals_equal",
+      "expected_rule": "SERVICE superseding obligation payable total = current linked FeeItem total = SERVICE locked draft total = Bill total = 1800.00",
+      "ui_evidence_point": "账单详情/账单明细",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "payment_registration_does_not_reduce_balance",
+      "expected_rule": "registering the first Payment does not change bill balance",
+      "ui_evidence_point": "预收款管理报表/登记回款不等于账单核销",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "first_offset_partially_settles",
+      "expected_rule": "after first 1200.00 Offset the bill is PARTIALLY_SETTLED/600.00",
+      "ui_evidence_point": "账单详情/账单结清状态",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "second_payment_reads_refreshed_balance",
+      "expected_rule": "after page refresh the second Payment reads the authoritative 600.00 balance",
+      "ui_evidence_point": "账单详情/刷新余额",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "two_payments_two_offsets_final_settled",
+      "expected_rule": "finally exactly two Payments and two valid Offsets exist and the bill is SETTLED/0.00",
+      "ui_evidence_point": "预收款管理报表/核销记录",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "payment_offset_bill_totals_equal",
+      "expected_rule": "sum of two Payments = sum of two valid Offsets = Bill total = 1800.00",
+      "ui_evidence_point": "账单详情/抵扣记录",
+      "required": true
+    },
+    {
+      "stage": "10",
+      "assertion_key": "gov_excluded_from_bill",
+      "expected_rule": "GOV amount does not enter Bill",
+      "ui_evidence_point": "账单详情/账单明细",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "original_service_obligation_final_state",
+      "expected_rule": "original SERVICE obligation remains SUPERSEDED/PAY/NOT_CREATED/UNPAID/NOT_APPLICABLE with no current links",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "new_service_obligation_final_state",
+      "expected_rule": "new SERVICE obligation is RECOGNIZED/PAY/CREATED/UNPAID/NOT_APPLICABLE and owns all current links",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "gov_identity_and_total_chain_complete",
+      "expected_rule": "same-case GOV draft/PayList/GovPayment identity and total chain is complete",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "service_identity_and_total_chain_complete",
+      "expected_rule": "same-case SERVICE obligation/draft/Bill/Payment/Offset identity and total chain is complete",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "dual_track_final_statuses",
+      "expected_rule": "GOV still awaits official evidence and SERVICE is settled",
+      "ui_evidence_point": "案件详情/同案双轨费用概览",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "network_and_console_empty",
+      "expected_rule": "Network and console arrays are empty",
+      "ui_evidence_point": "strict receipt/Network and console arrays",
+      "required": true
+    },
+    {
+      "stage": "11",
+      "assertion_key": "stage_11_no_new_writes",
+      "expected_rule": "Stage 11 performs no new writes",
+      "ui_evidence_point": "strict receipt/Stage 11 mutation ledger",
+      "required": true
+    }
+  ]
+}
