@@ -168,7 +168,7 @@ export function selectReviewedEvidenceOptions(
     caseId: string,
 ): ReviewedDocumentEvidenceOption[] {
     if (!caseId.trim()) return []
-    return documents.flatMap((document) => {
+    const options = documents.flatMap((document) => {
         if (document.case_id !== caseId) return []
         return (document.attachments || []).flatMap((attachment) => {
             const role = String(attachment.role || attachment.official_file_role || '').trim()
@@ -194,6 +194,20 @@ export function selectReviewedEvidenceOptions(
             }]
         })
     })
+    const identityCounts = new Map<string, number>()
+    for (const option of options) {
+        const identity = JSON.stringify([
+            option.document_id,
+            option.evidence_version_id,
+            option.content_hash,
+        ])
+        identityCounts.set(identity, (identityCounts.get(identity) || 0) + 1)
+    }
+    return options.filter((option) => identityCounts.get(JSON.stringify([
+        option.document_id,
+        option.evidence_version_id,
+        option.content_hash,
+    ])) === 1)
 }
 
 export function selectReviewedReplyDocumentOptions(

@@ -98,6 +98,23 @@ assert.deepEqual(evidenceOptions[0], {
   evidence_version_id: 'evidence-approved', content_hash: hashA,
 })
 
+const collidingDocuments = [{
+  id: 'document-collision', case_id: 'case-a', title: '身份碰撞证据', direction: 'OUT', reply_to_id: 'oa-collision', attachments: [
+    approvedAttachment({ id: 'collision-a', document_id: 'document-collision', filename: '碰撞甲.pdf', evidence_version_id: 'collision-version', content_hash: hashB, role: 'RECEIPT_PDF', is_receipt_evidence: true }),
+    approvedAttachment({ id: 'collision-b', document_id: 'document-collision', filename: '碰撞乙.pdf', evidence_version_id: 'collision-version', content_hash: hashB, role: 'RECEIPT_PDF', is_receipt_evidence: true }),
+  ],
+}]
+const callsBeforeCollision = httpCalls.length
+assert.deepEqual(documents.selectReviewedEvidenceOptions(collidingDocuments, 'case-a'), [])
+assert.deepEqual(documents.selectReviewedReplyDocumentOptions(collidingDocuments, 'case-a', 'oa-collision'), [])
+assert.deepEqual(documents.selectReviewedReceiptEvidenceOptions(collidingDocuments, 'case-a'), [])
+for (const option of documents.selectReviewedEvidenceOptions(collidingDocuments, 'case-a')) {
+  await documents.recordDocumentLifecycleEvidence('ACCEPTANCE_NOTICE', 'case-a', option, {
+    effective_at: '2026-08-02T10:00:00', occurred_at: null, idempotency_key: 'must-not-run',
+  })
+}
+assert.equal(httpCalls.length, callsBeforeCollision)
+
 const replyDocuments = [
   ...caseDocuments,
   { id: 'reply-oa1', case_id: 'case-a', title: 'OA1答复', direction: 'OUT', reply_to_id: 'oa1', attachments: [approvedAttachment({ id: 'reply-a', document_id: 'reply-oa1', filename: 'OA1答复.pdf', evidence_version_id: 'reply-evidence-a', content_hash: hashA, role: 'OA_REPLY' })] },
@@ -157,7 +174,7 @@ const receiptDocuments = [{
   id: 'receipt-document', case_id: 'case-a', title: 'OA回执', direction: 'IN', attachments: [
     approvedAttachment({ id: 'receipt-oa1', document_id: 'receipt-document', filename: 'OA1回执.pdf', role: 'RECEIPT_PDF', is_receipt_evidence: true }),
     approvedAttachment({ id: 'receipt-oa2', document_id: 'receipt-document', filename: 'OA2回执.pdf', role: 'ELECTRONIC_RECEIPT', is_archive_evidence: true, content_hash: hashB, evidence_version_id: 'receipt-evidence-2' }),
-    approvedAttachment({ id: 'not-receipt', document_id: 'receipt-document', filename: '普通附件.pdf', role: 'OTHER' }),
+    approvedAttachment({ id: 'not-receipt', document_id: 'receipt-document', filename: '普通附件.pdf', evidence_version_id: 'other-evidence', role: 'OTHER' }),
   ],
 }]
 const receiptOptions = documents.selectReviewedReceiptEvidenceOptions(receiptDocuments, 'case-a')
