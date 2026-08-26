@@ -490,6 +490,7 @@ def _valid_png(content: bytes) -> bool:
         return False
     offset = len(_PNG_SIGNATURE)
     chunk_index = 0
+    saw_idat = False
     while offset < len(content):
         if len(content) - offset < 12:
             return False
@@ -507,10 +508,33 @@ def _valid_png(content: bytes) -> bool:
         if chunk_index == 0:
             if chunk_type != b"IHDR" or length != 13:
                 return False
+            ihdr = content[data_start:crc_start]
+            width = int.from_bytes(ihdr[:4], "big")
+            height = int.from_bytes(ihdr[4:8], "big")
+            bit_depth = ihdr[8]
+            color_type = ihdr[9]
+            legal_bit_depths = {
+                0: (1, 2, 4, 8, 16),
+                2: (8, 16),
+                3: (1, 2, 4, 8),
+                4: (8, 16),
+                6: (8, 16),
+            }
+            if (
+                not 0 < width <= 0x7FFFFFFF
+                or not 0 < height <= 0x7FFFFFFF
+                or bit_depth not in legal_bit_depths.get(color_type, ())
+                or ihdr[10] != 0
+                or ihdr[11] != 0
+                or ihdr[12] not in (0, 1)
+            ):
+                return False
         elif chunk_type == b"IHDR":
             return False
+        if chunk_type == b"IDAT" and length > 0:
+            saw_idat = True
         if chunk_type == b"IEND":
-            return length == 0 and chunk_end == len(content)
+            return saw_idat and length == 0 and chunk_end == len(content)
         offset = chunk_end
         chunk_index += 1
     return False

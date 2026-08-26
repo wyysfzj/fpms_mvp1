@@ -489,6 +489,7 @@ def test_observer_binding_rejects_structurally_invalid_png_chunks(
     session_tuple = _session_tuple(module, context, actor="CODEX")
     iend = _png_chunk(b"IEND", b"")
     ihdr = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+    idat = _png_chunk(b"IDAT", b"\0")
     bad_crc_ihdr = bytearray(ihdr)
     bad_crc_ihdr[-1] ^= 1
     malformed = (
@@ -504,17 +505,30 @@ def test_observer_binding_rejects_structurally_invalid_png_chunks(
         + iend,
         PNG_1X1 + iend,
         PNG_1X1 + b"trailing" + iend,
+        PNG_SIGNATURE + ihdr + iend,
+        PNG_SIGNATURE
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 0, 1, 8, 6, 0, 0, 0))
+        + idat
+        + iend,
+        PNG_SIGNATURE
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 0, 8, 6, 0, 0, 0))
+        + idat
+        + iend,
     )
 
     with module._observer_binding(observer_root, session_tuple) as binding:
+        statuses = []
         for stage, content in enumerate(malformed, start=1):
             payload = _screenshot_payload(
                 session_tuple, f"observer-stage-{stage:02d}.png"
             )
             payload["content"] = base64.b64encode(content).decode()
-            assert _host_post(
-                binding.activation_url, "observer-artifact", payload
-            )[0] == 400
+            statuses.append(
+                _host_post(binding.activation_url, "observer-artifact", payload)[0]
+            )
+        assert not binding.finalized.is_set()
+        assert statuses[:-3] == [400] * (len(malformed) - 3)
+        assert statuses[-3:] == [400, 400, 400]
 
     assert not list(observer_root.iterdir())
     module.abc.remove_run_root(context.run_root, context.run_id)
