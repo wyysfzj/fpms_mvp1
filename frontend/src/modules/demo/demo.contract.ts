@@ -14,6 +14,91 @@ const MONEY = /^(?:0|[1-9]\d*)\.\d{2}$/
 const SHA256 = /^[0-9a-f]{64}$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
+export const DEMO_UI_PARITY_SCHEMA_ID = 'fpms.demo-v6-ui-parity/v1'
+
+// Frozen from Ordinal 02: sorted(Base.metadata.tables - SYSTEM_RUNTIME_TABLE_ALLOWLIST).
+export const DEMO_BUSINESS_COUNT_KEYS = [
+  't_annuity_task',
+  't_applicant',
+  't_bad_debt_recovery',
+  't_bad_debt_voucher',
+  't_bill',
+  't_bill_draft_source',
+  't_bill_item',
+  't_bio_deposit',
+  't_case',
+  't_case_activity_event',
+  't_case_activity_event_conflict',
+  't_case_activity_event_evidence',
+  't_case_agent_split',
+  't_case_applicant',
+  't_case_inventor',
+  't_case_receipt',
+  't_client',
+  't_client_address',
+  't_client_contact',
+  't_commission',
+  't_commission_rule',
+  't_commission_settle_line',
+  't_commission_settlement',
+  't_country',
+  't_customer_decision_gate',
+  't_demo_finance_command',
+  't_demo_offset_command',
+  't_demo_payment_command',
+  't_department',
+  't_doc_attachment',
+  't_doc_dispatch',
+  't_doc_dispatch_line',
+  't_document',
+  't_document_evidence_derivation',
+  't_document_evidence_version',
+  't_dunning',
+  't_dunning_line',
+  't_expense',
+  't_fee_draft',
+  't_fee_item',
+  't_fee_obligation',
+  't_fee_obligation_draft_item_link',
+  't_fee_obligation_line',
+  't_fee_obligation_payment_evidence_link',
+  't_fee_reduction_approval',
+  't_format_letter_mapping',
+  't_future_annuity_draft_exception_record',
+  't_future_annuity_reduction_lineage',
+  't_gov_payment',
+  't_grant_evidence_candidate',
+  't_grant_evidence_source_config',
+  't_grant_evidence_source_record',
+  't_grant_fee_task',
+  't_grant_manual_review_role_config',
+  't_grant_official_copy_verification_event',
+  't_legacy_fee_reduction_provenance',
+  't_letter_handoff',
+  't_letter_handoff_attachment',
+  't_letter_head',
+  't_official_fee_checklist',
+  't_official_payment_workbook_input_version',
+  't_official_work_package',
+  't_official_work_package_checklist',
+  't_official_work_package_manifest',
+  't_official_work_package_override',
+  't_official_work_package_receipt',
+  't_offset',
+  't_pay_list',
+  't_pay_list_export_artifact',
+  't_payment',
+  't_payment_line',
+  't_priority',
+  't_service_price_book',
+  't_system_param',
+  't_task',
+  't_task_log',
+  't_template',
+] as const
+
+export type DemoBusinessCountKey = (typeof DEMO_BUSINESS_COUNT_KEYS)[number]
+
 function invalid(path: string): never {
   throw new FinanceContractError(path)
 }
@@ -113,7 +198,13 @@ export interface DemoPreflight extends DemoServiceItem {
   authority_classification: 'SYNTHETIC_TEST_ONLY' | 'CUSTOMER_AUTHORIZED'
   customer_activation_eligible: boolean
   readiness: 'READY'
+  run_id: string | null
+  candidate_commit: string | null
+  candidate_tree: string | null
+  authority_sha256: string
+  contract_version: typeof DEMO_UI_PARITY_SCHEMA_ID | null
   business_counts: {
+    [key: string]: number
     client: number
     contact: number
     case: number
@@ -125,6 +216,15 @@ export interface DemoPreflight extends DemoServiceItem {
     payment: number
     offset: number
   }
+}
+
+export interface DemoUiSessionPreflight extends DemoPreflight {
+  authority_classification: 'SYNTHETIC_TEST_ONLY'
+  customer_activation_eligible: false
+  run_id: string
+  candidate_commit: string
+  candidate_tree: string
+  contract_version: typeof DEMO_UI_PARITY_SCHEMA_ID
 }
 
 export interface DemoDraft {
@@ -255,14 +355,30 @@ export function parseDemoPreflight(value: unknown): DemoPreflight {
     'demo_preflight.customer_activation_eligible',
   )
   literal(row.readiness, ['READY'], 'demo_preflight.readiness')
-  const counts = record(row.business_counts, 'demo_preflight.business_counts')
-  const expectedCountKeys = [
-    'bill', 'case', 'client', 'contact', 'draft', 'obligation', 'offset', 'package', 'payment', 'task',
+  digest(row.authority_sha256, 'demo_preflight.authority_sha256')
+  const sessionIdentity = [
+    row.run_id,
+    row.candidate_commit,
+    row.candidate_tree,
+    row.contract_version,
   ]
-  if (Object.keys(counts).sort().join('|') !== expectedCountKeys.join('|')) {
+  if (!sessionIdentity.every((entry) => entry === null)) {
+    string(row.run_id, 'demo_preflight.run_id')
+    const candidateCommit = string(row.candidate_commit, 'demo_preflight.candidate_commit')
+    const candidateTree = string(row.candidate_tree, 'demo_preflight.candidate_tree')
+    if (!/^[0-9a-f]{40}$/.test(candidateCommit)) invalid('demo_preflight.candidate_commit')
+    if (!/^[0-9a-f]{40}$/.test(candidateTree)) invalid('demo_preflight.candidate_tree')
+    literal(
+      row.contract_version,
+      [DEMO_UI_PARITY_SCHEMA_ID],
+      'demo_preflight.contract_version',
+    )
+  }
+  const counts = record(row.business_counts, 'demo_preflight.business_counts')
+  if (Object.keys(counts).sort().join('|') !== DEMO_BUSINESS_COUNT_KEYS.join('|')) {
     invalid('demo_preflight.business_counts')
   }
-  for (const key of expectedCountKeys) {
+  for (const key of DEMO_BUSINESS_COUNT_KEYS) {
     if (count(counts[key], `demo_preflight.business_counts.${key}`) !== 0) {
       invalid(`demo_preflight.business_counts.${key}`)
     }
@@ -274,6 +390,21 @@ export function parseDemoPreflight(value: unknown): DemoPreflight {
     invalid('demo_preflight.customer_activation_eligible')
   }
   return normalized as DemoPreflight
+}
+
+export function parseDemoUiSessionPreflight(value: unknown): DemoUiSessionPreflight {
+  const normalized = parseDemoPreflight(value)
+  if (
+    normalized.authority_classification !== 'SYNTHETIC_TEST_ONLY' ||
+    normalized.customer_activation_eligible ||
+    normalized.run_id === null ||
+    normalized.candidate_commit === null ||
+    normalized.candidate_tree === null ||
+    normalized.contract_version !== DEMO_UI_PARITY_SCHEMA_ID
+  ) {
+    invalid('demo_ui_session_preflight')
+  }
+  return normalized as DemoUiSessionPreflight
 }
 
 export function parseDemoFeeObligationResponse(value: unknown): DemoFeeObligationResponse {

@@ -2,12 +2,15 @@ import axios from 'axios'
 import type { AxiosError } from 'axios'
 import { normalizeApiError } from './errors'
 import type { ErrorEnvelope } from './types'
+import { installDemoUiObserver } from '../modules/demo/demoUiSession'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 
 export const http = axios.create({
   baseURL,
 })
+
+installDemoUiObserver(http)
 
 // Request interceptor: inject Authorization header
 http.interceptors.request.use((config) => {

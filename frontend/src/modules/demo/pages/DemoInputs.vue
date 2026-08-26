@@ -14,9 +14,24 @@
       >
         校验演示输入与空业务库
       </el-button>
+      <el-button
+        data-testid="demo-inputs-finalize"
+        type="warning"
+        :loading="exporting"
+        :disabled="!sessionActive"
+        @click="finalizeEvidence"
+      >
+        完成并导出本轮证据
+      </el-button>
     </header>
 
     <ApiErrorBanner v-if="error" :error="error" :dismissable="false" />
+    <el-alert
+      v-if="sessionMessage"
+      :title="sessionMessage"
+      :type="sessionMessageType"
+      :closable="false"
+    />
 
     <template v-if="preflight">
       <el-alert
@@ -55,12 +70,12 @@
 
       <el-card class="input-card" data-testid="demo-business-counts">
         <template #header><strong>本轮业务对象计数</strong></template>
-        <p class="count-note">开始客户演示前，以下十类计数应全部为 0。</p>
+        <p class="count-note">开始演示前，以下完整业务表计数应全部为 0。</p>
         <div class="count-grid">
           <div v-for="item in businessCountItems" :key="item.key" class="count-item">
             <span>{{ item.label }}</span>
             <strong :data-testid="`business-count-${item.key}`">
-              {{ preflight.business_counts[item.key] }}
+              {{ businessCount(item.key) }}
             </strong>
           </div>
         </div>
@@ -70,43 +85,76 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { DEMO_BUSINESS_COUNT_KEYS } from '../demo.contract'
 import { readDemoPreflight } from '../demo.api'
 import type { DemoPreflight } from '../demo.api'
+import {
+  activateDemoUiSession,
+  DEMO_UI_SESSION_CHANGE_EVENT,
+  finalizeDemoUiSessionEvidence,
+  isDemoUiSessionActive,
+} from '../demoUiSession'
 
-type BusinessCountKey = keyof DemoPreflight['business_counts']
+type BusinessCountKey = (typeof DEMO_BUSINESS_COUNT_KEYS)[number]
 
-const businessCountItems: ReadonlyArray<{ key: BusinessCountKey; label: string }> = [
-  { key: 'client', label: '客户' },
-  { key: 'contact', label: '联系人' },
-  { key: 'case', label: '案件' },
-  { key: 'package', label: '工作包' },
-  { key: 'task', label: '任务' },
-  { key: 'obligation', label: '费用义务' },
-  { key: 'draft', label: '费用草单' },
-  { key: 'bill', label: '账单' },
-  { key: 'payment', label: '回款' },
-  { key: 'offset', label: '核销' },
-]
+const businessCountItems: ReadonlyArray<{ key: BusinessCountKey; label: string }> =
+  DEMO_BUSINESS_COUNT_KEYS.map((key) => ({ key, label: key }))
 
 const preflight = ref<DemoPreflight | null>(null)
 const error = ref<ApiError | null>(null)
 const loading = ref(false)
+const exporting = ref(false)
+const sessionActive = ref(isDemoUiSessionActive())
+const sessionMessage = ref<string | null>(null)
+const sessionMessageType = computed(() => sessionActive.value ? 'success' : 'warning')
+
+function syncDemoSession(): void {
+  sessionActive.value = isDemoUiSessionActive()
+}
+
+function businessCount(key: BusinessCountKey): number {
+  const counts = preflight.value?.business_counts as unknown as Record<string, number> | undefined
+  return counts?.[key] ?? 0
+}
 
 async function loadPreflight(): Promise<void> {
   loading.value = true
   error.value = null
   preflight.value = null
+  sessionMessage.value = null
   try {
     preflight.value = await readDemoPreflight()
+    if (activateDemoUiSession(preflight.value)) {
+      sessionMessage.value = '合成演示会话已通过当前预检绑定。'
+    } else {
+      sessionMessage.value = '预检绑定与当前会话不一致，已停止本轮演示。'
+    }
   } catch (caught) {
     error.value = caught as ApiError
   } finally {
     loading.value = false
   }
 }
+
+async function finalizeEvidence(): Promise<void> {
+  if (!sessionActive.value) return
+  exporting.value = true
+  sessionMessage.value = null
+  try {
+    await finalizeDemoUiSessionEvidence()
+    sessionMessage.value = '本轮观察证据已导出。'
+  } catch {
+    sessionMessage.value = '观察证据导出失败，本轮演示已停止。'
+  } finally {
+    exporting.value = false
+  }
+}
+
+onMounted(() => window.addEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession))
+onBeforeUnmount(() => window.removeEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession))
 </script>
 
 <style scoped>
