@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 
 from app.modules.fees.obligation_schemas import FeeObligationDetailOut
 
@@ -40,25 +40,19 @@ class DemoServiceItemOut(BaseModel):
     total_amount: Decimal
 
 
-class DemoBusinessCountsOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    client: int
-    contact: int
-    case: int
-    package: int
-    task: int
-    obligation: int
-    draft: int
-    bill: int
-    payment: int
-    offset: int
+class DemoBusinessCountsOut(RootModel[dict[str, int]]):
+    pass
 
 
 class DemoPreflightOut(DemoServiceItemOut):
     authority_classification: str
     customer_activation_eligible: bool
     readiness: str
+    run_id: str
+    candidate_commit: str
+    candidate_tree: str
+    authority_sha256: str
+    contract_version: str
     business_counts: DemoBusinessCountsOut
 
 

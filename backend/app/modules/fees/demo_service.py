@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.core.demo_bundle import DemoBundleError, DemoBundleSnapshot, load_demo_bundle
 from app.core.errors import BusinessError
-from app.modules.billing.models import Bill, BillDraftSource, Offset, Payment
+from app.db.base import Base
+from app.modules.billing.models import BillDraftSource
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
@@ -61,13 +62,23 @@ from app.modules.fees.obligation_service import (
     record_client_instruction,
 )
 from app.modules.fees.service import get_fee_draft, list_fee_items
-from app.modules.masterdata.clients.models import Client, ClientContact
-from app.modules.official_workflows.models import OfficialWorkPackage
-from app.modules.tasks.models import Task
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SOURCE_SCHEMA = "FPMS_DEMO_SERVICE_PRICE_ITEMS_SELECTED_V2"
 _INTEGRATED_SCHEMA = "fpms.demo-input-bundle/integrated-a-v2"
+_UI_SESSION_CONTRACT_VERSION = "fpms.demo-ui-session/v1"
+SYSTEM_RUNTIME_TABLE_ALLOWLIST = frozenset(
+    {
+        "t_user",
+        "t_role",
+        "t_role_perm",
+        "t_user_role",
+        "t_doc_template",
+        "t_task_template",
+        "t_fee_rate_book",
+        "t_fee_rate",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +115,11 @@ class DemoPreflightResult(DemoServiceItems):
     authority_classification: str
     customer_activation_eligible: bool
     readiness: str
+    run_id: str
+    candidate_commit: str
+    candidate_tree: str
+    authority_sha256: str
+    contract_version: str
     business_counts: dict[str, int]
 
 
@@ -267,21 +283,23 @@ def get_demo_preflight(transaction: Session) -> DemoPreflightResult:
     if snapshot.schema_version != _INTEGRATED_SCHEMA:
         raise _config_required("当前输入不是集成演示方案 A 的运行包")
     item = _demo_service_items(snapshot)
-    models = (
-        ("client", Client),
-        ("contact", ClientContact),
-        ("case", Case),
-        ("package", OfficialWorkPackage),
-        ("task", Task),
-        ("obligation", FeeObligation),
-        ("draft", FeeDraft),
-        ("bill", Bill),
-        ("payment", Payment),
-        ("offset", Offset),
-    )
+    run_id = os.environ.get("FPMS_DEMO_RUN_ID", "")
+    candidate_commit = os.environ.get("FPMS_DEMO_CANDIDATE_COMMIT", "")
+    candidate_tree = os.environ.get("FPMS_DEMO_CANDIDATE_TREE", "")
+    contract_version = os.environ.get("FPMS_DEMO_CONTRACT_VERSION", "")
+    if not run_id or not candidate_commit or not candidate_tree:
+        raise _config_required("本地演示运行身份未配置")
+    if contract_version != _UI_SESSION_CONTRACT_VERSION:
+        raise _config_required("本地演示会话契约版本无效")
+    business_tables = sorted(set(Base.metadata.tables) - SYSTEM_RUNTIME_TABLE_ALLOWLIST)
     counts = {
-        name: int(transaction.scalar(select(func.count()).select_from(model)) or 0)
-        for name, model in models
+        name: int(
+            transaction.scalar(
+                select(func.count()).select_from(Base.metadata.tables[name])
+            )
+            or 0
+        )
+        for name in business_tables
     }
     if any(counts.values()):
         raise BusinessError(
@@ -295,6 +313,11 @@ def get_demo_preflight(transaction: Session) -> DemoPreflightResult:
         authority_classification=snapshot.authority_classification,
         customer_activation_eligible=snapshot.customer_activation_eligible,
         readiness="READY",
+        run_id=run_id,
+        candidate_commit=candidate_commit,
+        candidate_tree=candidate_tree,
+        authority_sha256=snapshot.authority_sha256,
+        contract_version=contract_version,
         business_counts=counts,
     )
 
