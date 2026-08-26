@@ -76,7 +76,7 @@
         type="primary"
         size="small"
         :loading="demoObligationPending"
-        :disabled="demoObligationPending"
+        :disabled="demoObligationPending || demoObligationAttempted"
         @click="handleCreateDemoServiceObligation"
       >
         生成服务费义务
@@ -93,10 +93,27 @@
       v-if="demoObligationError"
       type="warning"
       :closable="false"
-      title="服务费义务生成失败"
+      title="服务费义务结果未确认"
       :description="demoObligationError"
       show-icon
     />
+    <el-alert
+      v-if="demoRefreshError"
+      type="warning"
+      :closable="false"
+      title="服务费义务已生成，费用视图刷新失败"
+      :description="demoRefreshError"
+      show-icon
+    />
+    <el-button
+      v-if="demoRefreshError"
+      type="primary"
+      plain
+      size="small"
+      @click="handleReloadDemoFeeView"
+    >
+      重新加载费用视图
+    </el-button>
     <div v-if="overlayLoading" class="placeholder-content">正在加载真实费用义务...</div>
     <el-alert
       v-else-if="activeOverlayError"
@@ -254,8 +271,10 @@ const standaloneOverlayError = ref<ApiError | null>(null)
 const demoRefreshedOverlay = ref<LifecycleOverlay | null>(null)
 const demoSessionEnabled = ref(false)
 const demoObligationPending = ref(false)
+const demoObligationAttempted = ref(false)
 const demoObligationMessage = ref('')
 const demoObligationError = ref('')
+const demoRefreshError = ref('')
 const demoObligationIdempotencyKey = crypto.randomUUID()
 const trigger = ref('')
 const sourceDocumentId = ref('')
@@ -281,11 +300,14 @@ const isLifecycleOverlayManaged = computed(
     props.lifecycleOverlay !== undefined ||
     props.lifecycleOverlayError !== undefined,
 )
-const activeOverlay = computed(() => demoRefreshedOverlay.value ?? (
-  isLifecycleOverlayManaged.value ? props.lifecycleOverlay ?? null : standaloneOverlay.value
+const activeOverlay = computed(() => selectActiveFeeOverlay(
+  isLifecycleOverlayManaged.value,
+  props.lifecycleOverlay ?? null,
+  standaloneOverlay.value,
+  demoRefreshedOverlay.value,
 ))
 const activeOverlayError = computed(() =>
-  demoRefreshedOverlay.value !== null
+  activeOverlay.value !== null
     ? null
     : isLifecycleOverlayManaged.value
     ? props.lifecycleOverlayError ?? null
@@ -333,8 +355,24 @@ function canStartDemoServiceObligation(
   sessionActive: boolean,
   session: DemoHostTuple | null,
   pending: boolean,
+  attempted: boolean,
 ): boolean {
-  return sessionActive && session !== null && !pending
+  return sessionActive && session !== null && !pending && !attempted
+}
+
+function selectActiveFeeOverlay(
+  managed: boolean,
+  managedOverlay: LifecycleOverlay | null,
+  standaloneOverlayValue: LifecycleOverlay | null,
+  refreshedOverlay: LifecycleOverlay | null,
+): LifecycleOverlay | null {
+  if (!managed) return standaloneOverlayValue
+  if (refreshedOverlay === null) return managedOverlay
+  if (
+    managedOverlay !== null &&
+    managedOverlay.lifecycleRevision >= refreshedOverlay.lifecycleRevision
+  ) return managedOverlay
+  return refreshedOverlay
 }
 
 function syncDemoSession() {
@@ -345,31 +383,59 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '请刷新后重试。'
 }
 
+async function reloadDemoFeeView() {
+  const [overlay] = await Promise.all([
+    getLifecycleOverlay(props.caseId, { afterSequence: 0, limit: 50, asOfRevision: null }),
+    loadFeeDrafts(),
+  ])
+  if (isLifecycleOverlayManaged.value) {
+    demoRefreshedOverlay.value = overlay
+  } else {
+    standaloneOverlay.value = overlay
+  }
+}
+
+async function handleReloadDemoFeeView() {
+  demoRefreshError.value = ''
+  try {
+    await reloadDemoFeeView()
+  } catch (error) {
+    demoRefreshError.value = errorMessage(error)
+  }
+}
+
 async function handleCreateDemoServiceObligation() {
   if (!canStartDemoServiceObligation(
     isDemoUiSessionActive(),
     getDemoUiSession(),
     demoObligationPending.value,
+    demoObligationAttempted.value,
   )) return
   demoObligationPending.value = true
+  demoObligationAttempted.value = true
   demoObligationMessage.value = ''
   demoObligationError.value = ''
+  demoRefreshError.value = ''
   syncDemoSession()
   try {
-    const result = await createValidatedDemoServiceObligation(
-      props.caseId,
-      demoObligationIdempotencyKey,
-    )
+    let result
+    try {
+      result = await createValidatedDemoServiceObligation(
+        props.caseId,
+        demoObligationIdempotencyKey,
+      )
+    } catch (error) {
+      demoObligationError.value = errorMessage(error)
+      return
+    }
     demoObligationMessage.value = result.reused
       ? `${result.name_zh_cn}义务已复用（${result.currency} ${result.amount}）`
       : `${result.name_zh_cn}义务已生成（${result.currency} ${result.amount}）`
-    const [overlay] = await Promise.all([
-      getLifecycleOverlay(props.caseId, { afterSequence: 0, limit: 50, asOfRevision: null }),
-      loadFeeDrafts(),
-    ])
-    demoRefreshedOverlay.value = overlay
-  } catch (error) {
-    demoObligationError.value = errorMessage(error)
+    try {
+      await reloadDemoFeeView()
+    } catch (error) {
+      demoRefreshError.value = errorMessage(error)
+    }
   } finally {
     demoObligationPending.value = false
     syncDemoSession()

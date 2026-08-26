@@ -67,10 +67,10 @@ const tuple = {
   contract_version: 'fpms.demo-v6-ui-parity/v1', run_id: 'run-1', candidate_commit: '1'.repeat(40),
   candidate_tree: '2'.repeat(40), authority_sha256: '3'.repeat(64), actor: 'HUMAN',
 }
-assert.equal(guards.canStartDemoServiceObligation(true, tuple, false), true)
-assert.equal(guards.canStartDemoServiceObligation(false, tuple, false), false)
-assert.equal(guards.canStartDemoServiceObligation(true, null, false), false)
-assert.equal(guards.canStartDemoServiceObligation(true, tuple, true), false)
+assert.equal(guards.canStartDemoServiceObligation(true, tuple, false, false), true)
+assert.equal(guards.canStartDemoServiceObligation(false, tuple, false, false), false)
+assert.equal(guards.canStartDemoServiceObligation(true, null, false, false), false)
+assert.equal(guards.canStartDemoServiceObligation(true, tuple, true, false), false)
 
 const noSessionCalls = serviceCalls.length
 if (guards.canStartDemoServiceObligation(false, null, false)) {
@@ -104,6 +104,95 @@ itemValue = new Error('service item invalid')
 const mutationsBeforeInvalidItem = serviceCalls.filter((call) => call.method === 'POST').length
 await assert.rejects(demo.createValidatedDemoServiceObligation('case-a', 'service-intent-1'))
 assert.equal(serviceCalls.filter((call) => call.method === 'POST').length, mutationsBeforeInvalidItem)
+
+const handlerHarness = {
+  pending: { value: false },
+  attempted: { value: false },
+  message: { value: '' },
+  mutationError: { value: '' },
+  refreshError: { value: '' },
+  refreshedOverlay: { value: null },
+  standaloneOverlay: { value: null },
+  sessionEnabled: { value: true },
+  managed: { value: true },
+  overlay: { lifecycleRevision: 2 },
+  refreshFailure: new Error('视图刷新失败'),
+  postCount: 0,
+  refreshCount: 0,
+  draftRefreshCount: 0,
+}
+globalThis.__ordinal06HandlerHarness = handlerHarness
+const handler = await importFunctions(
+  script(caseFees),
+  [
+    'canStartDemoServiceObligation',
+    'syncDemoSession',
+    'errorMessage',
+    'reloadDemoFeeView',
+    'handleReloadDemoFeeView',
+    'handleCreateDemoServiceObligation',
+  ],
+  `
+    const harness = globalThis.__ordinal06HandlerHarness
+    const demoObligationPending = harness.pending
+    const demoObligationAttempted = harness.attempted
+    const demoObligationMessage = harness.message
+    const demoObligationError = harness.mutationError
+    const demoRefreshError = harness.refreshError
+    const demoRefreshedOverlay = harness.refreshedOverlay
+    const standaloneOverlay = harness.standaloneOverlay
+    const demoSessionEnabled = harness.sessionEnabled
+    const isLifecycleOverlayManaged = harness.managed
+    const props = { caseId: 'case-a' }
+    const demoObligationIdempotencyKey = 'service-intent-1'
+    const isDemoUiSessionActive = () => true
+    const getDemoUiSession = () => ({ run_id: 'run-1' })
+    const createValidatedDemoServiceObligation = async () => {
+      harness.postCount += 1
+      return { reused: false, name_zh_cn: '代理服务费', currency: 'CNY', amount: '1500.00' }
+    }
+    const getLifecycleOverlay = async () => {
+      harness.refreshCount += 1
+      if (harness.refreshFailure) throw harness.refreshFailure
+      return harness.overlay
+    }
+    const loadFeeDrafts = async () => { harness.draftRefreshCount += 1 }
+  `,
+)
+await handler.handleCreateDemoServiceObligation()
+await handler.handleCreateDemoServiceObligation()
+assert.equal(handlerHarness.postCount, 1, 'a terminal mutation attempt must not issue a second POST')
+assert.equal(handlerHarness.attempted.value, true)
+assert.match(handlerHarness.message.value, /义务已生成/)
+assert.equal(handlerHarness.mutationError.value, '')
+assert.match(handlerHarness.refreshError.value, /视图刷新失败/)
+assert.equal(guards.canStartDemoServiceObligation(true, tuple, false, true), false)
+
+handlerHarness.refreshFailure = null
+await handler.handleReloadDemoFeeView()
+assert.equal(handlerHarness.postCount, 1)
+assert.equal(handlerHarness.refreshCount, 2)
+assert.equal(handlerHarness.draftRefreshCount, 2)
+assert.equal(handlerHarness.refreshError.value, '')
+assert.equal(handlerHarness.refreshedOverlay.value, handlerHarness.overlay)
+
+handlerHarness.pending.value = false
+handlerHarness.attempted.value = false
+handlerHarness.message.value = ''
+handlerHarness.refreshError.value = ''
+handlerHarness.managed.value = false
+await handler.handleCreateDemoServiceObligation()
+assert.equal(handlerHarness.standaloneOverlay.value, handlerHarness.overlay)
+assert.equal(handlerHarness.refreshedOverlay.value, handlerHarness.overlay)
+
+const overlaySelection = await importFunctions(script(caseFees), ['selectActiveFeeOverlay'])
+const rev1 = { lifecycleRevision: 1 }
+const rev2 = { lifecycleRevision: 2 }
+const rev3 = { lifecycleRevision: 3 }
+const standalone = { lifecycleRevision: 4 }
+assert.equal(overlaySelection.selectActiveFeeOverlay(true, rev1, null, rev2), rev2)
+assert.equal(overlaySelection.selectActiveFeeOverlay(true, rev3, null, rev2), rev3)
+assert.equal(overlaySelection.selectActiveFeeOverlay(false, null, standalone, rev2), standalone)
 
 const rows = [
   { id: 1, pay_list_id: 7, fee_item_id: 'fee-1', status: 'PLANNED', planned_amt: 100, paid_amount: 0 },
@@ -143,6 +232,7 @@ assert.match(caseFees, /生成服务费义务/)
 assert.match(caseFees, /isDemoUiSessionActive\(\)/)
 assert.match(caseFees, /getDemoUiSession\(\)/)
 assert.match(caseFees, /:loading="demoObligationPending"/)
+assert.match(caseFees, /重新加载费用视图/)
 assert.match(payment, /登记下一行/)
 assert.match(payment, /返回当前清单/)
 assert.match(payment, /parseQueryText\(route\.query\.next_fee_item_id\)/)
@@ -150,4 +240,5 @@ assert.doesNotMatch(caseFees + payment, /<el-input[^>]+(?:obligationId|itemCode|
 
 delete globalThis.__ordinal06ReadItem
 delete globalThis.__ordinal06Create
+delete globalThis.__ordinal06HandlerHarness
 console.log('demo V6 fee UI parity contract: PASS')
