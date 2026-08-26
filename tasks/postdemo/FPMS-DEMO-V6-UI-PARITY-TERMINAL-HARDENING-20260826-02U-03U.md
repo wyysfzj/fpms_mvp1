@@ -10,6 +10,8 @@ Chosen runbook: `P0-prereq-heavy-story`
 
 - User approval:
   `批准 02S Unicode-safe STOP + 03R console/race 最小修复边界`.
+- Demo-critical risk decision:
+  `批准 4a03e3d 作为 Demo-critical 条件通过；将 post-STOP console capability/Error.cause 降为 Demo 后 P2 安全整改，继续 Ordinal 04`.
 - User also requested a concurrent over-engineering audit.
 - Base HEAD: `2a60669df4333128f756de3e22103916d01508c9`.
 - Controlling review: final 03R re-review at that HEAD, exactly three remaining P1 findings.
@@ -49,6 +51,10 @@ required by the same real frontend-to-host terminal path.
   bounded helper over new abstractions. Existing unrelated code is not renamed, reformatted, or moved.
 - Final audit reports production/test line delta, new abstractions/dependencies, changed paths, and
   whether any line lacks a direct finding mapping.
+- Post-STOP logging of a capability nested in `Error.cause` or another complete-argument edge case is
+  explicitly deferred to `FPMS-DEMO-V6-POST-STOP-CONSOLE-SECURITY-POSTDEMO`. The accepted demo path
+  does not log capabilities, and this deferred security hardening does not block Demo-critical
+  acceptance or Ordinal 04.
 
 ## Allowed Files
 
@@ -86,12 +92,14 @@ Independent review binds the exact task range and the over-engineering audit.
 ## Remaining Follow-Up Task IDs
 
 - `FPMS-DEMO-V6-UI-PARITY-LIFECYCLE-20260826-04`, blocked until repaired Ordinal 03 is accepted.
+- `FPMS-DEMO-V6-POST-STOP-CONSOLE-SECURITY-POSTDEMO`, deferred until after the customer demo.
 
 ## Done Definition
 
-All three counterexamples are closed without new architecture or scope, prior gates remain green,
-independent review reports zero findings, the atomic evidence gate passes, and the over-engineering
-audit finds no speculative or unmapped production change.
+All three Demo-critical counterexamples are closed without new architecture or scope, prior gates
+remain green, independent review reports zero Demo-critical findings, the atomic evidence gate
+passes, and the over-engineering audit finds no speculative or unmapped production change. The
+explicit post-demo P2 remains non-closure and is not reported as task PASS work.
 
 ## Rollback
 
