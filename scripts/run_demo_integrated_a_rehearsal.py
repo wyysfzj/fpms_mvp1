@@ -580,13 +580,17 @@ def _contains_sensitive_ledger_value(value: object, capability: str) -> bool:
                 if (
                     not isinstance(key, str)
                     or key.casefold() in _SENSITIVE_LEDGER_KEYS
-                    or secrets.compare_digest(key, capability)
+                    or (key.isascii() and secrets.compare_digest(key, capability))
                 ):
                     return True
                 pending.append(nested)
         elif isinstance(current, list):
             pending.extend(current)
-        elif isinstance(current, str) and secrets.compare_digest(current, capability):
+        elif (
+            isinstance(current, str)
+            and current.isascii()
+            and secrets.compare_digest(current, capability)
+        ):
             return True
     return False
 

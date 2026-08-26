@@ -553,4 +553,86 @@ await proveFinding('activation binding is scrubbed from URL/history', async () =
 
 assert.deepEqual(remediationFindings, [], `Ordinal 03R remediation gaps:\n- ${remediationFindings.join('\n- ')}`)
 
+const terminalHardeningFindings = []
+async function proveTerminalFinding(name, proof) {
+  try { await proof() } catch (error) { terminalHardeningFindings.push(`${name}: ${error instanceof Error ? error.message : String(error)}`) }
+}
+await proveTerminalFinding('console sink receives only fixed capability redaction', async () => {
+  const savedWindowValue = globalThis.window
+  const savedDocumentValue = globalThis.document
+  const savedConsoleError = console.error
+  const sinkArguments = []
+  const fakeConsoleWindow = new FakeTarget()
+  fakeConsoleWindow.location = { href: pageUrl, pathname: '/', origin: 'http://127.0.0.1:5173' }
+  fakeConsoleWindow.history = { state: null, replaceState() {} }
+  globalThis.window = fakeConsoleWindow
+  globalThis.document = new FakeTarget()
+  console.error = (...args) => sinkArguments.push(args)
+  try {
+    const module = await sessionImport()
+    assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+    assert.equal(await module.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+    const disposeConsoleObserver = module.installDemoUiDomObserver()
+    console.error('safe', { nested: [capability] }, `prefix-${capability}-suffix`)
+    await module.exportStopDemoUiSession(hostFetch)
+    disposeConsoleObserver()
+    assert.deepEqual(sinkArguments, [[
+      'safe',
+      '[FPMS_DEMO_REDACTED]',
+      '[FPMS_DEMO_REDACTED]',
+    ]])
+    assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP')
+    assert.ok(!JSON.stringify(module.getDemoObserverLedger()).includes(capability))
+  } finally {
+    console.error = savedConsoleError
+    globalThis.window = savedWindowValue
+    globalThis.document = savedDocumentValue
+  }
+})
+
+await proveTerminalFinding('deferred old STOP cannot clear genuine new run', async () => {
+  const module = await sessionImport()
+  const localStorage = new MemoryStorage()
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  module.recordVisibleAction({ route: '/cases', role: 'button', label_or_testid: '停止旧轮次' })
+  let releaseStop
+  let signalStopStarted
+  const stopStarted = new Promise((resolve) => { signalStopStarted = resolve })
+  const oldRequests = []
+  const deferredStopFetch = async (url, init) => {
+    oldRequests.push({ url, body: JSON.parse(init.body) })
+    signalStopStarted()
+    return new Promise((resolve) => { releaseStop = () => resolve(hostResponse(200, { status: 'STOPPED' })) })
+  }
+  module.stopDemoUiSession('OLD_RUN_STOP', localStorage, deferredStopFetch)
+  const oldStopPromise = module.exportStopDemoUiSession(deferredStopFetch)
+  await stopStarted
+
+  const newCapability = 'new_run_capability_0123456789_ABCDEFGH'
+  const newBinding = `http://127.0.0.1:43124/observer-artifact?capability=${newCapability}&actor=HUMAN`
+  const newPageUrl = `http://127.0.0.1:5173/?fpmsObserverBinding=${encodeURIComponent(newBinding)}`
+  const newPreflight = structuredClone(preflight)
+  newPreflight.run_id = 'ui-human-contract-new'
+  const newFetch = async (url, init) => {
+    assert.equal(new URL(url).pathname, '/revalidate')
+    assert.equal(JSON.parse(init.body).run_id, newPreflight.run_id)
+    return hostResponse(200, { status: 'VALID' })
+  }
+  assert.equal(module.configureDemoObserverBinding(newPageUrl), true)
+  assert.equal(await module.activateDemoUiSession(newPreflight, localStorage, newFetch), true)
+  const newStoredValue = localStorage.getItem(module.DEMO_UI_SESSION_STORAGE_KEY)
+  releaseStop()
+  await oldStopPromise
+
+  assert.equal(new URL(oldRequests[0].url).searchParams.get('capability'), capability)
+  assert.equal(oldRequests[0].body.run_id, preflight.run_id)
+  assert.equal(oldRequests[0].body.ledger.events.at(-1).kind, 'STOP')
+  assert.equal(localStorage.getItem(module.DEMO_UI_SESSION_STORAGE_KEY), newStoredValue)
+  assert.equal(module.getDemoUiSession().run_id, newPreflight.run_id)
+  assert.equal(module.isDemoUiSessionActive(), true)
+})
+
+assert.deepEqual(terminalHardeningFindings, [], `Ordinal 02U-03U frontend gaps:\n- ${terminalHardeningFindings.join('\n- ')}`)
+
 console.log('demo V6 UI session contract: PASS')

@@ -453,6 +453,36 @@ def test_observer_stop_persists_exact_ledger_after_partial_evidence(
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 
+def test_observer_stop_accepts_simplified_chinese_visible_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact-stop-unicode" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+    events = [
+        {
+            "kind": "action",
+            "action_id": "action-unicode",
+            "route": "/案件/新建",
+            "role": "button",
+            "label_or_testid": "保存案件",
+        },
+        {"kind": "STOP", "reason": "OBSERVER_STOPPED"},
+    ]
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        assert _host_post(
+            binding.activation_url,
+            "stop",
+            _stop_payload(session_tuple, events=events),
+        ) == (200, {"status": "STOPPED"})
+        assert binding.stopped.is_set()
+        assert not binding.failed.is_set()
+
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
 def test_observer_stop_rejects_wrong_binding_tuple_and_malformed_ledgers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -426,17 +426,31 @@ async function uploadLedger(fetcher: typeof fetch): Promise<void> {
 export async function exportStopDemoUiSession(fetcher: typeof fetch = fetch): Promise<void> {
   if (stopExportPromise) return stopExportPromise
   if (!persistedSession || !isTuple(persistedSession.tuple)) return
-  const session = persistedSession
+  const tuple = { ...persistedSession.tuple }
+  const binding = persistedSession.binding
+  const storage = activeStorage
+  const storedValue = storage?.getItem(DEMO_UI_SESSION_STORAGE_KEY) ?? null
+  const events = [...observerLedger]
+  const stopUrl = new URL(binding)
+  stopUrl.pathname = '/stop'
+  stopUrl.searchParams.delete('actor')
   stopExportPromise = (async () => {
     try {
       await waitForObserverDigests()
-      persistLedger()
-      const response = await postHost('/stop', {
-        ...session.tuple,
-        ledger: ledgerContent(),
-      }, fetcher)
+      const ledger = JSON.parse(JSON.stringify({
+        schema_id: DEMO_UI_PARITY_SCHEMA_ID,
+        session: tuple,
+        events,
+      })) as Record<string, unknown>
+      const response = await fetcher(stopUrl.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...tuple, ledger }),
+      })
       await expectHostResponse(response, 200, { status: 'STOPPED' })
-      activeStorage?.removeItem(DEMO_UI_SESSION_STORAGE_KEY)
+      if (storedValue !== null && storage?.getItem(DEMO_UI_SESSION_STORAGE_KEY) === storedValue) {
+        storage.removeItem(DEMO_UI_SESSION_STORAGE_KEY)
+      }
     } catch {
       // Terminal STOP is single-attempt. Preserve the bound run when the host does not confirm it.
     }
@@ -631,8 +645,25 @@ export function installDemoUiDomObserver(): () => void {
   const onRejection = (event: PromiseRejectionEvent) => { if (active && routeIsObserved()) { trackFailure('console_failure', event.reason, lastVisibleAction?.action_id ?? null); stopDemoUiSession('CONSOLE_FAILURE') } }
   const originalConsoleError = console.error
   console.error = (...values: unknown[]) => {
-    originalConsoleError(...values)
-    if (active && routeIsObserved()) { trackFailure('console_failure', values, lastVisibleAction?.action_id ?? null); stopDemoUiSession('CONSOLE_FAILURE') }
+    const capability = active && persistedSession
+      ? new URL(persistedSession.binding).searchParams.get('capability')
+      : null
+    const sinkValues = capability
+      ? values.map((value) => {
+        try {
+          const searchable = typeof value === 'string'
+            ? value
+            : value instanceof Error
+              ? `${value.message}\n${value.stack ?? ''}`
+              : JSON.stringify(value)
+          return searchable?.includes(capability) ? '[FPMS_DEMO_REDACTED]' : value
+        } catch {
+          return '[FPMS_DEMO_REDACTED]'
+        }
+      })
+      : values
+    originalConsoleError(...sinkValues)
+    if (active && routeIsObserved()) { trackFailure('console_failure', sinkValues, lastVisibleAction?.action_id ?? null); stopDemoUiSession('CONSOLE_FAILURE') }
   }
   document.addEventListener('click', capture, true)
   document.addEventListener('submit', capture, true)
