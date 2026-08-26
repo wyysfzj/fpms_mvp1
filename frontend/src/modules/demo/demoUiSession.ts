@@ -2,6 +2,8 @@ import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } fro
 import { DEMO_UI_PARITY_SCHEMA_ID, parseDemoUiSessionPreflight } from './demo.contract'
 
 export const DEMO_UI_SESSION_STORAGE_KEY = 'fpms_demo_v6_ui_session_v1'
+export const DEMO_UI_LEDGER_STORAGE_KEY = 'fpms_demo_v6_ui_ledger_v1'
+export const DEMO_UI_TERMINAL_STORAGE_KEY = 'fpms_demo_v6_ui_terminal_v1'
 export const DEMO_UI_SESSION_CHANGE_EVENT = 'fpms:demo-ui-session-change'
 export const DEMO_UI_SCREENSHOT_COUNT = 11
 
@@ -71,7 +73,7 @@ let active = false
 let activeStorage: Storage | null = null
 let activeFetcher: typeof fetch | null = null
 let lastVisibleAction: VisibleAction | null = null
-let stopExportStarted = false
+let stopExportPromise: Promise<void> | null = null
 let axiosDisposer: (() => void) | null = null
 let domDisposer: (() => void) | null = null
 
@@ -92,6 +94,31 @@ function emitSessionChange(): void {
   if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
     window.dispatchEvent(new CustomEvent(DEMO_UI_SESSION_CHANGE_EVENT))
   }
+}
+
+function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  return Object.keys(value).sort().join('|') === [...keys].sort().join('|')
+}
+
+function isObserverEvent(value: unknown): value is DemoObserverEvent {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const row = value as Record<string, unknown>
+  if (row.kind === 'action') return exactKeys(row, ['kind', 'action_id', 'route', 'role', 'label_or_testid']) &&
+    [row.action_id, row.route, row.role, row.label_or_testid].every((entry) => typeof entry === 'string')
+  if (row.kind === 'mutation') return exactKeys(row, ['kind', 'action_id', 'route', 'role', 'label_or_testid', 'method', 'path', 'payload_sha256', 'status']) &&
+    (row.action_id === null || typeof row.action_id === 'string') &&
+    [row.route, row.role, row.label_or_testid, row.method, row.path].every((entry) => typeof entry === 'string') &&
+    typeof row.payload_sha256 === 'string' && /^[0-9a-f]{64}$/.test(row.payload_sha256) &&
+    (row.status === null || (typeof row.status === 'number' && Number.isInteger(row.status)))
+  if (row.kind === 'console_failure' || row.kind === 'network_failure') return exactKeys(row, ['kind', 'action_id', 'digest']) &&
+    (row.action_id === null || typeof row.action_id === 'string') && typeof row.digest === 'string' && /^[0-9a-f]{64}$/.test(row.digest)
+  if (row.kind === 'screenshot') return exactKeys(row, ['kind', 'stage', 'sha256', 'width', 'height']) &&
+    typeof row.stage === 'number' && Number.isInteger(row.stage) && row.stage >= 1 && row.stage <= DEMO_UI_SCREENSHOT_COUNT &&
+    typeof row.sha256 === 'string' && /^[0-9a-f]{64}$/.test(row.sha256) &&
+    typeof row.width === 'number' && typeof row.height === 'number'
+  if (row.kind === 'STOP') return exactKeys(row, ['kind', 'reason']) && typeof row.reason === 'string' && row.reason.trim().length > 0
+  if (row.kind === 'FINALIZED') return exactKeys(row, ['kind'])
+  return false
 }
 
 function parseBinding(raw: string): { binding: string; actor: 'HUMAN' | 'CODEX' } | null {
@@ -141,7 +168,91 @@ function parseStored(raw: string | null): PersistedSession | null {
   }
 }
 
-function operationUrl(operation: '/revalidate' | '/observer-artifact' | '/finalize'): string {
+function terminalRunId(storage: Storage): string | null | undefined {
+  const raw = storage.getItem(DEMO_UI_TERMINAL_STORAGE_KEY)
+  if (raw === null) return null
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+    const row = value as Record<string, unknown>
+    return exactKeys(row, ['run_id', 'status']) && row.status === 'STOPPED' && typeof row.run_id === 'string'
+      ? row.run_id : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function ledgerStorageKey(runId: string): string {
+  return `${DEMO_UI_LEDGER_STORAGE_KEY}:${runId}`
+}
+
+function persistLedger(): void {
+  if (!activeStorage || !persistedSession || !isTuple(persistedSession.tuple)) return
+  activeStorage.setItem(ledgerStorageKey(persistedSession.tuple.run_id), JSON.stringify({
+    schema_id: DEMO_UI_PARITY_SCHEMA_ID,
+    run_id: persistedSession.tuple.run_id,
+    events: observerLedger,
+  }))
+}
+
+function hydrateLedger(storage: Storage, session: PersistedSession): boolean {
+  try {
+    const raw = storage.getItem(ledgerStorageKey(session.tuple.run_id))
+    if (!raw) return false
+    const capability = new URL(session.binding).searchParams.get('capability')
+    if (capability && raw.includes(capability)) return false
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const row = value as Record<string, unknown>
+    if (!exactKeys(row, ['schema_id', 'run_id', 'events']) ||
+      row.schema_id !== DEMO_UI_PARITY_SCHEMA_ID || row.run_id !== session.tuple.run_id ||
+      !Array.isArray(row.events) || !row.events.every(isObserverEvent)) return false
+    observerLedger.splice(0, observerLedger.length, ...row.events)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function appendEvent(event: DemoObserverEvent): void {
+  const capability = persistedSession
+    ? new URL(persistedSession.binding).searchParams.get('capability')
+    : null
+  if (capability && JSON.stringify(event).includes(capability)) {
+    active = false
+    lastVisibleAction = null
+    observerLedger.push({ kind: 'STOP', reason: 'CAPABILITY_LEAK_BLOCKED' })
+    if (activeStorage && persistedSession && isTuple(persistedSession.tuple)) {
+      activeStorage.setItem(DEMO_UI_TERMINAL_STORAGE_KEY, JSON.stringify({
+        run_id: persistedSession.tuple.run_id,
+        status: 'STOPPED',
+      }))
+    }
+    persistLedger()
+    emitSessionChange()
+    if (activeFetcher) void exportStopDemoUiSession(activeFetcher)
+    return
+  }
+  observerLedger.push(event)
+  persistLedger()
+}
+
+async function expectHostResponse(
+  response: Response,
+  status: number,
+  body: Record<string, string>,
+): Promise<void> {
+  if (response.status !== status) throw new Error(`OBSERVER_STATUS_${response.status}`)
+  let value: unknown
+  try { value = await response.json() } catch { throw new Error('OBSERVER_RESPONSE_INVALID') }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('OBSERVER_RESPONSE_INVALID')
+  const row = value as Record<string, unknown>
+  if (!exactKeys(row, Object.keys(body)) || Object.entries(body).some(([key, expected]) => row[key] !== expected)) {
+    throw new Error('OBSERVER_RESPONSE_INVALID')
+  }
+}
+
+function operationUrl(operation: '/revalidate' | '/observer-artifact' | '/stop' | '/finalize'): string {
   if (!persistedSession) throw new Error('演示观察宿主未绑定')
   const url = new URL(persistedSession.binding)
   url.pathname = operation
@@ -150,7 +261,7 @@ function operationUrl(operation: '/revalidate' | '/observer-artifact' | '/finali
 }
 
 async function postHost(
-  operation: '/revalidate' | '/observer-artifact' | '/finalize',
+  operation: '/revalidate' | '/observer-artifact' | '/stop' | '/finalize',
   payload: object,
   fetcher: typeof fetch,
 ): Promise<Response> {
@@ -171,6 +282,10 @@ export function configureDemoObserverBinding(pageHref: string): boolean {
     const parsed = parseBinding(raw)
     if (!parsed) return false
     persistedSession = { binding: parsed.binding, tuple: null as unknown as DemoHostTuple }
+    page.searchParams.delete('fpmsObserverBinding')
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(window.history.state, '', `${page.pathname}${page.search}${page.hash}`)
+    }
     return true
   } catch {
     return false
@@ -221,14 +336,24 @@ export async function activateDemoUiSession(
     const binding = persistedSession.binding
     const candidate = candidateTuple(value)
     persistedSession = { binding, tuple: candidate }
-    const tuple = tupleFromPreflight(value)
-    const response = await postHost('/revalidate', tuple, fetcher)
-    if (!response.ok) throw new Error(`REVALIDATE_${response.status}`)
-    target.setItem(DEMO_UI_SESSION_STORAGE_KEY, JSON.stringify(persistedSession))
     activeStorage = target
     activeFetcher = fetcher
+    const terminal = terminalRunId(target)
+    if (terminal === undefined) throw new Error('SESSION_TERMINAL_INVALID')
+    if (terminal === candidate.run_id) {
+      active = false
+      emitSessionChange()
+      return false
+    }
+    const tuple = tupleFromPreflight(value)
+    const response = await postHost('/revalidate', tuple, fetcher)
+    await expectHostResponse(response, 200, { status: 'VALID' })
+    target.setItem(DEMO_UI_SESSION_STORAGE_KEY, JSON.stringify(persistedSession))
+    observerLedger.splice(0, observerLedger.length)
+    persistLedger()
+    target.removeItem(DEMO_UI_TERMINAL_STORAGE_KEY)
     active = true
-    stopExportStarted = false
+    stopExportPromise = null
     emitSessionChange()
     return true
   } catch {
@@ -251,10 +376,18 @@ export async function restoreDemoUiSession(
   activeStorage = target
   activeFetcher = fetcher
   try {
+    const terminal = terminalRunId(target)
+    if (terminal === undefined) throw new Error('SESSION_TERMINAL_INVALID')
+    if (terminal === stored.tuple.run_id) {
+      active = false
+      emitSessionChange()
+      return false
+    }
+    if (!hydrateLedger(target, stored)) throw new Error('SESSION_LEDGER_INVALID')
     const response = await postHost('/revalidate', stored.tuple, fetcher)
-    if (!response.ok) throw new Error(`REVALIDATE_${response.status}`)
+    await expectHostResponse(response, 200, { status: 'VALID' })
     active = true
-    stopExportStarted = false
+    stopExportPromise = null
     emitSessionChange()
     return true
   } catch {
@@ -287,32 +420,71 @@ async function uploadLedger(fetcher: typeof fetch): Promise<void> {
     ...persistedSession.tuple,
     filename: 'observer-ui-ledger.json', encoding: 'json', content: ledgerContent(),
   }, fetcher)
-  if (!response.ok) throw new Error(`OBSERVER_LEDGER_${response.status}`)
+  await expectHostResponse(response, 201, { filename: 'observer-ui-ledger.json' })
 }
 
 export async function exportStopDemoUiSession(fetcher: typeof fetch = fetch): Promise<void> {
-  if (stopExportStarted || !persistedSession || !isTuple(persistedSession.tuple)) return
-  stopExportStarted = true
-  try {
-    await uploadLedger(fetcher)
-    activeStorage?.removeItem(DEMO_UI_SESSION_STORAGE_KEY)
-  } catch {
-    // Preserve the exact run binding for audit/recovery; observer writes are never retried.
-  }
+  if (stopExportPromise) return stopExportPromise
+  if (!persistedSession || !isTuple(persistedSession.tuple)) return
+  const session = persistedSession
+  stopExportPromise = (async () => {
+    try {
+      await waitForObserverDigests()
+      persistLedger()
+      const response = await postHost('/stop', {
+        ...session.tuple,
+        ledger: ledgerContent(),
+      }, fetcher)
+      await expectHostResponse(response, 200, { status: 'STOPPED' })
+      activeStorage?.removeItem(DEMO_UI_SESSION_STORAGE_KEY)
+    } catch {
+      // Terminal STOP is single-attempt. Preserve the bound run when the host does not confirm it.
+    }
+  })()
+  return stopExportPromise
 }
 
 export function stopDemoUiSession(reason: string, storage?: Storage, fetcher?: typeof fetch): void {
-  if (observerLedger.at(-1)?.kind !== 'STOP') observerLedger.push({ kind: 'STOP', reason })
   active = false
   lastVisibleAction = null
   activeStorage = storageOrDefault(storage) ?? activeStorage
+  if (activeStorage && persistedSession && isTuple(persistedSession.tuple)) {
+    activeStorage.setItem(DEMO_UI_TERMINAL_STORAGE_KEY, JSON.stringify({
+      run_id: persistedSession.tuple.run_id,
+      status: 'STOPPED',
+    }))
+  }
+  if (observerLedger.at(-1)?.kind !== 'STOP') appendEvent({ kind: 'STOP', reason })
   emitSessionChange()
   if (fetcher ?? activeFetcher) void exportStopDemoUiSession((fetcher ?? activeFetcher) as typeof fetch)
   else if (typeof fetch !== 'undefined') void exportStopDemoUiSession(fetch)
 }
 
-export function handleDemoUiRoute(route: string, fetcher?: typeof fetch): void {
-  if (active && route === '/demo/abc') stopDemoUiSession(`ROUTE_EXCLUDED:${route}`, undefined, fetcher)
+export async function handleDemoUiRoute(
+  route: string,
+  storage?: Storage,
+  fetcher: typeof fetch = fetch,
+): Promise<boolean> {
+  if (route !== '/demo/abc') return false
+  const target = storageOrDefault(storage)
+  if (!active) {
+    const stored = target && parseStored(target.getItem(DEMO_UI_SESSION_STORAGE_KEY))
+    if (!target || !stored) return false
+    persistedSession = stored
+    activeStorage = target
+    activeFetcher = fetcher
+    if (!hydrateLedger(target, stored)) return false
+    const terminal = terminalRunId(target)
+    if (terminal === stored.tuple.run_id) return false
+    if (terminal === undefined) {
+      stopDemoUiSession('SESSION_TERMINAL_INVALID', target, fetcher)
+      await exportStopDemoUiSession(fetcher)
+      return true
+    }
+  }
+  stopDemoUiSession(`ROUTE_EXCLUDED:${route}`, target ?? undefined, fetcher)
+  await exportStopDemoUiSession(fetcher)
+  return true
 }
 
 function actionId(): string {
@@ -324,7 +496,7 @@ export function recordVisibleAction(input: Omit<VisibleAction, 'kind' | 'action_
   const action: VisibleAction = { kind: 'action', action_id: actionId(), ...input }
   if (active && routeIsObserved(input.route)) {
     lastVisibleAction = action
-    observerLedger.push(action)
+    appendEvent(action)
   }
   return action.action_id
 }
@@ -376,8 +548,11 @@ export function observeMutationRequest<T extends AxiosRequestConfig>(config: T):
     path: mutationPath(config), payload_sha256: '0'.repeat(64), status: null,
   }
   requestObservations.set(config, observation)
-  observerLedger.push(observation)
-  trackPending(normalizedPayloadSha256(config.data).then((digest) => { observation.payload_sha256 = digest }))
+  appendEvent(observation)
+  trackPending(normalizedPayloadSha256(config.data).then((digest) => {
+    observation.payload_sha256 = digest
+    persistLedger()
+  }))
   lastVisibleAction = null
   if (!action) stopDemoUiSession('UNMATCHED_MUTATION')
   return config
@@ -385,13 +560,19 @@ export function observeMutationRequest<T extends AxiosRequestConfig>(config: T):
 
 export function observeMutationResponse(config: AxiosRequestConfig, status: number): void {
   const observation = requestObservations.get(config)
-  if (observation) observation.status = status
+  if (observation) {
+    observation.status = status
+    persistLedger()
+  }
 }
 
 function trackFailure(kind: FailureObservation['kind'], value: unknown, actionIdValue: string | null): void {
   const failure: FailureObservation = { kind, action_id: actionIdValue, digest: '0'.repeat(64) }
-  observerLedger.push(failure)
-  trackPending(normalizedPayloadSha256(value).then((digest) => { failure.digest = digest }))
+  appendEvent(failure)
+  trackPending(normalizedPayloadSha256(value).then((digest) => {
+    failure.digest = digest
+    persistLedger()
+  }))
 }
 
 export function observeMutationFailure(config: AxiosRequestConfig, error: AxiosError): void {
@@ -570,17 +751,23 @@ async function pngIdentity(png: Blob): Promise<{ sha256: string; width: number; 
 export async function captureDemoStageScreenshot(stage: number): Promise<void> {
   if (!active || !persistedSession || !routeIsObserved()) throw new Error('演示会话未激活')
   if (!Number.isInteger(stage) || stage < 1 || stage > DEMO_UI_SCREENSHOT_COUNT) throw new Error('阶段序号无效')
-  const existing = await evidenceStore.list(persistedSession.tuple.run_id)
-  const expectedStage = existing.length + 1
-  if (stage !== expectedStage) throw new Error(`请先记录阶段 ${String(expectedStage).padStart(2, '0')} 截图`)
-  if (existing.some((entry) => entry.stage === stage)) throw new Error('本阶段截图已记录')
-  const png = await (captureAdapter ?? nativeCapture)()
-  const identity = await pngIdentity(png)
-  const identities = await Promise.all(existing.map((entry) => pngIdentity(entry.png)))
-  if (identities.some((entry) => entry.sha256 === identity.sha256)) throw new Error('阶段截图必须与此前阶段不同')
-  await evidenceStore.put(persistedSession.tuple.run_id, stage, png)
-  observerLedger.push({ kind: 'screenshot', stage, ...identity })
-  emitSessionChange()
+  const capturePromise = (captureAdapter ?? nativeCapture)()
+  try {
+    const existing = await evidenceStore.list(persistedSession.tuple.run_id)
+    const expectedStage = existing.length + 1
+    if (stage !== expectedStage) throw new Error(`请先记录阶段 ${String(expectedStage).padStart(2, '0')} 截图`)
+    if (existing.some((entry) => entry.stage === stage)) throw new Error('本阶段截图已记录')
+    const png = await capturePromise
+    const identity = await pngIdentity(png)
+    const identities = await Promise.all(existing.map((entry) => pngIdentity(entry.png)))
+    if (identities.some((entry) => entry.sha256 === identity.sha256)) throw new Error('阶段截图必须与此前阶段不同')
+    await evidenceStore.put(persistedSession.tuple.run_id, stage, png)
+    appendEvent({ kind: 'screenshot', stage, ...identity })
+    emitSessionChange()
+  } catch (error) {
+    await capturePromise.catch(() => undefined)
+    throw error
+  }
 }
 
 export async function getNextDemoScreenshotStage(): Promise<number | null> {
@@ -603,27 +790,30 @@ export async function finalizeDemoUiSessionEvidence(fetcher: typeof fetch = fetc
   if (screenshots.length !== DEMO_UI_SCREENSHOT_COUNT || screenshots.some((entry, index) => entry.stage !== index + 1)) throw new Error('请先记录全部 11 个阶段截图')
   const identities = await Promise.all(screenshots.map((entry) => pngIdentity(entry.png)))
   if (new Set(identities.map((entry) => entry.sha256)).size !== DEMO_UI_SCREENSHOT_COUNT) throw new Error('阶段截图不得重复')
-  observerLedger.push({ kind: 'FINALIZED' })
   try {
-    stopExportStarted = true
     await uploadLedger(fetcher)
     for (const entry of screenshots) {
+      const filename = `observer-stage-${String(entry.stage).padStart(2, '0')}.png`
       const response = await postHost('/observer-artifact', {
         ...session.tuple,
-        filename: `observer-stage-${String(entry.stage).padStart(2, '0')}.png`,
+        filename,
         encoding: 'base64', content: bytesToBase64(new Uint8Array(await entry.png.arrayBuffer())),
       }, fetcher)
-      if (!response.ok) throw new Error(`OBSERVER_PNG_${response.status}`)
+      await expectHostResponse(response, 201, { filename })
     }
     const response = await postHost('/finalize', session.tuple, fetcher)
-    if (!response.ok) throw new Error(`OBSERVER_FINALIZE_${response.status}`)
+    await expectHostResponse(response, 200, { status: 'FINALIZED' })
+    appendEvent({ kind: 'FINALIZED' })
     active = false
     activeStorage?.removeItem(DEMO_UI_SESSION_STORAGE_KEY)
+    activeStorage?.removeItem(ledgerStorageKey(session.tuple.run_id))
+    activeStorage?.removeItem(DEMO_UI_TERMINAL_STORAGE_KEY)
     await evidenceStore.clear(session.tuple.run_id)
     persistedSession = null
     emitSessionChange()
   } catch (error) {
-    stopDemoUiSession('OBSERVER_FINALIZE_FAILED')
+    stopDemoUiSession('OBSERVER_FINALIZE_FAILED', activeStorage ?? undefined, fetcher)
+    await exportStopDemoUiSession(fetcher)
     throw error
   }
 }

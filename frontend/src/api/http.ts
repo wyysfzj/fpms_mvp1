@@ -10,7 +10,7 @@ export const http = axios.create({
   baseURL,
 })
 
-let disposeDemoObserver: (() => void) | null = installDemoUiObserver(http)
+let disposeDemoObserver: (() => void) | null = null
 
 // Request interceptor: inject Authorization header
 http.interceptors.request.use((config) => {

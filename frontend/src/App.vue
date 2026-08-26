@@ -31,7 +31,12 @@ function syncDemoSession(): void {
 
 onMounted(async () => {
   window.addEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
-  if (['/login', '/demo/abc'].includes(route.path)) return
+  if (route.path === '/demo/abc') {
+    await handleDemoUiRoute(route.path)
+    syncDemoSession()
+    return
+  }
+  if (route.path === '/login') return
   disposeHttpObserver = installHttpDemoObserver()
   disposeDomObserver = installDemoUiDomObserver()
   if (!prepareDemoUiSessionObserver()) return
@@ -49,7 +54,7 @@ onMounted(async () => {
   }
 })
 
-watch(() => route.path, (path) => handleDemoUiRoute(path), { immediate: true })
+watch(() => route.path, (path) => { void handleDemoUiRoute(path) })
 
 onBeforeUnmount(() => {
   window.removeEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)

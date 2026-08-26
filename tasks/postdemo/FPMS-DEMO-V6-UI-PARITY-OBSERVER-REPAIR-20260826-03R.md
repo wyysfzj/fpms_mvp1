@@ -9,6 +9,8 @@ Chosen runbook: `P0-frontend-heavy-story`
 ## Approval And Fixed References
 
 - User approval: `批准 Ordinal 02R/03R 最小重划边界，修复后恢复 Ordinal 03 并继续后续计划`.
+- Findings-only expansion approval:
+  `批准 02R terminal STOP host + 03R findings-only 最小整改边界`.
 - Approved design: `docs/superpowers/specs/2026-08-26-fpms-demo-v6-ui-parity-design.md`,
   exact commit `5d48d0aed4356e7a1bd2d958301afe6ffab12b4d`.
 - Approved plan: `docs/superpowers/plans/2026-08-26-fpms-demo-v6-ui-parity-implementation.md`,
@@ -16,6 +18,7 @@ Chosen runbook: `P0-frontend-heavy-story`
 - Active lean overlay:
   `docs/superpowers/plans/2026-08-26-fpms-demo-v6-ui-parity-lean-execution-overlay.md`.
 - Accepted Ordinal 02R HEAD: `c4230a48e356764b956bbd51d34ce589969c88fa`.
+- Accepted Ordinal 02S HEAD: `8b07b5f671d238b39cee11c81d4ecf857499ffa5`.
 - Rejected Ordinal 03 candidate: `54074a764ddd176f826711928453a6dc9ff4b236`.
 - Controlling findings: the eight P1s in the independent review of
   `1971f62e2f3a489158ae83aec62c0ef42c72f8f2..54074a764ddd176f826711928453a6dc9ff4b236`;
@@ -36,16 +39,20 @@ existing implementation; do not create a second observer or session layer.
    six-field host tuple plus binding in `sessionStorage`; never print or record the capability.
 2. Normal-route reload restores only by POSTing the stored exact tuple to the same capability's
    `/revalidate` operation. It must not rerun the all-zero preflight after business mutations.
-   Missing/drifted storage, wrong binding/actor/tuple, or failed revalidation transitions to STOP.
+   Require exact `200 {"status":"VALID"}`. Missing/drifted storage, wrong binding/actor/tuple, or
+   any other status/body transitions to STOP. Persist and strictly hydrate the redacted ledger by
+   run ID across real module/page reload; capability is allowed only inside the bound session record.
 3. STOP disables every V6-only control but retains the redacted ledger and exact host tuple long
-   enough to export the STOP evidence through the observer-only binding. Manual preflight failure,
+   enough to export the STOP evidence through the accepted 02S `/stop` binding. STOP is irreversible
+   for the exact run; only a genuinely new run/binding may activate. Manual preflight failure,
    console error, window error, unhandled rejection, unmatched mutation, and network failure all
    transition to STOP; no observer operation issues/retries/changes a business request.
 4. Preserve an Axios HTTP error's `response.status`; use `0` only for a transport failure. Reject the
    identical Axios error after observation.
 5. `/demo/abc` and `/login` never show the boundary and are never observed. Entering `/demo/abc`
-   during an active V6 session records/exports STOP and clears active controls; normal business
-   routes remain covered.
+   with either a hot or cold stored V6 session restores only enough exact host identity to export
+   STOP, then clears active controls/session without installing the observer or banner; normal
+   business routes remain covered.
 6. Return and invoke an exact disposer for DOM/window listeners and console interception. Eject any
    installed Axios interceptors when disposed/reinstalled. Mount/unmount/reinstall cannot duplicate
    actions, failures, or interceptors and restores the original `console.error`.
@@ -54,9 +61,16 @@ existing implementation; do not create a second observer or session layer.
    validate runtime compatibility with the canonical parser, not stale source-string key literals.
 8. Browser finalization uploads the redacted observer ledger and the eleven genuine stage PNG
    captures named by 02R, then POSTs the exact tuple to `/finalize`. It must not create repeated or
-   synthetic placeholder images. A host rejection records STOP and preserves the run; only a 200
-   finalization clears session state and reports success. The observer may capture visible browser
-   state but may not click, fill, navigate, call a business API, or mutate business data.
+   synthetic placeholder images. Artifact writes require exact `201` and echoed filename; finalize
+   requires exact `200 {"status":"FINALIZED"}`. Do not record FINALIZED before that response. Any
+   partial-upload/finalize failure appends terminal STOP and exports the complete corrected ledger
+   through 02S `/stop`; only host-confirmed success clears state. `getDisplayMedia` must be invoked in
+   the visible click's synchronous activation chain before any IndexedDB await, and every path stops
+   its tracks. The observer may capture visible browser state but may not click, fill, navigate,
+   call a business API, or mutate business data.
+9. After parsing a valid initial binding, immediately remove the complete binding query parameter
+   from the visible URL/history. No capability may appear in the ledger, screenshot store, console,
+   route, or other persistence.
 
 ## Explicit Non-Closure
 
@@ -98,7 +112,8 @@ uploads, ledger-before-finalize ordering, and no observer-originated business re
 review binds the exact repaired Ordinal 03 range.
 
 Expected loopback statuses are the accepted 02R semantics. Existing business API statuses and Axios
-request/rejection identity are unchanged.
+request/rejection identity are unchanged. Accepted 02S STOP requires exact
+`200 {"status":"STOPPED"}`.
 
 ## Evidence Path
 

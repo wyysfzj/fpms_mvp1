@@ -107,6 +107,9 @@ for (const bad of [
 assert.equal(session.configureDemoObserverBinding(pageUrl), true)
 
 const requests = []
+function hostResponse(status, body) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body }
+}
 const hostFetch = async (url, init) => {
   const body = JSON.parse(init.body)
   requests.push({ url, body })
@@ -114,7 +117,11 @@ const hostFetch = async (url, init) => {
   const pathname = new URL(url).pathname
   assert.equal(new URL(url).searchParams.get('capability'), capability)
   assert.equal(new URL(url).searchParams.has('actor'), false)
-  return { ok: true, status: pathname === '/observer-artifact' ? 201 : 200 }
+  if (pathname === '/revalidate') return hostResponse(200, { status: 'VALID' })
+  if (pathname === '/observer-artifact') return hostResponse(201, { filename: body.filename })
+  if (pathname === '/stop') return hostResponse(200, { status: 'STOPPED' })
+  if (pathname === '/finalize') return hostResponse(200, { status: 'FINALIZED' })
+  return hostResponse(404, { error: 'NOT_FOUND' })
 }
 const storage = new MemoryStorage()
 assert.equal(await session.activateDemoUiSession(preflight, storage, hostFetch), true)
@@ -166,12 +173,11 @@ const stopped = await sessionImport()
 const stopStorage = new MemoryStorage()
 assert.equal(stopped.configureDemoObserverBinding(pageUrl), true)
 assert.equal(await stopped.activateDemoUiSession(preflight, stopStorage, hostFetch), true)
-stopped.handleDemoUiRoute('/demo/abc', hostFetch)
-await new Promise((resolve) => setTimeout(resolve, 0))
+await stopped.handleDemoUiRoute('/demo/abc', stopStorage, hostFetch)
 assert.equal(stopped.isDemoUiSessionActive(), false)
 assert.equal(stopped.getDemoObserverLedger().at(-1).kind, 'STOP')
-assert.equal(requests.at(-1).body.filename, 'observer-ui-ledger.json')
-assert.equal(requests.at(-1).body.content.events.at(-1).kind, 'STOP')
+assert.equal(new URL(requests.at(-1).url).pathname, '/stop')
+assert.equal(requests.at(-1).body.ledger.events.at(-1).kind, 'STOP')
 
 for (const [reason, trigger] of [
   ['manual preflight', async (module, localStorage) => {
@@ -193,8 +199,8 @@ for (const [reason, trigger] of [
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(module.isDemoUiSessionActive(), false, `${reason} must STOP`)
   assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP', `${reason} must be auditable`)
-  const stopExport = requests.slice(beforeStop).findLast((entry) => entry.body.filename === 'observer-ui-ledger.json')
-  assert.equal(stopExport?.body.content.events.at(-1).kind, 'STOP', `${reason} must export STOP`)
+  const stopExport = requests.slice(beforeStop).findLast((entry) => new URL(entry.url).pathname === '/stop')
+  assert.equal(stopExport?.body.ledger.events.at(-1).kind, 'STOP', `${reason} must export STOP`)
 }
 
 const revalidationSession = await sessionImport()
@@ -202,7 +208,7 @@ const revalidationStorage = new MemoryStorage()
 assert.equal(revalidationSession.configureDemoObserverBinding(pageUrl), true)
 assert.equal(await revalidationSession.activateDemoUiSession(preflight, revalidationStorage, hostFetch), true)
 const rejectRevalidationFetch = async (url, init) => {
-  if (new URL(url).pathname === '/revalidate') return { ok: false, status: 409 }
+  if (new URL(url).pathname === '/revalidate') return hostResponse(409, { error: 'SESSION_TUPLE_CONFLICT' })
   return hostFetch(url, init)
 }
 const revalidationReload = await sessionImport()
@@ -222,14 +228,15 @@ const rejectedCalls = []
 const rejectPngFetch = async (url, init) => {
   const body = JSON.parse(init.body)
   rejectedCalls.push({ url, body })
-  if (body.filename === 'observer-stage-01.png') return { ok: false, status: 409 }
-  return { ok: true, status: new URL(url).pathname === '/observer-artifact' ? 201 : 200 }
+  if (body.filename === 'observer-stage-01.png') return hostResponse(409, { error: 'OBSERVER_EVIDENCE_CONFLICT' })
+  if (new URL(url).pathname === '/stop') return hostResponse(200, { status: 'STOPPED' })
+  return hostResponse(201, { filename: body.filename })
 }
-await assert.rejects(rejectedFinalize.finalizeDemoUiSessionEvidence(rejectPngFetch), /OBSERVER_PNG_409/)
+await assert.rejects(rejectedFinalize.finalizeDemoUiSessionEvidence(rejectPngFetch), /OBSERVER_STATUS_409/)
 assert.equal(rejectedFinalize.getDemoObserverLedger().at(-1).kind, 'STOP')
-assert.notEqual(rejectedStorage.getItem(rejectedFinalize.DEMO_UI_SESSION_STORAGE_KEY), null)
+assert.equal(rejectedStorage.getItem(rejectedFinalize.DEMO_UI_SESSION_STORAGE_KEY), null)
 assert.equal(rejectedStages.rows.length, 11)
-assert.deepEqual(rejectedCalls.map((entry) => entry.body.filename ?? new URL(entry.url).pathname), ['observer-ui-ledger.json', 'observer-stage-01.png'])
+assert.deepEqual(rejectedCalls.map((entry) => entry.body.filename ?? new URL(entry.url).pathname), ['observer-ui-ledger.json', 'observer-stage-01.png', '/stop'])
 
 const interceptorState = { request: new Map(), response: new Map(), requestEjects: 0, responseEjects: 0, next: 0 }
 const fakeAxios = { interceptors: {
@@ -277,6 +284,7 @@ const savedCustomEvent = globalThis.CustomEvent
 const savedFetch = globalThis.fetch
 const fakeWindow = new FakeTarget()
 fakeWindow.location = { pathname: '/', href: pageUrl, origin: 'http://127.0.0.1:5173' }
+fakeWindow.history = { state: null, replaceState() {} }
 const fakeDocument = new FakeTarget()
 globalThis.window = fakeWindow
 globalThis.document = fakeDocument
@@ -308,15 +316,18 @@ for (const [source, fire] of [
   const module = await sessionImport()
   assert.equal(module.configureDemoObserverBinding(pageUrl), true)
   assert.equal(await module.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+  const realConsoleError = console.error
+  if (source === 'console error') console.error = () => undefined
   const beforeInstall = console.error
   const disposeFailureObserver = module.installDemoUiDomObserver()
   fire()
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  await module.exportStopDemoUiSession(hostFetch)
   assert.equal(module.isDemoUiSessionActive(), false, `${source} must STOP`)
   assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP')
-  assert.equal(requests.at(-1).body.content.events.at(-1).kind, 'STOP')
+  assert.equal(requests.at(-1).body.ledger.events.at(-1).kind, 'STOP')
   disposeFailureObserver()
   assert.equal(console.error, beforeInstall, `${source} disposer restores console`)
+  console.error = realConsoleError
 }
 globalThis.window = savedWindow
 globalThis.document = savedDocument
@@ -340,5 +351,206 @@ assert.ok(sources.banner.includes('合成演示数据｜仅用于技术展示，
 assert.ok(sources.banner.includes('记录阶段'))
 assert.ok(sources.inputs.includes('完成并导出本轮证据'))
 assert.ok(!/http\.(post|put|patch|delete)/.test(sources.inputs))
+
+const remediationFindings = []
+async function proveFinding(name, proof) {
+  try { await proof() } catch (error) { remediationFindings.push(`${name}: ${error instanceof Error ? error.message : String(error)}`) }
+}
+
+await proveFinding('ledger hydrates across real module reload without capability persistence', async () => {
+  const first = await sessionImport()
+  const localStorage = new MemoryStorage()
+  assert.equal(first.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await first.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  first.recordVisibleAction({ route: '/cases', role: 'button', label_or_testid: '查看案件' })
+  const second = await sessionImport()
+  assert.equal(await second.restoreDemoUiSession(localStorage, hostFetch), true)
+  assert.equal(second.getDemoObserverLedger().some((event) => event.label_or_testid === '查看案件'), true)
+  for (const [key, value] of localStorage.values) if (key !== second.DEMO_UI_SESSION_STORAGE_KEY) assert.ok(!value.includes(capability))
+})
+
+await proveFinding('cold /demo/abc exports exact STOP without observer install', async () => {
+  const hot = await sessionImport()
+  const localStorage = new MemoryStorage()
+  assert.equal(hot.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await hot.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  const cold = await sessionImport()
+  const before = requests.length
+  assert.equal(await cold.handleDemoUiRoute('/demo/abc', localStorage, hostFetch), true)
+  assert.equal(new URL(requests.at(-1).url).pathname, '/stop')
+  assert.equal(requests.at(-1).body.ledger.events.at(-1).kind, 'STOP')
+  assert.equal(localStorage.getItem(cold.DEMO_UI_SESSION_STORAGE_KEY), null)
+  assert.equal(requests.length, before + 1)
+})
+
+await proveFinding('terminal STOP prevents same-run reactivation', async () => {
+  const module = await sessionImport()
+  const localStorage = new MemoryStorage()
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  module.stopDemoUiSession('TERMINAL_TEST', localStorage, hostFetch)
+  await module.exportStopDemoUiSession(hostFetch)
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), false)
+})
+
+await proveFinding('loopback success bodies are exact', async () => {
+  const module = await sessionImport()
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  const wrongValid = async () => ({ ok: true, status: 200, json: async () => ({ status: 'WRONG' }) })
+  assert.equal(await module.activateDemoUiSession(preflight, new MemoryStorage(), wrongValid), false)
+})
+
+await proveFinding('partial finalization exports corrected STOP ledger', async () => {
+  const module = await sessionImport()
+  const localStorage = new MemoryStorage()
+  const localStages = new MemoryStages()
+  let value = 0
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  module.setDemoStageEvidenceAdaptersForTest(localStages, async () => png(++value))
+  for (let ordinal = 1; ordinal <= 11; ordinal += 1) await module.captureDemoStageScreenshot(ordinal)
+  const calls = []
+  const rejectPartial = async (url, init) => {
+    const body = JSON.parse(init.body); calls.push({ url, body })
+    if (body.filename === 'observer-stage-01.png') return { ok: false, status: 409, json: async () => ({ error: 'CONFLICT' }) }
+    if (new URL(url).pathname === '/stop') return { ok: true, status: 200, json: async () => ({ status: 'STOPPED' }) }
+    return { ok: true, status: 201, json: async () => ({ filename: body.filename }) }
+  }
+  await assert.rejects(module.finalizeDemoUiSessionEvidence(rejectPartial))
+  assert.equal(new URL(calls.at(-1).url).pathname, '/stop')
+  assert.equal(calls.at(-1).body.ledger.events.at(-1).kind, 'STOP')
+  assert.equal(calls.at(-1).body.ledger.events.some((event) => event.kind === 'FINALIZED'), false)
+})
+
+await proveFinding('artifact echo and finalize body are exact', async () => {
+  for (const fault of ['artifact-echo', 'finalize-body']) {
+    const module = await sessionImport()
+    const localStorage = new MemoryStorage()
+    const localStages = new MemoryStages()
+    let value = 0
+    const calls = []
+    assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+    assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+    module.setDemoStageEvidenceAdaptersForTest(localStages, async () => png(++value))
+    for (let ordinal = 1; ordinal <= 11; ordinal += 1) await module.captureDemoStageScreenshot(ordinal)
+    const strictFetch = async (url, init) => {
+      const body = JSON.parse(init.body); const pathname = new URL(url).pathname
+      calls.push({ url, body })
+      if (pathname === '/stop') return hostResponse(200, { status: 'STOPPED' })
+      if (pathname === '/finalize') return hostResponse(200, { status: fault === 'finalize-body' ? 'WRONG' : 'FINALIZED' })
+      if (fault === 'artifact-echo' && body.filename === 'observer-ui-ledger.json') return hostResponse(201, { filename: 'wrong.json' })
+      return hostResponse(201, { filename: body.filename })
+    }
+    await assert.rejects(module.finalizeDemoUiSessionEvidence(strictFetch), /OBSERVER_RESPONSE_INVALID/)
+    assert.equal(new URL(calls.at(-1).url).pathname, '/stop')
+    assert.equal(calls.at(-1).body.ledger.events.at(-1).kind, 'STOP')
+    assert.equal(calls.at(-1).body.ledger.events.some((event) => event.kind === 'FINALIZED'), false)
+  }
+})
+
+await proveFinding('display capture starts before first IndexedDB await', async () => {
+  const module = await sessionImport()
+  const order = []
+  const localStorage = new MemoryStorage()
+  const localStages = {
+    async put() {}, async clear() {},
+    async list() { order.push('idb'); return [] },
+  }
+  assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+  assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+  module.setDemoStageEvidenceAdaptersForTest(localStages, async () => { order.push('capture'); return png(1) })
+  await module.captureDemoStageScreenshot(1)
+  assert.deepEqual(order.slice(0, 2), ['capture', 'idb'])
+})
+
+await proveFinding('native media capture stops tracks on success and encoding failure', async () => {
+  const savedNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const savedDocumentValue = globalThis.document
+  const savedWindowValue = globalThis.window
+  try {
+    for (const encode of [png(1), null]) {
+      const module = await sessionImport()
+      const localStorage = new MemoryStorage()
+      const order = []
+      let stops = 0
+      assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+      assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+      const stream = { getTracks: () => [{ stop: () => { stops += 1 } }] }
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: { mediaDevices: { getDisplayMedia: () => { order.push('media'); return Promise.resolve(stream) } } },
+      })
+      globalThis.window = {
+        location: { pathname: '/', origin: 'http://127.0.0.1:5173' },
+        history: { state: null, replaceState() {} },
+        dispatchEvent() {},
+      }
+      globalThis.document = {
+        createElement(name) {
+          if (name === 'video') return {
+            videoWidth: 640, videoHeight: 360, srcObject: null,
+            set onloadedmetadata(handler) { queueMicrotask(handler) },
+            set onerror(_handler) {},
+            async play() {},
+          }
+          return {
+            width: 0, height: 0,
+            getContext: () => ({ drawImage() {} }),
+            toBlob: (resolve) => resolve(encode),
+          }
+        },
+      }
+      const localStages = {
+        async put() {}, async clear() {},
+        async list() { order.push('idb'); return [] },
+      }
+      module.setDemoStageEvidenceAdaptersForTest(localStages, null)
+      if (encode) await module.captureDemoStageScreenshot(1)
+      else await assert.rejects(module.captureDemoStageScreenshot(1), /阶段截图编码失败/)
+      assert.deepEqual(order.slice(0, 2), ['media', 'idb'])
+      assert.equal(stops, 1)
+    }
+  } finally {
+    if (savedNavigatorDescriptor) Object.defineProperty(globalThis, 'navigator', savedNavigatorDescriptor)
+    else delete globalThis.navigator
+    globalThis.document = savedDocumentValue
+    globalThis.window = savedWindowValue
+  }
+})
+
+await proveFinding('activation binding is scrubbed from URL/history', async () => {
+  const savedWindowValue = globalThis.window
+  const historyCalls = []
+  globalThis.window = {
+    location: { href: pageUrl, pathname: '/', origin: 'http://127.0.0.1:5173' },
+    history: { state: null, replaceState: (...args) => historyCalls.push(args) },
+    dispatchEvent() {},
+  }
+  try {
+    const module = await sessionImport()
+    const localStorage = new MemoryStorage()
+    const localStages = new MemoryStages()
+    assert.equal(module.configureDemoObserverBinding(pageUrl), true)
+    assert.equal(historyCalls.length, 1)
+    assert.ok(!historyCalls[0][2].includes('fpmsObserverBinding'))
+    assert.ok(!historyCalls[0][2].includes(capability))
+    assert.equal(await module.activateDemoUiSession(preflight, localStorage, hostFetch), true)
+    module.setDemoStageEvidenceAdaptersForTest(localStages, async () => png(1))
+    await module.captureDemoStageScreenshot(1)
+    assert.ok(localStorage.getItem(module.DEMO_UI_SESSION_STORAGE_KEY).includes(capability))
+    assert.ok(!localStorage.getItem(`${module.DEMO_UI_LEDGER_STORAGE_KEY}:${preflight.run_id}`).includes(capability))
+    assert.ok(!JSON.stringify(localStages.rows).includes(capability))
+    assert.ok(!JSON.stringify(module.getDemoObserverLedger()).includes(capability))
+    module.recordVisibleAction({ route: '/cases', role: 'button', label_or_testid: capability })
+    await module.exportStopDemoUiSession(hostFetch)
+    assert.equal(module.getDemoObserverLedger().at(-1).kind, 'STOP')
+    assert.ok(!JSON.stringify(module.getDemoObserverLedger()).includes(capability))
+  } finally {
+    globalThis.window = savedWindowValue
+  }
+})
+
+assert.deepEqual(remediationFindings, [], `Ordinal 03R remediation gaps:\n- ${remediationFindings.join('\n- ')}`)
 
 console.log('demo V6 UI session contract: PASS')
