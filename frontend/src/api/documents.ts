@@ -166,6 +166,7 @@ function mapDocument(input: BackendDocument): Document {
 export function selectReviewedEvidenceOptions(
     documents: Document[],
     caseId: string,
+    requireFinal = true,
 ): ReviewedDocumentEvidenceOption[] {
     if (!caseId.trim()) return []
     const options = documents.flatMap((document) => {
@@ -176,7 +177,7 @@ export function selectReviewedEvidenceOptions(
                 attachment.document_id && attachment.document_id !== document.id
                 || attachment.review_state !== 'APPROVED'
                 || attachment.is_current !== true
-                || attachment.is_final !== true
+                || (requireFinal && attachment.is_final !== true)
                 || !attachment.evidence_version_id
                 || !attachment.content_hash
                 || !/^sha256:[0-9a-f]{64}$/.test(attachment.content_hash)
@@ -232,7 +233,7 @@ export function selectReviewedReceiptEvidenceOptions(
     const attachments = new Map(
         documents.flatMap((document) => (document.attachments || []).map((attachment) => [attachment.id, attachment] as const)),
     )
-    return selectReviewedEvidenceOptions(documents, caseId).filter((option) => {
+    return selectReviewedEvidenceOptions(documents, caseId, false).filter((option) => {
         const attachment = attachments.get(option.attachment_id)
         return Boolean(
             attachment

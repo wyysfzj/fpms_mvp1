@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -179,6 +180,39 @@ const receiptDocuments = [{
 }]
 const receiptOptions = documents.selectReviewedReceiptEvidenceOptions(receiptDocuments, 'case-a')
 assert.deepEqual(receiptOptions.map((row) => row.attachment_id), ['receipt-oa1', 'receipt-oa2'])
+const reviewedDraftReceiptDocuments = [
+  {
+    id: 'reviewed-draft-receipts', case_id: 'case-a', title: '已复核回执附件', direction: 'IN', attachments: [
+      approvedAttachment({ id: 'draft-role', document_id: 'reviewed-draft-receipts', filename: '角色回执.pdf', role: 'RECEIPT_PDF', is_final: false }),
+      approvedAttachment({ id: 'draft-receipt-flag', document_id: 'reviewed-draft-receipts', filename: '回执标记.pdf', role: 'OTHER', is_receipt_evidence: true, is_final: false, evidence_version_id: 'draft-receipt-flag-version' }),
+      approvedAttachment({ id: 'draft-archive-flag', document_id: 'reviewed-draft-receipts', filename: '归档标记.pdf', role: 'OTHER', is_archive_evidence: true, is_final: false, evidence_version_id: 'draft-archive-flag-version' }),
+      approvedAttachment({ id: 'draft-pending', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', review_state: 'PENDING', is_final: false, evidence_version_id: 'draft-pending-version' }),
+      approvedAttachment({ id: 'draft-rejected', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', review_state: 'REJECTED', is_final: false, evidence_version_id: 'draft-rejected-version' }),
+      approvedAttachment({ id: 'draft-stale', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', is_current: false, is_final: false, evidence_version_id: 'draft-stale-version' }),
+      approvedAttachment({ id: 'draft-missing-version', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: null }),
+      approvedAttachment({ id: 'draft-missing-hash', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: 'draft-missing-hash-version', content_hash: null }),
+      approvedAttachment({ id: 'draft-invalid-hash', document_id: 'reviewed-draft-receipts', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: 'draft-invalid-hash-version', content_hash: `sha256:${'A'.repeat(64)}` }),
+      approvedAttachment({ id: 'draft-ordinary', document_id: 'reviewed-draft-receipts', role: 'OTHER', is_final: false, evidence_version_id: 'draft-ordinary-version' }),
+    ],
+  },
+  {
+    id: 'reviewed-draft-wrong-case', case_id: 'case-b', title: '他案已复核回执', direction: 'IN', attachments: [
+      approvedAttachment({ id: 'draft-wrong-case', document_id: 'reviewed-draft-wrong-case', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: 'draft-wrong-case-version' }),
+    ],
+  },
+]
+assert.deepEqual(documents.selectReviewedEvidenceOptions(reviewedDraftReceiptDocuments, 'case-a'), [])
+assert.deepEqual(
+  documents.selectReviewedReceiptEvidenceOptions(reviewedDraftReceiptDocuments, 'case-a').map((row) => row.attachment_id),
+  ['draft-role', 'draft-receipt-flag', 'draft-archive-flag'],
+)
+const reviewedDraftReceiptCollision = [{
+  id: 'reviewed-draft-collision', case_id: 'case-a', title: '已复核回执身份碰撞', direction: 'IN', attachments: [
+    approvedAttachment({ id: 'draft-collision-a', document_id: 'reviewed-draft-collision', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: 'draft-collision-version', content_hash: hashB }),
+    approvedAttachment({ id: 'draft-collision-b', document_id: 'reviewed-draft-collision', role: 'RECEIPT_PDF', is_final: false, evidence_version_id: 'draft-collision-version', content_hash: hashB }),
+  ],
+}]
+assert.deepEqual(documents.selectReviewedReceiptEvidenceOptions(reviewedDraftReceiptCollision, 'case-a'), [])
 await official.createReviewedOfficialWorkPackageReceipt('package-oa1', 'case-a', receiptOptions[0], receiptPayload)
 await official.createReviewedOfficialWorkPackageReceipt('package-oa2', 'case-a', receiptOptions[1], receiptPayload)
 assert.deepEqual(httpCalls.slice(-2).map((call) => call.payload.receipt_attachment_id), ['receipt-oa1', 'receipt-oa2'])
