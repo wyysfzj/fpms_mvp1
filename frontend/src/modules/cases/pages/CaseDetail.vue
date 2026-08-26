@@ -150,6 +150,21 @@
                   </div>
                 </div>
 
+                <div v-if="primaryContacts.length" class="info-section">
+                  <h4 class="info-section-title">客户主联系人</h4>
+                  <div class="official-party-list">
+                    <div
+                      v-for="contact in primaryContacts"
+                      :key="contact.id"
+                      class="official-party-item"
+                    >
+                      <span>姓名：{{ contact.contact_name }}</span>
+                      <span>职务：{{ contact.title }}</span>
+                      <span>邮箱：{{ contact.email }}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div v-if="caseData.priorities?.length" class="info-section">
                   <h4 class="info-section-title">优先权信息</h4>
                   <div class="priority-list">
@@ -524,7 +539,9 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCase, getCaseByCaseNo } from '../../../api/cases'
+import { getClientContacts } from '../../../api/clients'
 import type { Case } from '../../../api/cases.types'
+import type { ClientContact } from '../../../api/clients.types'
 import type { LifecycleOverlay } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -548,6 +565,7 @@ const router = useRouter()
 const pageContext = usePageContext()
 
 const caseData = ref<Case | null>(null)
+const clientContacts = ref<ClientContact[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('overview')
@@ -557,6 +575,9 @@ const lifecycleOverlayError = ref<ApiError | null>(null)
 
 const statusTagClass = computed(() =>
   caseData.value?.status ? getStatusTagClass(caseData.value.status) : 'gray'
+)
+const primaryContacts = computed(() =>
+  clientContacts.value.filter(contact => contact.is_primary === true)
 )
 
 const statusDisplayText = computed(() => {
@@ -648,6 +669,9 @@ async function fetchCase() {
 
   try {
     caseData.value = caseNo ? await getCaseByCaseNo(caseNo) : await getCase(id)
+    clientContacts.value = caseData.value.client_id
+      ? await getClientContacts(String(caseData.value.client_id))
+      : []
     pageContext.setBreadcrumb(['案件管理', '案件详情', caseData.value.case_no || caseData.value.title || '未命名案件'])
     if (!caseNo && caseData.value.case_no) {
       await router.replace({ name: 'case_detail_by_no', params: { caseNo: caseData.value.case_no } })
