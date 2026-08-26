@@ -13,6 +13,20 @@ const oaPage = read('src/modules/documents/pages/OAReplyPackage.vue')
 const receiptPanel = read('src/modules/officialWorkflows/components/ReceiptArchivePanel.vue')
 const lifecyclePath = join(frontendRoot, 'src/modules/documents/components/DocumentLifecycleEvidenceActions.vue')
 const lifecyclePanel = existsSync(lifecyclePath) ? readFileSync(lifecyclePath, 'utf8') : ''
+const lifecycleScript = lifecyclePanel.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1] || ''
+const lifecycleSourceFile = ts.createSourceFile(
+  'DocumentLifecycleEvidenceActions.ts', lifecycleScript, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+)
+const lifecycleProjectionNames = ['baseActions', 'isOaNoticeDocument', 'actions']
+const lifecycleProjectionDeclarations = lifecycleSourceFile.statements.filter(
+  (statement) => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(
+    (declaration) => ts.isIdentifier(declaration.name) && lifecycleProjectionNames.includes(declaration.name.text),
+  ),
+)
+assert.equal(lifecycleProjectionDeclarations.length, lifecycleProjectionNames.length)
+const evidenceLabelExpression = lifecyclePanel.match(/<el-form-item\s+:label="([^"]+)"/)?.[1]
+assert.ok(evidenceLabelExpression)
+const renderEvidenceLabel = new Function('isOaNoticeDocument', `return ${evidenceLabelExpression}`)
 const documentsApi = read('src/api/documents.ts')
 const officialApi = read('src/api/officialWorkflows.ts')
 
@@ -25,8 +39,6 @@ assert.equal(documentPage.match(/<DocumentLifecycleEvidenceActions/g)?.length, 1
 for (const label of ['记录受理通知', '开始初步审查', '记录初审通过', '记录公布通知', '开始实质审查']) {
   assert.match(lifecyclePanel, new RegExp(label))
 }
-assert.match(lifecyclePanel, /已复核证据版本/)
-assert.match(lifecyclePanel, /记录审查意见通知/)
 assert.match(oaPage, /答复文书/)
 assert.match(oaPage, /linkReviewedOaReplyDocument/)
 assert.match(receiptPanel, /回执文件/)
@@ -91,8 +103,59 @@ for (const templateCode of [
 ]) {
   assert.equal(documents.isOaNoticeTemplateCode(templateCode), true)
 }
-for (const templateCode of ['ACCEPTANCE_NOTICE', 'GRANT_NOTICE', 'OFFICIAL_NOTICE_001', '', null]) {
+for (const templateCode of [
+  'OA_OUT',
+  'ACCEPTANCE_NOTICE',
+  'GRANT_NOTICE',
+  'OFFICIAL_NOTICE_001',
+  'OFFICIAL_NOTICE_004',
+  'OFFICIAL_NOTICE_999',
+  '',
+  null,
+]) {
   assert.equal(documents.isOaNoticeTemplateCode(templateCode), false)
+}
+
+async function loadLifecycleActionProjection(templateCode) {
+  const compiled = ts.transpileModule(
+    `
+      const props = { document: { template_code: ${JSON.stringify(templateCode)} } }
+      const computed = (factory) => ({ get value() { return factory() } })
+      const isOaNoticeTemplateCode = ${documents.isOaNoticeTemplateCode.toString()}
+      ${lifecycleProjectionDeclarations.map((statement) => statement.getText(lifecycleSourceFile)).join('\n')}
+      export { isOaNoticeDocument, actions }
+    `,
+    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
+  ).outputText
+  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}#${Math.random()}`)
+}
+
+const originalLifecycleActions = [
+  { code: 'ACCEPTANCE_NOTICE', label: '记录受理通知' },
+  { code: 'PRELIMINARY_START', label: '开始初步审查' },
+  { code: 'PRELIMINARY_PASS', label: '记录初审通过' },
+  { code: 'PUBLICATION_NOTICE', label: '记录公布通知' },
+  { code: 'SUBSTANTIVE_START', label: '开始实质审查' },
+]
+const ordinaryLifecycleProjection = await loadLifecycleActionProjection('OA_OUT')
+assert.equal(ordinaryLifecycleProjection.isOaNoticeDocument.value, false)
+assert.equal(renderEvidenceLabel(ordinaryLifecycleProjection.isOaNoticeDocument.value), '证据文件')
+assert.deepEqual(ordinaryLifecycleProjection.actions.value, originalLifecycleActions)
+for (const templateCode of [
+  'OA_IN',
+  'OFFICIAL_NOTICE_003',
+  'OFFICIAL_NOTICE_005',
+  'OFFICIAL_NOTICE_021',
+  'OFFICIAL_NOTICE_024',
+  'OFFICIAL_NOTICE_029',
+]) {
+  const oaLifecycleProjection = await loadLifecycleActionProjection(templateCode)
+  assert.equal(oaLifecycleProjection.isOaNoticeDocument.value, true)
+  assert.equal(renderEvidenceLabel(oaLifecycleProjection.isOaNoticeDocument.value), '已复核证据版本')
+  assert.deepEqual(oaLifecycleProjection.actions.value, [
+    ...originalLifecycleActions,
+    { code: 'OA_NOTICE', label: '记录审查意见通知' },
+  ])
 }
 const approvedAttachment = (overrides = {}) => ({
   id: 'attachment-approved', filename: '受理通知书.pdf', file_size: 12, created_at: '2026-08-02',
