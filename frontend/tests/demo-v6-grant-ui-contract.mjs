@@ -10,6 +10,7 @@ const page = read('src/modules/grantFees/pages/GrantFeeTaskList.vue')
 const panelPath = join(frontendRoot, 'src/modules/documents/components/DocumentLifecycleEvidenceActions.vue')
 const panel = existsSync(panelPath) ? readFileSync(panelPath, 'utf8') : ''
 const grantApi = read('src/api/grantFees.ts')
+const grantTypes = read('src/api/grantFees.types.ts')
 const documentsApi = read('src/api/documents.ts')
 
 function importFunctions(source, names, prelude = '') {
@@ -315,6 +316,17 @@ assert.doesNotMatch(page + panel, /<el-input[^>]+(?:taskId|documentId|attachment
 for (const unchanged of ['预览官费', '更正通知', "record_pay_instruction", 'preview_digest']) {
   assert.match(page, new RegExp(unchanged))
 }
+for (const auditSummary of [
+  '审计组数',
+  '审计标识总数',
+  '审计前摘要',
+  '审计后摘要',
+  '预览只读校验：一致（无业务写入）',
+]) {
+  assert.match(page, new RegExp(auditSummary))
+}
+assert.match(grantTypes, /read_only_audit_snapshot:\s*ReadOnlyAuditSnapshot/)
+assert.doesNotMatch(page, /read_only_audit_snapshot\.(?:before|after)\.groups|\.identities/)
 
 delete globalThis.__ordinal05Http
 delete globalThis.__ordinal05State

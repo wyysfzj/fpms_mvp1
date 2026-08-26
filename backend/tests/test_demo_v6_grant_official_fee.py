@@ -19,7 +19,11 @@ from app.api import deps
 from app.core.errors import BusinessError
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.auth.models import T_User
-from app.modules.billing.models import DemoFinanceCommand
+from app.modules.billing.models import (
+    DemoFinanceCommand,
+    DemoOffsetCommand,
+    DemoPaymentCommand,
+)
 from app.modules.cases.models import CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.fees.demo_service import _load_bundle_snapshot
@@ -234,6 +238,52 @@ def _exact_state(transaction: Session) -> dict[str, tuple[tuple[object, ...], ..
     return state
 
 
+def _expected_read_only_audit_groups(transaction: Session) -> list[dict[str, object]]:
+    def identities(*models: type[object]) -> list[str]:
+        return sorted(
+            f"{model.__tablename__}:{identity}"
+            for model in models
+            for identity in transaction.scalars(select(model.id))
+        )
+
+    groups: list[tuple[str, tuple[type[object], ...]]] = [
+        ("CaseActivityEvent", (CaseActivityEvent,)),
+        (
+            "DemoCommandCarriers",
+            (DemoPaymentCommand, DemoOffsetCommand, DemoFinanceCommand),
+        ),
+        ("FeeObligation", (FeeObligation,)),
+        ("FeeObligationLine", (FeeObligationLine,)),
+        ("FeeObligationDraftItemLink", (FeeObligationDraftItemLink,)),
+        ("FeeDraft", (FeeDraft,)),
+        ("FeeItem", (FeeItem,)),
+        ("PayList", (PayList,)),
+        ("GovPayment", (GovPayment,)),
+    ]
+    result = []
+    for name, models in groups:
+        exact_identities = identities(*models)
+        result.append(
+            {
+                "name": name,
+                "identity_count": len(exact_identities),
+                "identities": exact_identities,
+            }
+        )
+    return result
+
+
+def _audit_digest(groups: list[dict[str, object]]) -> str:
+    canonical = json.dumps(
+        {"groups": groups},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _command(task, evidence, preview, **changes: object):
     values: dict[str, object] = {
         "grant_fee_task_id": task.id,
@@ -303,6 +353,130 @@ def test_preview_rejects_a_dirty_session_without_flushing_it(
             409,
         )
         assert _exact_state(transaction) == before
+
+
+def test_preview_fails_closed_when_audit_identity_projection_drifts(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label="AUDIT-DRIFT"
+        )
+        before = _exact_state(transaction)
+        capture = demo_official_fee._capture_read_only_audit_state
+        calls = 0
+
+        def drift_on_second_capture(session: Session):
+            nonlocal calls
+            calls += 1
+            state = capture(session)
+            if calls == 2:
+                first = state.groups[0]
+                return replace(
+                    state,
+                    groups=(
+                        replace(first, identity_count=first.identity_count + 1),
+                        *state.groups[1:],
+                    ),
+                )
+            return state
+
+        monkeypatch.setattr(
+            demo_official_fee,
+            "_capture_read_only_audit_state",
+            drift_on_second_capture,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            409,
+        )
+        assert calls == 2
+        assert _exact_state(transaction) == before
+        assert not (transaction.new or transaction.dirty or transaction.deleted)
+
+
+def test_preview_fails_closed_when_calculation_leaves_pending_orm_state(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label="AUDIT-PENDING"
+        )
+        before = _exact_state(transaction)
+        canonical_preview_payload = demo_official_fee._canonical_preview_payload
+
+        def leave_pending_state(**kwargs: object) -> str:
+            canonical = canonical_preview_payload(**kwargs)
+            task.remark = "预览不得留下待提交状态"
+            return canonical
+
+        monkeypatch.setattr(
+            demo_official_fee,
+            "_canonical_preview_payload",
+            leave_pending_state,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            409,
+        )
+        assert _exact_state(transaction) == before
+        assert task in transaction.dirty
+
+
+def test_preview_fails_closed_when_audit_projection_is_malformed(
+    session_factory: sessionmaker,
+    runtime_bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _case, _document, task, _evidence, _book = _seed(
+            transaction, label="AUDIT-MALFORMED"
+        )
+        capture = demo_official_fee._capture_read_only_audit_state
+
+        def malformed_capture(session: Session):
+            state = capture(session)
+            first = state.groups[0]
+            return replace(
+                state,
+                groups=(
+                    replace(first, identity_count=first.identity_count + 1),
+                    *state.groups[1:],
+                ),
+            )
+
+        monkeypatch.setattr(
+            demo_official_fee,
+            "_capture_read_only_audit_state",
+            malformed_capture,
+        )
+
+        with pytest.raises(BusinessError) as caught:
+            demo_official_fee.preview_grant_official_fees(
+                transaction, grant_fee_task_id=task.id
+            )
+
+        assert (caught.value.code, caught.value.status_code) == (
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            409,
+        )
+        assert not (transaction.new or transaction.dirty or transaction.deleted)
 
 
 def test_preview_rejects_task_due_date_drift(
@@ -898,6 +1072,7 @@ def test_http_contract_permissions_statuses_and_validation(
         task_id = task.id
         evidence_id = evidence.id
         evidence_hash = evidence.content_hash
+        expected_audit_groups = _expected_read_only_audit_groups(transaction)
 
     preview_path = f"/api/v1/grant-fee-tasks/{task_id}/official-fee-preview"
     assert client.get(preview_path).status_code == 401
@@ -912,6 +1087,23 @@ def test_http_contract_permissions_statuses_and_validation(
     assert preview_response.status_code == 200, preview_response.text
     preview = preview_response.json()
     assert "canonical_payload" not in preview
+    expected_audit_digest = _audit_digest(expected_audit_groups)
+    assert preview["read_only_audit_snapshot"] == {
+        "schema_version": "fpms.demo-read-only-audit-snapshot/v1",
+        "tracked_group_count": 9,
+        "total_identity_count": sum(
+            int(group["identity_count"]) for group in expected_audit_groups
+        ),
+        "before": {
+            "groups": expected_audit_groups,
+            "digest": expected_audit_digest,
+        },
+        "after": {
+            "groups": expected_audit_groups,
+            "digest": expected_audit_digest,
+        },
+        "unchanged": True,
+    }
     assert {
         (line["fee_code"], line["effective_from"], line["rate_row_sha256"])
         for line in preview["lines"]

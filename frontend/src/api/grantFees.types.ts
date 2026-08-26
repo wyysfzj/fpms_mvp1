@@ -185,6 +185,26 @@ export interface GrantOfficialFeePreviewLine {
     effective_to: string | null
 }
 
+export interface ReadOnlyAuditGroup {
+    name: string
+    identity_count: number
+    identities: string[]
+}
+
+export interface ReadOnlyAuditState {
+    groups: ReadOnlyAuditGroup[]
+    digest: string
+}
+
+export interface ReadOnlyAuditSnapshot {
+    schema_version: 'fpms.demo-read-only-audit-snapshot/v1'
+    tracked_group_count: number
+    total_identity_count: number
+    before: ReadOnlyAuditState
+    after: ReadOnlyAuditState
+    unchanged: boolean
+}
+
 export interface GrantOfficialFeePreview {
     grant_fee_task_id: string
     case_id: string
@@ -200,6 +220,7 @@ export interface GrantOfficialFeePreview {
     lines: GrantOfficialFeePreviewLine[]
     total_payable_amount: GrantFeeMoney
     preview_digest: string
+    read_only_audit_snapshot: ReadOnlyAuditSnapshot
 }
 
 export interface GrantOfficialFeeConfirmationPayload {

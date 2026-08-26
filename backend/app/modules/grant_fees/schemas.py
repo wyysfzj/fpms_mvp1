@@ -144,6 +144,32 @@ class GrantOfficialFeePreviewLineOut(BaseModel):
     effective_to: date | None
 
 
+class ReadOnlyAuditGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    name: str
+    identity_count: int
+    identities: list[str]
+
+
+class ReadOnlyAuditStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    groups: list[ReadOnlyAuditGroupOut]
+    digest: str
+
+
+class ReadOnlyAuditSnapshotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    schema_version: Literal["fpms.demo-read-only-audit-snapshot/v1"]
+    tracked_group_count: int
+    total_identity_count: int
+    before: ReadOnlyAuditStateOut
+    after: ReadOnlyAuditStateOut
+    unchanged: bool
+
+
 class GrantOfficialFeePreviewOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
@@ -161,6 +187,7 @@ class GrantOfficialFeePreviewOut(BaseModel):
     lines: list[GrantOfficialFeePreviewLineOut]
     total_payable_amount: Decimal
     preview_digest: str
+    read_only_audit_snapshot: ReadOnlyAuditSnapshotOut
 
 
 class GrantOfficialFeeConfirmationLineIn(BaseModel):

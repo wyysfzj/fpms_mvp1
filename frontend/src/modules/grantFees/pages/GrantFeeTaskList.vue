@@ -357,6 +357,27 @@
         <p class="preview-total">
           合计：{{ formatAmount(officialFeePreview.total_payable_amount, officialFeePreview.currency) }}
         </p>
+        <el-descriptions class="preview-audit" :column="2" border>
+          <el-descriptions-item label="审计组数">
+            {{ officialFeePreview.read_only_audit_snapshot.tracked_group_count }}
+          </el-descriptions-item>
+          <el-descriptions-item label="审计标识总数">
+            {{ officialFeePreview.read_only_audit_snapshot.total_identity_count }}
+          </el-descriptions-item>
+          <el-descriptions-item label="审计前摘要" :span="2">
+            {{ officialFeePreview.read_only_audit_snapshot.before.digest }}
+          </el-descriptions-item>
+          <el-descriptions-item label="审计后摘要" :span="2">
+            {{ officialFeePreview.read_only_audit_snapshot.after.digest }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-alert
+          v-if="officialFeePreview.read_only_audit_snapshot.unchanged"
+          title="预览只读校验：一致（无业务写入）"
+          type="success"
+          :closable="false"
+          show-icon
+        />
       </template>
       <template #footer>
         <el-button @click="officialFeeDialogVisible = false">取消</el-button>

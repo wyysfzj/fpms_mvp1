@@ -12,6 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.core.demo_bundle import demo_official_fee_row_sha256
 from app.core.errors import BusinessError
+from app.modules.annuity.models import GovPayment, PayList
+from app.modules.billing.models import (
+    DemoFinanceCommand,
+    DemoOffsetCommand,
+    DemoPaymentCommand,
+)
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
@@ -28,7 +34,16 @@ from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.fees.demo_service import _bundle
-from app.modules.fees.models import FeeObligation, FeeRate, OfficialRateBook, T_GrantFeeTask
+from app.modules.fees.models import (
+    FeeDraft,
+    FeeItem,
+    FeeObligation,
+    FeeObligationDraftItemLink,
+    FeeObligationLine,
+    FeeRate,
+    OfficialRateBook,
+    T_GrantFeeTask,
+)
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
@@ -57,6 +72,17 @@ from app.modules.grant_fees.service import (
 
 _SOURCE_EVENT = "DEMO_GRANT_OFFICIAL_FEE_CONFIRMED"
 _SOURCE_SCHEMA = "FPMS_DEMO_GRANT_OFFICIAL_FEE_CONFIRMED_V1"
+_READ_ONLY_AUDIT_GROUP_NAMES = (
+    "CaseActivityEvent",
+    "DemoCommandCarriers",
+    "FeeObligation",
+    "FeeObligationLine",
+    "FeeObligationDraftItemLink",
+    "FeeDraft",
+    "FeeItem",
+    "PayList",
+    "GovPayment",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +105,29 @@ class GrantOfficialFeePreviewLine:
 
 
 @dataclass(frozen=True, slots=True)
+class ReadOnlyAuditGroup:
+    name: str
+    identity_count: int
+    identities: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ReadOnlyAuditState:
+    groups: tuple[ReadOnlyAuditGroup, ...]
+    digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReadOnlyAuditSnapshot:
+    schema_version: str
+    tracked_group_count: int
+    total_identity_count: int
+    before: ReadOnlyAuditState
+    after: ReadOnlyAuditState
+    unchanged: bool
+
+
+@dataclass(frozen=True, slots=True)
 class GrantOfficialFeePreview:
     grant_fee_task_id: str
     case_id: str
@@ -96,6 +145,7 @@ class GrantOfficialFeePreview:
     total_payable_amount: Decimal
     preview_digest: str
     canonical_payload: str
+    read_only_audit_snapshot: ReadOnlyAuditSnapshot
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -144,6 +194,77 @@ def _evidence_conflict() -> None:
 
 def _confirmation_conflict() -> None:
     _fail("DEMO_GOV_CONFIRMATION_CONFLICT", "官费人工确认与当前预览不一致", status_code=409)
+
+
+def _capture_read_only_audit_state(transaction: Session) -> ReadOnlyAuditState:
+    group_models = (
+        ("CaseActivityEvent", (CaseActivityEvent,)),
+        (
+            "DemoCommandCarriers",
+            (DemoPaymentCommand, DemoOffsetCommand, DemoFinanceCommand),
+        ),
+        ("FeeObligation", (FeeObligation,)),
+        ("FeeObligationLine", (FeeObligationLine,)),
+        ("FeeObligationDraftItemLink", (FeeObligationDraftItemLink,)),
+        ("FeeDraft", (FeeDraft,)),
+        ("FeeItem", (FeeItem,)),
+        ("PayList", (PayList,)),
+        ("GovPayment", (GovPayment,)),
+    )
+    groups: list[ReadOnlyAuditGroup] = []
+    with transaction.no_autoflush:
+        for name, models in group_models:
+            identities = tuple(
+                sorted(
+                    f"{model.__tablename__}:{identity}"
+                    for model in models
+                    for identity in transaction.scalars(select(model.id))
+                )
+            )
+            groups.append(
+                ReadOnlyAuditGroup(
+                    name=name,
+                    identity_count=len(identities),
+                    identities=identities,
+                )
+            )
+    group_tuple = tuple(groups)
+    return ReadOnlyAuditState(
+        groups=group_tuple,
+        digest=_read_only_audit_digest(group_tuple),
+    )
+
+
+def _read_only_audit_digest(groups: tuple[ReadOnlyAuditGroup, ...]) -> str:
+    canonical = json.dumps(
+        {
+            "groups": [
+                {
+                    "identities": list(group.identities),
+                    "identity_count": group.identity_count,
+                    "name": group.name,
+                }
+                for group in groups
+            ]
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _read_only_audit_state_is_valid(state: ReadOnlyAuditState) -> bool:
+    return (
+        tuple(group.name for group in state.groups) == _READ_ONLY_AUDIT_GROUP_NAMES
+        and all(
+            group.identity_count == len(group.identities)
+            and group.identities == tuple(sorted(set(group.identities)))
+            for group in state.groups
+        )
+        and state.digest == _read_only_audit_digest(state.groups)
+    )
 
 
 def _rate_row_sha256(row: FeeRate) -> str:
@@ -356,6 +477,7 @@ def preview_grant_official_fees(
             "官费预览要求干净事务",
             status_code=409,
         )
+    before_audit = _capture_read_only_audit_state(transaction)
     with transaction.no_autoflush:
         task, case = _task_state(transaction, grant_fee_task_id)
     snapshot = _bundle()
@@ -464,6 +586,20 @@ def preview_grant_official_fees(
         book=book,
         lines=line_tuple,
     )
+    after_audit = _capture_read_only_audit_state(transaction)
+    if (
+        transaction.new
+        or transaction.dirty
+        or transaction.deleted
+        or not _read_only_audit_state_is_valid(before_audit)
+        or not _read_only_audit_state_is_valid(after_audit)
+        or before_audit != after_audit
+    ):
+        _fail(
+            "DEMO_GOV_PREVIEW_TRANSACTION_CONFLICT",
+            "官费预览只读审计不一致",
+            status_code=409,
+        )
     return GrantOfficialFeePreview(
         grant_fee_task_id=task.id,
         case_id=task.case_id,
@@ -483,6 +619,16 @@ def preview_grant_official_fees(
         ),
         preview_digest="sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
         canonical_payload=canonical,
+        read_only_audit_snapshot=ReadOnlyAuditSnapshot(
+            schema_version="fpms.demo-read-only-audit-snapshot/v1",
+            tracked_group_count=len(before_audit.groups),
+            total_identity_count=sum(
+                group.identity_count for group in before_audit.groups
+            ),
+            before=before_audit,
+            after=after_audit,
+            unchanged=before_audit == after_audit,
+        ),
     )
 
 
