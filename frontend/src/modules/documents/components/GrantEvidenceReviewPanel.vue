@@ -5,13 +5,18 @@
         <h3 class="panel-heading">授权证据候选复核</h3>
         <p class="panel-description">候选信息仅供人工复核，最终结果以服务器记录为准。</p>
       </div>
-      <el-button size="small" :loading="loading" @click="fetchCandidates">刷新候选</el-button>
+      <el-button size="small" :loading="loading" @click="fetchCandidates">
+        {{ hasLoadedCandidates ? '刷新候选' : '加载授权证据候选' }}
+      </el-button>
     </div>
 
     <ApiErrorBanner v-if="error" :error="error" @dismiss="error = null" />
 
     <el-skeleton v-if="loading" :rows="3" animated />
-    <el-empty v-else-if="candidates.length === 0" description="暂无授权证据候选" />
+    <el-empty
+      v-else-if="hasLoadedCandidates && candidates.length === 0"
+      description="暂无授权证据候选"
+    />
     <div v-else class="candidate-list">
       <article
         v-for="candidate in candidates"
@@ -133,6 +138,7 @@ const props = defineProps<{
 
 const authStore = useAuthStore()
 const candidates = ref<GrantEvidenceCandidate[]>([])
+const hasLoadedCandidates = ref(false)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const currentUserId = ref<string | null>(null)
@@ -141,6 +147,7 @@ const reviewingDecision = ref<GrantEvidenceReviewPayload['decision'] | null>(nul
 const reviewReasons = reactive<Record<string, string>>({})
 
 async function fetchCandidates(): Promise<void> {
+  hasLoadedCandidates.value = true
   loading.value = true
   error.value = null
   try {
@@ -257,7 +264,6 @@ function formatDateTime(value: string | null): string {
 }
 
 onMounted(() => {
-  fetchCandidates()
   fetchCurrentUser()
 })
 </script>

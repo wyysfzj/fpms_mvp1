@@ -10,9 +10,13 @@ test("document detail shows controlled grant evidence and lets a second person r
 }) => {
   let reviewRequest: Request | null = null;
   let reviewStatus: "PENDING" | "APPROVED" = "PENDING";
+  let candidateListRequestCount = 0;
 
   await mockGrantReviewApi(page, {
     getReviewStatus: () => reviewStatus,
+    onCandidateList: () => {
+      candidateListRequestCount += 1;
+    },
     onReview: async (route) => {
       reviewRequest = route.request();
       reviewStatus = "APPROVED";
@@ -35,6 +39,12 @@ test("document detail shows controlled grant evidence and lets a second person r
   const panel = page.getByTestId("grant-evidence-review-panel");
   const candidate = page.getByTestId(`grant-evidence-candidate-${candidateId}`);
   await expect(panel.getByRole("heading", { name: "授权证据候选复核" })).toBeVisible();
+  expect(candidateListRequestCount).toBe(0);
+  await expect(panel.getByText("暂无授权证据候选")).toHaveCount(0);
+  await expect(panel.locator(".error-banner")).toHaveCount(0);
+  await panel.getByRole("button", { name: "加载授权证据候选" }).click();
+  await expect.poll(() => candidateListRequestCount).toBe(1);
+  await expect(panel.getByRole("button", { name: "刷新候选" })).toBeVisible();
   await expect(candidate.getByText("来源记录：CNIPA-2026-0001")).toBeVisible();
   await expect(candidate.getByText("来源版本：2026.08.11")).toBeVisible();
   await expect(candidate.getByText("提出人：proposer-grant-review-ui")).toBeVisible();
@@ -58,12 +68,14 @@ test("document detail shows controlled grant evidence and lets a second person r
   });
   await expect(candidate.getByText("复核状态：已批准")).toBeVisible();
   await expect(candidate.getByText(`复核人：${reviewerId}`)).toBeVisible();
+  await expect.poll(() => candidateListRequestCount).toBe(2);
   await expect(panel.getByText("法律状态")).toHaveCount(0);
   await expect(page.getByText("授权证据候选已批准")).toBeVisible();
 });
 
 interface GrantReviewApiOptions {
   getReviewStatus: () => "PENDING" | "APPROVED";
+  onCandidateList: () => void;
   onReview: (route: Route) => Promise<void>;
 }
 
@@ -89,6 +101,7 @@ async function mockGrantReviewApi(
       request.method() === "GET" &&
       apiPath === `/documents/${documentId}/grant-evidence-candidates`
     ) {
+      options.onCandidateList();
       return fulfillJson(route, [candidateResponse(options.getReviewStatus())]);
     }
     if (
