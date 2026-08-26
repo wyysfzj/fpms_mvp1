@@ -875,13 +875,40 @@ function goToRegister(row: GovPaymentInfo) {
   if (!payList.value || !row.fee_item_id) return
   router.push({
     path: '/fee-management/gov-payments/new',
-    query: {
-      pay_list_id: String(payList.value.id),
-      fee_item_id: row.fee_item_id,
-      demo_command: '1',
-      paid_amount: String(row.planned_amt ?? row.paid_amount),
-    },
+    query: buildPaymentRegistrationQuery(payList.value.id, detail.value?.gov_payments ?? [], row),
   })
+}
+
+function buildPaymentRegistrationQuery(
+  currentPayListId: number,
+  rows: GovPaymentInfo[],
+  currentRow: GovPaymentInfo,
+): Record<string, string> {
+  if (currentPayListId <= 0 || currentRow.pay_list_id !== currentPayListId || !currentRow.fee_item_id) return {}
+  const query: Record<string, string> = {
+    pay_list_id: String(currentPayListId),
+    fee_item_id: currentRow.fee_item_id,
+    demo_command: '1',
+    paid_amount: String(currentRow.planned_amt ?? currentRow.paid_amount),
+  }
+  const currentIndex = rows.findIndex((row) => (
+    row.id === currentRow.id
+    && row.pay_list_id === currentPayListId
+    && row.fee_item_id === currentRow.fee_item_id
+  ))
+  if (currentIndex < 0) return query
+  const nextRow = rows.slice(currentIndex + 1).find((row) => {
+    const status = (row.status || '').toUpperCase()
+    return row.pay_list_id === currentPayListId
+      && Boolean(row.fee_item_id)
+      && status !== 'PAID'
+      && status !== 'RECORDED'
+  })
+  if (nextRow?.fee_item_id) {
+    query.next_fee_item_id = nextRow.fee_item_id
+    query.next_paid_amount = String(nextRow.planned_amt ?? nextRow.paid_amount)
+  }
+  return query
 }
 
 function openManualDialog() {

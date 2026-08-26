@@ -69,7 +69,34 @@
   </div>
 
   <div class="case-panel" data-testid="real-fee-obligations">
-    <h3 class="panel-heading">真实费用义务</h3>
+    <div class="panel-toolbar">
+      <h3 class="panel-heading">真实费用义务</h3>
+      <el-button
+        v-if="demoSessionEnabled"
+        type="primary"
+        size="small"
+        :loading="demoObligationPending"
+        :disabled="demoObligationPending"
+        @click="handleCreateDemoServiceObligation"
+      >
+        生成服务费义务
+      </el-button>
+    </div>
+    <el-alert
+      v-if="demoObligationMessage"
+      type="success"
+      :closable="false"
+      :title="demoObligationMessage"
+      show-icon
+    />
+    <el-alert
+      v-if="demoObligationError"
+      type="warning"
+      :closable="false"
+      title="服务费义务生成失败"
+      :description="demoObligationError"
+      show-icon
+    />
     <div v-if="overlayLoading" class="placeholder-content">正在加载真实费用义务...</div>
     <el-alert
       v-else-if="activeOverlayError"
@@ -191,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getFeeDrafts, previewOfficialFeeCandidates, recordFeeObligationInstruction } from '../../../api/fees'
 import type {
@@ -204,6 +231,13 @@ import { getLifecycleOverlay } from '../../../api/lifecycleOverlay'
 import type { LifecycleOverlay } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
 import { getFeeDraftStatusText, getFeeDraftTypeText } from '../../../constants/displayText'
+import { createValidatedDemoServiceObligation } from '../../demo/demo.api'
+import {
+  DEMO_UI_SESSION_CHANGE_EVENT,
+  getDemoUiSession,
+  isDemoUiSessionActive,
+} from '../../demo/demoUiSession'
+import type { DemoHostTuple } from '../../demo/demoUiSession'
 
 const props = defineProps<{
   caseId: string
@@ -217,6 +251,12 @@ const items = ref<FeeDraftListItem[]>([])
 const draftLoading = ref(true)
 const standaloneOverlay = ref<LifecycleOverlay | null>(null)
 const standaloneOverlayError = ref<ApiError | null>(null)
+const demoRefreshedOverlay = ref<LifecycleOverlay | null>(null)
+const demoSessionEnabled = ref(false)
+const demoObligationPending = ref(false)
+const demoObligationMessage = ref('')
+const demoObligationError = ref('')
+const demoObligationIdempotencyKey = crypto.randomUUID()
 const trigger = ref('')
 const sourceDocumentId = ref('')
 const rateEffectiveOn = ref('')
@@ -241,11 +281,13 @@ const isLifecycleOverlayManaged = computed(
     props.lifecycleOverlay !== undefined ||
     props.lifecycleOverlayError !== undefined,
 )
-const activeOverlay = computed(() =>
-  isLifecycleOverlayManaged.value ? props.lifecycleOverlay ?? null : standaloneOverlay.value,
-)
+const activeOverlay = computed(() => demoRefreshedOverlay.value ?? (
+  isLifecycleOverlayManaged.value ? props.lifecycleOverlay ?? null : standaloneOverlay.value
+))
 const activeOverlayError = computed(() =>
-  isLifecycleOverlayManaged.value
+  demoRefreshedOverlay.value !== null
+    ? null
+    : isLifecycleOverlayManaged.value
     ? props.lifecycleOverlayError ?? null
     : standaloneOverlayError.value,
 )
@@ -274,12 +316,65 @@ const realObligations = computed(() =>
 )
 
 onMounted(async () => {
+  syncDemoSession()
+  window.addEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
   const loaders = [loadFeeDrafts()]
   if (!isLifecycleOverlayManaged.value) {
     loaders.push(loadLifecycleOverlay())
   }
   await Promise.all(loaders)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
+})
+
+function canStartDemoServiceObligation(
+  sessionActive: boolean,
+  session: DemoHostTuple | null,
+  pending: boolean,
+): boolean {
+  return sessionActive && session !== null && !pending
+}
+
+function syncDemoSession() {
+  demoSessionEnabled.value = isDemoUiSessionActive() && getDemoUiSession() !== null
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '请刷新后重试。'
+}
+
+async function handleCreateDemoServiceObligation() {
+  if (!canStartDemoServiceObligation(
+    isDemoUiSessionActive(),
+    getDemoUiSession(),
+    demoObligationPending.value,
+  )) return
+  demoObligationPending.value = true
+  demoObligationMessage.value = ''
+  demoObligationError.value = ''
+  syncDemoSession()
+  try {
+    const result = await createValidatedDemoServiceObligation(
+      props.caseId,
+      demoObligationIdempotencyKey,
+    )
+    demoObligationMessage.value = result.reused
+      ? `${result.name_zh_cn}义务已复用（${result.currency} ${result.amount}）`
+      : `${result.name_zh_cn}义务已生成（${result.currency} ${result.amount}）`
+    const [overlay] = await Promise.all([
+      getLifecycleOverlay(props.caseId, { afterSequence: 0, limit: 50, asOfRevision: null }),
+      loadFeeDrafts(),
+    ])
+    demoRefreshedOverlay.value = overlay
+  } catch (error) {
+    demoObligationError.value = errorMessage(error)
+  } finally {
+    demoObligationPending.value = false
+    syncDemoSession()
+  }
+}
 
 function clearEstimate() {
   estimate.value = null

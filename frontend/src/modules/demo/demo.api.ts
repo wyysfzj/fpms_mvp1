@@ -129,6 +129,40 @@ export async function createDemoServiceObligation(
   )
 }
 
+export async function createValidatedDemoServiceObligation(
+  caseId: string,
+  idempotencyKey: string,
+): Promise<DemoFeeObligationResponse> {
+  const item = await readDemoServiceItem()
+  const result = await createDemoServiceObligation(caseId, item.item_code, idempotencyKey)
+  const obligation = result.obligation as unknown as Record<string, unknown>
+  const exactItem = result.classification === item.classification
+    && result.bundle_id === item.bundle_id
+    && result.bundle_version === item.bundle_version
+    && result.manifest_sha256 === item.manifest_sha256
+    && result.template_code === item.template_code
+    && result.template_sha256 === item.template_sha256
+    && result.template_required_variables.length === item.template_required_variables.length
+    && result.template_required_variables.every((value, index) => value === item.template_required_variables[index])
+    && result.item_code === item.item_code
+    && result.name_zh_cn === item.name_zh_cn
+    && result.currency === item.currency
+    && result.amount === item.amount
+    && result.source_ref === item.source_ref
+    && result.source_version === item.source_version
+    && result.source_sha256 === item.source_sha256
+    && result.disclaimer_zh_cn === item.disclaimer_zh_cn
+  if (
+    !exactItem
+    || obligation.case_id !== caseId
+    || obligation.fee_domain !== 'SERVICE'
+    || result.idempotency_key !== idempotencyKey
+  ) {
+    throw new Error('演示服务费义务与当前案件或服务项目不一致')
+  }
+  return result
+}
+
 export async function readDemoServiceObligation(
   obligationId: string,
   caseId: string,

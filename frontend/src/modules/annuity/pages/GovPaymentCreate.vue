@@ -157,6 +157,16 @@
           <el-descriptions-item label="币种">{{ result.pay_list.currency }}</el-descriptions-item>
         </el-descriptions>
       </div>
+      <div class="form-actions">
+        <el-button
+          v-if="paymentResultNavigation.nextRow"
+          type="primary"
+          @click="goToNextRow"
+        >
+          登记下一行
+        </el-button>
+        <el-button @click="goToCurrentPayList">返回当前清单</el-button>
+      </div>
     </div>
   </main>
 </template>
@@ -200,7 +210,7 @@ const resultPendingOfficialEvidence = computed(() => (
   && 'fact_status' in result.value
   && result.value.fact_status === 'REGISTERED_PENDING_OFFICIAL_EVIDENCE'
 ))
-const idempotencyKey = crypto.randomUUID()
+const idempotencyKey = ref(crypto.randomUUID())
 
 function parseQueryPositiveInt(value: unknown): number {
   if (typeof value !== 'string' && typeof value !== 'number') return 0
@@ -264,9 +274,55 @@ const rules: FormRules<GovPaymentForm> = {
 }
 
 const routeContextReady = computed(() => form.pay_list_id > 0 && form.fee_item_id.length > 0)
+const paymentResultNavigation = computed(() => buildPaymentResultNavigation(
+  form.pay_list_id,
+  parseQueryText(route.query.next_fee_item_id),
+  Number(parseQueryText(route.query.next_paid_amount)),
+))
+
+function buildPaymentResultNavigation(
+  currentPayListId: number,
+  nextFeeItemId: string,
+  nextPaidAmount: number,
+) {
+  const currentList = { path: `/fee-management/pay-lists/${currentPayListId}` }
+  if (currentPayListId <= 0 || !nextFeeItemId || !Number.isFinite(nextPaidAmount) || nextPaidAmount <= 0) {
+    return { currentList, nextRow: null }
+  }
+  return {
+    currentList,
+    nextRow: {
+      path: '/fee-management/gov-payments/new',
+      query: {
+        pay_list_id: String(currentPayListId),
+        fee_item_id: nextFeeItemId,
+        demo_command: '1',
+        paid_amount: String(nextPaidAmount),
+      },
+    },
+  }
+}
 
 function goBack() {
   router.push('/annuity/pay-lists')
+}
+
+function goToCurrentPayList() {
+  void router.push(paymentResultNavigation.value.currentList)
+}
+
+async function goToNextRow() {
+  const nextRow = paymentResultNavigation.value.nextRow
+  if (!nextRow) return
+  await router.push(nextRow)
+  form.fee_item_id = nextRow.query.fee_item_id
+  form.paid_amount = Number(nextRow.query.paid_amount)
+  form.official_receipt_no = ''
+  form.remark = '已登记，待官方凭证核验'
+  result.value = null
+  error.value = null
+  fieldErrors.value = new Map()
+  idempotencyKey.value = crypto.randomUUID()
 }
 
 function govPaymentStatusText(status: string): string {
@@ -368,7 +424,7 @@ async function handleSubmit() {
           voucher_no: null,
           invoice_no: null,
           remark: '已登记，待官方凭证核验',
-          idempotency_key: idempotencyKey,
+          idempotency_key: idempotencyKey.value,
         })
       : await registerGovPayment({
           pay_list_id: form.pay_list_id,
