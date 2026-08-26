@@ -481,6 +481,7 @@ class DemoRunContext(NamedTuple):
 class ObserverBinding(NamedTuple):
     activation_url: str
     finalized: threading.Event
+    stopped: threading.Event
     failed: threading.Event
     errors: list[str]
 
@@ -661,6 +662,7 @@ def _observer_binding(
     expected_tuple = {key: session_tuple[key] for key in _UI_SESSION_TUPLE_KEYS}
     capability = secrets.token_urlsafe(32)
     finalized = threading.Event()
+    stopped = threading.Event()
     failed = threading.Event()
     errors: list[str] = []
 
@@ -786,6 +788,41 @@ def _observer_binding(
             if self._exclusive_write(target, content):
                 self._response(201, {"filename": filename})
 
+        def _write_stop_ledger(self, payload: dict[str, object]) -> None:
+            if set(payload) != set(_UI_SESSION_TUPLE_KEYS) | {"ledger"}:
+                self._reject(400, "MALFORMED_STOP_LEDGER")
+                return
+            ledger = payload.get("ledger")
+            if not isinstance(ledger, dict) or set(ledger) != {
+                "schema_id",
+                "session",
+                "events",
+            }:
+                self._reject(400, "MALFORMED_STOP_LEDGER")
+                return
+            events = ledger.get("events")
+            final_event = events[-1] if isinstance(events, list) and events else None
+            if (
+                ledger.get("schema_id") != expected_tuple["contract_version"]
+                or ledger.get("session") != expected_tuple
+                or not isinstance(final_event, dict)
+                or set(final_event) != {"kind", "reason"}
+                or final_event.get("kind") != "STOP"
+                or not isinstance(final_event.get("reason"), str)
+                or not final_event["reason"].strip()
+            ):
+                self._reject(400, "MALFORMED_STOP_LEDGER")
+                return
+            if stopped.is_set() or finalized.is_set():
+                self._reject(409, "OBSERVER_EVIDENCE_CONFLICT")
+                return
+            content = (
+                json.dumps(ledger, ensure_ascii=False, indent=2) + "\n"
+            ).encode()
+            if self._exclusive_write(observer_root / "observer-stop-ledger.json", content):
+                self._response(200, {"status": "STOPPED"})
+                stopped.set()
+
         def _evidence_complete(self) -> bool:
             entries = {path.name for path in observer_root.iterdir()}
             allowed = UI_SESSION_OBSERVER_FILES | _UI_SESSION_INTERNAL_OBSERVER_FILES
@@ -837,7 +874,12 @@ def _observer_binding(
             ]:
                 self._reject(401, "CAPABILITY_REQUIRED", terminal=False)
                 return
-            if parsed.path not in {"/revalidate", "/observer-artifact", "/finalize"}:
+            if parsed.path not in {
+                "/revalidate",
+                "/observer-artifact",
+                "/stop",
+                "/finalize",
+            }:
                 self._reject(404, "NOT_FOUND")
                 return
             payload = self._payload()
@@ -851,6 +893,9 @@ def _observer_binding(
                 return
             if parsed.path == "/observer-artifact":
                 self._write_observer_artifact(payload)
+                return
+            if parsed.path == "/stop":
+                self._write_stop_ledger(payload)
                 return
             if set(payload) != set(_UI_SESSION_TUPLE_KEYS):
                 self._reject(400, "MALFORMED_REQUEST")
@@ -878,6 +923,7 @@ def _observer_binding(
         yield ObserverBinding(
             activation_url=activation_url,
             finalized=finalized,
+            stopped=stopped,
             failed=failed,
             errors=errors,
         )
@@ -904,12 +950,14 @@ def _wait_for_browser_finalization(
             raise RuntimeError(f"observer host rejected browser state: {error}")
         if binding.finalized.is_set():
             return "FINALIZED"
+        if binding.stopped.is_set():
+            return "STOPPED"
         if browser_process.poll() is not None:
             return "STOPPED"
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return "STOPPED"
-        binding.finalized.wait(min(0.1, remaining))
+        binding.stopped.wait(min(0.1, remaining))
 
 
 def _run_ui_browser_session(
@@ -967,6 +1015,7 @@ def _run_ui_browser_session(
                     "operations": [
                         "/revalidate",
                         "/observer-artifact",
+                        "/stop",
                         "/finalize",
                     ],
                     "required_observer_files": sorted(UI_SESSION_OBSERVER_FILES),

@@ -323,6 +323,19 @@ def _ledger_payload(session_tuple: dict[str, str]) -> dict[str, object]:
     }
 
 
+def _stop_payload(
+    session_tuple: dict[str, str], reason: str = "OBSERVER_STOPPED"
+) -> dict[str, object]:
+    return {
+        **session_tuple,
+        "ledger": {
+            "schema_id": session_tuple["contract_version"],
+            "session": session_tuple,
+            "events": [{"kind": "STOP", "reason": reason}],
+        },
+    }
+
+
 def _screenshot_payload(
     session_tuple: dict[str, str], filename: str
 ) -> dict[str, object]:
@@ -397,6 +410,178 @@ def test_observer_binding_authenticates_exact_tuple_and_revalidates_after_mutati
 
     assert context.run_root.is_dir()
     assert observer_root.is_dir()
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_observer_stop_persists_exact_ledger_after_partial_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact-stop-partial" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    stop_payload = _stop_payload(session_tuple)
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        assert _host_post(
+            binding.activation_url, "observer-artifact", _ledger_payload(session_tuple)
+        )[0] == 201
+        assert _host_post(
+            binding.activation_url,
+            "observer-artifact",
+            _screenshot_payload(session_tuple, "observer-stage-01.png"),
+        )[0] == 201
+
+        status, body = _host_post(binding.activation_url, "stop", stop_payload)
+        assert status == 200
+        assert body == {"status": "STOPPED"}
+        assert binding.stopped.is_set()
+        assert not binding.finalized.is_set()
+        assert not binding.failed.is_set()
+        assert json.loads(
+            (observer_root / "observer-stop-ledger.json").read_text(encoding="utf-8")
+        ) == stop_payload["ledger"]
+        assert _host_post(binding.activation_url, "stop", stop_payload)[0] == 409
+
+    assert context.run_root.is_dir()
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_observer_stop_rejects_wrong_binding_tuple_and_malformed_ledgers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact-stop-invalid" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+    valid = _stop_payload(session_tuple)
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        assert _host_post(
+            binding.activation_url, "stop", valid, capability=""
+        )[0] == 401
+        assert _host_post(
+            binding.activation_url, "stop", valid, capability="wrong"
+        )[0] == 401
+        assert not binding.failed.is_set()
+
+        drifted = {**valid, "run_id": "wrong-run"}
+        assert _host_post(binding.activation_url, "stop", drifted)[0] == 409
+        malformed = (
+            {**valid, "filename": "outside.json"},
+            {**valid, "password": "forbidden"},
+            {**valid, "ledger": {**valid["ledger"], "events": []}},
+            {
+                **valid,
+                "ledger": {
+                    **valid["ledger"],
+                    "events": [{"kind": "ERROR", "reason": "NOT_STOP"}],
+                },
+            },
+            {
+                **valid,
+                "ledger": {
+                    **valid["ledger"],
+                    "events": [{"kind": "STOP", "reason": ""}],
+                },
+            },
+        )
+        assert [
+            _host_post(binding.activation_url, "stop", payload)[0]
+            for payload in malformed
+        ] == [400] * len(malformed)
+        assert binding.failed.is_set()
+        assert not binding.stopped.is_set()
+        assert not (observer_root / "observer-stop-ledger.json").exists()
+
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_authenticated_stop_wakes_runner_and_preserves_run_without_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    artifact = (tmp_path / "artifact-stop-runner").resolve()
+    args = module.parse_args(
+        ["--ui-session", "--actor", "CODEX", "--artifact", str(artifact)]
+    )
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    stop_payload = _stop_payload(session_tuple, "USER_REQUESTED")
+
+    def launch_browser(command, _env):
+        page_query = urllib.parse.parse_qs(urllib.parse.urlsplit(command[-1]).query)
+        activation_url = page_query["fpmsObserverBinding"][0]
+        assert _host_post(activation_url, "stop", stop_payload) == (
+            200,
+            {"status": "STOPPED"},
+        )
+        return _BrowserProcess()
+
+    monkeypatch.setattr(module, "_start_headed_browser", launch_browser)
+    status = module._run_ui_browser_session(args, context, artifact)
+    assert status == "STOPPED"
+    module._complete_ui_session(context, artifact, status)
+
+    assert context.run_root.is_dir()
+    assert json.loads(
+        (artifact / "observer" / "observer-stop-ledger.json").read_text(
+            encoding="utf-8"
+        )
+    ) == stop_payload["ledger"]
+    assert json.loads(
+        (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
+    ) == {
+        "status": "STOPPED",
+        "run_id": context.run_id,
+        "run_root_removed": False,
+    }
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+@pytest.mark.parametrize("failure", ["write", "response"])
+def test_observer_stop_io_or_response_failure_never_signals_stopped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / f"artifact-stop-{failure}" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+    original_open = module.os.open
+    original_dumps = module.json.dumps
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        if failure == "write":
+            monkeypatch.setattr(
+                module.os,
+                "open",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("sensitive")),
+            )
+        else:
+            monkeypatch.setattr(
+                module.json,
+                "dumps",
+                lambda value, *args, **kwargs: (
+                    (_ for _ in ()).throw(OSError("sensitive"))
+                    if isinstance(value, dict) and value.get("status") == "STOPPED"
+                    else original_dumps(value, *args, **kwargs)
+                ),
+            )
+        try:
+            status, body = _host_post(
+                binding.activation_url, "stop", _stop_payload(session_tuple)
+            )
+        finally:
+            monkeypatch.setattr(module.os, "open", original_open)
+            monkeypatch.setattr(module.json, "dumps", original_dumps)
+        assert status == 500
+        assert body == {"error": "OBSERVER_HOST_FAILURE"}
+        assert binding.failed.is_set()
+        assert not binding.stopped.is_set()
+        assert not binding.finalized.is_set()
+
+    assert context.run_root.is_dir()
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 
