@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -11,6 +12,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.core import demo_bundle
 from app.db.base import Base
@@ -102,6 +105,7 @@ def test_preflight_derives_every_business_table_and_rejects_any_nonzero_count(
     )
 
     assert demo_service.SYSTEM_RUNTIME_TABLE_ALLOWLIST == SYSTEM_RUNTIME_TABLE_ALLOWLIST
+    assert len(expected_business_tables) == 77
     assert "t_grant_fee_task" in expected_business_tables
     assert {
         "t_official_work_package",
@@ -185,8 +189,8 @@ def test_ui_session_preflight_requires_exact_session_identity(
 
 
 class _BrowserProcess:
-    def __init__(self) -> None:
-        self.returncode = None
+    def __init__(self, returncode: int | None = None) -> None:
+        self.returncode = returncode
         self.signals: list[int] = []
 
     def poll(self):
@@ -204,6 +208,16 @@ class _BrowserProcess:
 
     def wait(self, timeout=None):
         return self.returncode
+
+
+EXPECTED_OBSERVER_FILES = frozenset(
+    {"observer-ui-ledger.json"}
+    | {f"observer-stage-{stage:02d}.png" for stage in range(1, 12)}
+)
+PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8A"
+    "AQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 def _real_ui_context(
@@ -240,153 +254,352 @@ def _real_ui_context(
     return module, context
 
 
-def _exercise_ui_session(
+def _session_tuple(module, context, *, actor: str) -> dict[str, str]:
+    return {
+        "contract_version": module.UI_SESSION_CONTRACT_VERSION,
+        "run_id": context.run_id,
+        "candidate_commit": context.candidate_commit,
+        "candidate_tree": context.candidate_tree,
+        "authority_sha256": context.authority_sha,
+        "actor": actor,
+    }
+
+
+def _binding_url(activation_url: str, operation: str, capability: str | None = None) -> str:
+    parsed = urllib.parse.urlsplit(activation_url)
+    actual = urllib.parse.parse_qs(parsed.query)["capability"][0]
+    selected = actual if capability is None else capability
+    query = urllib.parse.urlencode({"capability": selected}) if selected else ""
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, f"/{operation}", query, "")
+    )
+
+
+def _host_post(
+    activation_url: str,
+    operation: str,
+    payload: object,
+    *,
+    capability: str | None = None,
+    raw_body: bytes | None = None,
+    declared_length: int | None = None,
+) -> tuple[int, dict[str, object]]:
+    headers = {"Content-Type": "application/json"}
+    if declared_length is not None:
+        headers["Content-Length"] = str(declared_length)
+    request = urllib.request.Request(
+        _binding_url(activation_url, operation, capability),
+        data=raw_body if raw_body is not None else json.dumps(payload).encode(),
+        headers=headers,
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=2) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def _ledger_payload(session_tuple: dict[str, str]) -> dict[str, object]:
+    return {
+        **session_tuple,
+        "filename": "observer-ui-ledger.json",
+        "encoding": "json",
+        "content": {
+            "schema_id": session_tuple["contract_version"],
+            "session": session_tuple,
+            "events": [],
+        },
+    }
+
+
+def _screenshot_payload(
+    session_tuple: dict[str, str], filename: str
+) -> dict[str, object]:
+    return {
+        **session_tuple,
+        "filename": filename,
+        "encoding": "base64",
+        "content": base64.b64encode(PNG_1X1).decode(),
+    }
+
+
+def _upload_complete_evidence(
+    activation_url: str, session_tuple: dict[str, str]
+) -> None:
+    assert _host_post(
+        activation_url, "observer-artifact", _ledger_payload(session_tuple)
+    )[0] == 201
+    for filename in sorted(EXPECTED_OBSERVER_FILES - {"observer-ui-ledger.json"}):
+        assert _host_post(
+            activation_url,
+            "observer-artifact",
+            _screenshot_payload(session_tuple, filename),
+        )[0] == 201
+
+
+def test_observer_binding_authenticates_exact_tuple_and_revalidates_after_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        activation = urllib.parse.urlsplit(binding.activation_url)
+        activation_query = urllib.parse.parse_qs(activation.query)
+        capability = activation_query["capability"][0]
+        assert len(capability) >= 43
+        assert activation_query["actor"] == ["HUMAN"]
+        assert _host_post(
+            binding.activation_url, "revalidate", session_tuple, capability=""
+        )[0] == 401
+        assert _host_post(
+            binding.activation_url, "revalidate", session_tuple, capability="wrong"
+        )[0] == 401
+        assert not binding.failed.is_set()
+
+        for key in session_tuple:
+            drifted = {**session_tuple, key: f"wrong-{key}"}
+            assert _host_post(binding.activation_url, "revalidate", drifted)[0] == 409
+        missing_actor = {**session_tuple}
+        del missing_actor["actor"]
+        assert _host_post(binding.activation_url, "revalidate", missing_actor)[0] == 409
+
+        assert _host_post(binding.activation_url, "revalidate", session_tuple)[0] == 200
+        engine = create_engine(f"sqlite:///{context.database_path}")
+        with Session(engine) as db:
+            db.add(
+                Client(
+                    id=str(uuid4()),
+                    client_code="UI-SESSION-POST-MUTATION",
+                    name_cn="会话重校验",
+                    client_type="CLIENT",
+                    default_currency="CNY",
+                    is_active=True,
+                )
+            )
+            db.commit()
+        engine.dispose()
+        assert _host_post(binding.activation_url, "revalidate", session_tuple)[0] == 200
+        assert _host_post(binding.activation_url, "unknown", session_tuple)[0] == 404
+
+    assert context.run_root.is_dir()
+    assert observer_root.is_dir()
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_observer_binding_accepts_only_exact_named_evidence_and_rejects_invalid_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    observer_root = (tmp_path / "artifact" / "observer").resolve()
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+
+    assert module.UI_SESSION_OBSERVER_FILES == EXPECTED_OBSERVER_FILES
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        wrong_ledger_tuple = _ledger_payload(session_tuple)
+        wrong_ledger_tuple["content"]["session"] = {
+            **session_tuple,
+            "run_id": "wrong-run",
+        }
+        assert _host_post(
+            binding.activation_url, "observer-artifact", wrong_ledger_tuple
+        )[0] == 400
+        malformed_json = {
+            **_ledger_payload(session_tuple),
+            "encoding": "base64",
+        }
+        assert _host_post(
+            binding.activation_url, "observer-artifact", malformed_json
+        )[0] == 400
+        assert _host_post(
+            binding.activation_url,
+            "observer-artifact",
+            _ledger_payload(session_tuple),
+        )[0] == 201
+        assert _host_post(
+            binding.activation_url,
+            "observer-artifact",
+            _ledger_payload(session_tuple),
+        )[0] == 409
+        assert _host_post(binding.activation_url, "finalize", session_tuple)[0] == 409
+
+        for filename in (
+            "../observer-ui-ledger.json",
+            "observer-extra.json",
+            "observer-stage-12.png",
+        ):
+            invalid = {**_ledger_payload(session_tuple), "filename": filename}
+            assert _host_post(
+                binding.activation_url, "observer-artifact", invalid
+            )[0] == 400
+
+        malformed_png = {
+            **_screenshot_payload(session_tuple, "observer-stage-01.png"),
+            "content": "not-base64",
+        }
+        assert _host_post(
+            binding.activation_url, "observer-artifact", malformed_png
+        )[0] == 400
+
+        outside = tmp_path / "outside.png"
+        outside.write_bytes(PNG_1X1)
+        symlink = observer_root / "observer-stage-02.png"
+        symlink.symlink_to(outside)
+        assert _host_post(
+            binding.activation_url,
+            "observer-artifact",
+            _screenshot_payload(session_tuple, symlink.name),
+        )[0] == 409
+        symlink.unlink()
+
+        assert _host_post(
+            binding.activation_url,
+            "observer-artifact",
+            {},
+            raw_body=b"{}",
+            declared_length=2_000_001,
+        )[0] == 400
+
+    assert sorted(path.name for path in observer_root.iterdir()) == [
+        "observer-ui-ledger.json"
+    ]
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_browser_finalization_requires_complete_evidence_and_cleans_exact_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    finalization: str,
 ):
     module, context = _real_ui_context(tmp_path, monkeypatch)
-    artifact = (tmp_path / f"artifact-{finalization.lower()}").resolve()
-    browser_process = _BrowserProcess()
-    monkeypatch.setattr(module, "_start_headed_browser", lambda *_args: browser_process)
-    monkeypatch.setattr("builtins.input", lambda _prompt: finalization)
+    artifact = (tmp_path / "artifact-finalized").resolve()
     args = module.parse_args(
         ["--ui-session", "--actor", "HUMAN", "--artifact", str(artifact)]
     )
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+    browser_process = _BrowserProcess()
+    captured_capability = ""
+
+    def launch_browser(command, _env):
+        nonlocal captured_capability
+        assert command[:3] == ["node", "./node_modules/.bin/playwright", "open"]
+        assert "--browser=chromium" in command
+        assert "--headless" not in command
+        page_query = urllib.parse.parse_qs(urllib.parse.urlsplit(command[-1]).query)
+        activation_url = page_query["fpmsObserverBinding"][0]
+        captured_capability = urllib.parse.parse_qs(
+            urllib.parse.urlsplit(activation_url).query
+        )["capability"][0]
+        assert command[-1].count(captured_capability) == 1
+        assert _host_post(activation_url, "revalidate", session_tuple)[0] == 200
+        _upload_complete_evidence(activation_url, session_tuple)
+        assert _host_post(activation_url, "finalize", session_tuple)[0] == 200
+        return browser_process
+
+    monkeypatch.setattr(module, "_start_headed_browser", launch_browser)
+    monkeypatch.setattr(
+        "builtins.input", lambda _prompt: pytest.fail("terminal input is forbidden")
+    )
+
     status = module._run_ui_browser_session(args, context, artifact)
+    assert status == "FINALIZED"
     module._complete_ui_session(context, artifact, status)
 
-    session = json.loads((artifact / "session.json").read_text(encoding="utf-8"))
-    binding = json.loads(
-        (artifact / "observer" / "finalize-binding.json").read_text(encoding="utf-8")
+    assert not context.run_root.exists()
+    assert captured_capability
+    serialized = capsys.readouterr().out + "".join(
+        path.read_text(encoding="utf-8")
+        for path in artifact.rglob("*.json")
     )
-    output = capsys.readouterr().out
-    assert "playwright" in binding["browser_command"][1]
-    assert binding["browser_command"][2] == "open"
-    assert "--headless" not in binding["browser_command"]
-    assert binding["observer_artifact_root"] == str((artifact / "observer").resolve())
-    browser_query = urllib.parse.parse_qs(
-        urllib.parse.urlsplit(binding["browser_command"][-1]).query
-    )
-    assert browser_query["fpmsObserverBinding"] == [binding["observer_binding_url"]]
-    assert binding["run_id"] == session["run_id"]
-    serialized = output + json.dumps(binding) + json.dumps(session)
+    assert captured_capability not in serialized
     assert context.admin_password not in serialized
     assert context.reviewer_password not in serialized
-    assert '"password": "<redacted>"' in output
-    return module, artifact, context.run_root
-
-
-def test_ui_session_stop_preserves_exact_run_and_redacted_artifact(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-):
-    _module, artifact, run_root = _exercise_ui_session(
-        tmp_path, monkeypatch, capsys, "STOP"
-    )
-
-    assert run_root.is_dir()
-    assert artifact.is_dir()
-    status = json.loads(
+    final_status = json.loads(
         (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
     )
-    assert status["status"] == "STOPPED"
-    assert status["run_root_removed"] is False
-    _module.abc.remove_run_root(run_root, status["run_id"])
+    assert final_status == {
+        "status": "FINALIZED",
+        "run_id": context.run_id,
+        "run_root_removed": True,
+    }
 
 
-def test_ui_session_explicit_success_alone_cleans_the_validated_run(
+@pytest.mark.parametrize("stop_reason", ["browser-exit", "timeout"])
+def test_browser_exit_or_timeout_stops_without_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    stop_reason: str,
 ):
-    _module, artifact, run_root = _exercise_ui_session(
-        tmp_path, monkeypatch, capsys, "FINALIZE_SUCCESS"
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    artifact = (tmp_path / f"artifact-{stop_reason}").resolve()
+    args = module.parse_args(
+        ["--ui-session", "--actor", "CODEX", "--artifact", str(artifact)]
+    )
+    process = _BrowserProcess(returncode=0 if stop_reason == "browser-exit" else None)
+    monkeypatch.setattr(module, "_start_headed_browser", lambda *_args: process)
+    monkeypatch.setattr(module, "UI_SESSION_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        "builtins.input", lambda _prompt: pytest.fail("terminal input is forbidden")
     )
 
-    assert not run_root.exists()
+    status = module._run_ui_browser_session(args, context, artifact)
+    assert status == "STOPPED"
+    module._complete_ui_session(context, artifact, status)
+
+    assert context.run_root.is_dir()
     assert artifact.is_dir()
-    status = json.loads(
+    final_status = json.loads(
         (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
     )
-    assert status["status"] == "FINALIZED"
-    assert status["run_root_removed"] is True
+    assert final_status["run_root_removed"] is False
+    module.abc.remove_run_root(context.run_root, context.run_id)
 
 
-def test_real_bootstrap_browser_failure_preserves_exact_run_and_artifact(
+def test_malformed_host_evidence_records_failure_and_preserves_exact_run_and_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     module, context = _real_ui_context(tmp_path, monkeypatch)
-    artifact = (tmp_path / "artifact-failed").resolve()
+    artifact = (tmp_path / "artifact-host-failed").resolve()
     args = module.parse_args(
         ["--ui-session", "--actor", "CODEX", "--artifact", str(artifact)]
     )
-    monkeypatch.setattr(
-        module,
-        "_start_headed_browser",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("injected browser failure")),
-    )
+    session_tuple = _session_tuple(module, context, actor="CODEX")
 
-    with pytest.raises(RuntimeError, match="injected browser failure"):
+    def launch_browser(command, _env):
+        page_query = urllib.parse.parse_qs(urllib.parse.urlsplit(command[-1]).query)
+        activation_url = page_query["fpmsObserverBinding"][0]
+        malformed = _screenshot_payload(session_tuple, "observer-stage-01.png")
+        malformed["content"] = "not-base64"
+        assert _host_post(
+            activation_url,
+            "observer-artifact",
+            malformed,
+        )[0] == 400
+        return _BrowserProcess()
+
+    monkeypatch.setattr(module, "_start_headed_browser", launch_browser)
+
+    with pytest.raises(RuntimeError, match="observer host rejected"):
         module._run_ui_browser_session(args, context, artifact)
 
     assert context.database_path.read_bytes().startswith(b"SQLite format 3")
     assert context.run_root.is_dir()
     assert artifact.is_dir()
-    status = json.loads(
+    final_status = json.loads(
         (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
     )
-    assert status == {
+    assert final_status == {
         "status": "FAILED",
         "run_id": context.run_id,
         "run_root_removed": False,
     }
     module.abc.remove_run_root(context.run_root, context.run_id)
-
-
-def test_observer_host_binding_writes_only_observer_files_and_rejects_escape(
-    tmp_path: Path,
-):
-    module = _runner_module()
-    observer_root = (tmp_path / "artifact" / "observer").resolve()
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-
-    with module._observer_binding(observer_root) as binding:
-        request = urllib.request.Request(
-            binding.url,
-            data=json.dumps(
-                {
-                    "filename": "observer-checkpoints.json",
-                    "content": {"status": "RECORDED"},
-                }
-            ).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with opener.open(request, timeout=2) as response:
-            assert response.status == 201
-
-        assert json.loads(
-            (observer_root / "observer-checkpoints.json").read_text(encoding="utf-8")
-        ) == {"status": "RECORDED"}
-        for filename in ("../session.json", "session.json", "observer/escape.json"):
-            rejected = urllib.request.Request(
-                binding.url,
-                data=json.dumps({"filename": filename, "content": {}}).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with pytest.raises(urllib.error.HTTPError) as error:
-                opener.open(rejected, timeout=2)
-            assert error.value.code == 400
-
-    assert sorted(path.name for path in observer_root.iterdir()) == [
-        "observer-checkpoints.json"
-    ]
-    assert not (tmp_path / "artifact" / "session.json").exists()
 
 
 def test_ui_session_cli_rejects_invalid_combinations_before_side_effects(

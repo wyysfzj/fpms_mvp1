@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -14,13 +15,14 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import zipfile
 from contextlib import contextmanager
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator, NamedTuple
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +52,23 @@ UI_SESSION_CONTRACT_VERSION = json.loads(
         / "demo_v6_ui_parity_v1.json"
     ).read_text(encoding="utf-8")
 )["schema_id"]
-UI_SESSION_FINALIZE_SIGNAL = "FINALIZE_SUCCESS"
+UI_SESSION_TIMEOUT_SECONDS = 12 * 60 * 60
+UI_SESSION_MAX_BODY_BYTES = 2_000_000
+UI_SESSION_OBSERVER_FILES = frozenset(
+    {"observer-ui-ledger.json"}
+    | {f"observer-stage-{stage:02d}.png" for stage in range(1, 12)}
+)
+_UI_SESSION_TUPLE_KEYS = (
+    "contract_version",
+    "run_id",
+    "candidate_commit",
+    "candidate_tree",
+    "authority_sha256",
+    "actor",
+)
+_UI_SESSION_INTERNAL_OBSERVER_FILES = frozenset({"finalize-binding.json"})
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_PNG_END = b"IEND\xaeB`\x82"
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
     "route.fulfill(",
@@ -461,7 +479,10 @@ class DemoRunContext(NamedTuple):
 
 
 class ObserverBinding(NamedTuple):
-    url: str
+    activation_url: str
+    finalized: threading.Event
+    failed: threading.Event
+    errors: list[str]
 
 
 def _new_run_context(
@@ -574,9 +595,19 @@ def _remove_finalized_ui_run(artifact: Path, context: DemoRunContext) -> None:
 
 
 @contextmanager
-def _observer_binding(observer_root: Path) -> Iterator[ObserverBinding]:
+def _observer_binding(
+    observer_root: Path,
+    session_tuple: dict[str, str],
+) -> Iterator[ObserverBinding]:
     observer_root = observer_root.resolve()
     observer_root.mkdir(parents=True, exist_ok=True)
+    if set(session_tuple) != set(_UI_SESSION_TUPLE_KEYS):
+        raise RuntimeError("invalid UI-session observer tuple")
+    expected_tuple = {key: session_tuple[key] for key in _UI_SESSION_TUPLE_KEYS}
+    capability = secrets.token_urlsafe(32)
+    finalized = threading.Event()
+    failed = threading.Event()
+    errors: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
         def _response(self, status: int, payload: dict[str, object]) -> None:
@@ -589,6 +620,135 @@ def _observer_binding(observer_root: Path) -> Iterator[ObserverBinding]:
             self.end_headers()
             self.wfile.write(body)
 
+        def _reject(self, status: int, error: str, *, terminal: bool = True) -> None:
+            if terminal:
+                errors.append(error)
+                failed.set()
+            self._response(status, {"error": error})
+
+        def _payload(self) -> dict[str, object] | None:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._reject(400, "MALFORMED_REQUEST")
+                return None
+            if not 0 < length <= UI_SESSION_MAX_BODY_BYTES:
+                self._reject(400, "MALFORMED_REQUEST")
+                return None
+            try:
+                payload = json.loads(self.rfile.read(length))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._reject(400, "MALFORMED_REQUEST")
+                return None
+            if not isinstance(payload, dict):
+                self._reject(400, "MALFORMED_REQUEST")
+                return None
+            return payload
+
+        def _valid_tuple(self, payload: dict[str, object]) -> bool:
+            if any(payload.get(key) != value for key, value in expected_tuple.items()):
+                self._reject(409, "SESSION_TUPLE_CONFLICT")
+                return False
+            return True
+
+        def _validate_ledger(self, content: object) -> bool:
+            if not isinstance(content, dict):
+                return False
+            return (
+                content.get("schema_id") == expected_tuple["contract_version"]
+                and content.get("session") == expected_tuple
+                and isinstance(content.get("events"), list)
+            )
+
+        def _exclusive_write(self, target: Path, content: bytes) -> bool:
+            try:
+                descriptor = os.open(
+                    target,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                )
+            except FileExistsError:
+                self._reject(409, "OBSERVER_EVIDENCE_CONFLICT")
+                return False
+            try:
+                with os.fdopen(descriptor, "wb") as output:
+                    output.write(content)
+            except Exception:
+                target.unlink(missing_ok=True)
+                raise
+            return True
+
+        def _write_observer_artifact(self, payload: dict[str, object]) -> None:
+            expected_keys = set(_UI_SESSION_TUPLE_KEYS) | {
+                "filename",
+                "encoding",
+                "content",
+            }
+            if set(payload) != expected_keys:
+                self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                return
+            filename = payload.get("filename")
+            if not isinstance(filename, str) or filename not in UI_SESSION_OBSERVER_FILES:
+                self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                return
+            target = observer_root / filename
+            if target.parent.resolve() != observer_root or target.exists() or target.is_symlink():
+                self._reject(409, "OBSERVER_EVIDENCE_CONFLICT")
+                return
+            if filename.endswith(".json"):
+                if payload.get("encoding") != "json" or not self._validate_ledger(
+                    payload.get("content")
+                ):
+                    self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                    return
+                content = (
+                    json.dumps(
+                        payload["content"], ensure_ascii=False, indent=2
+                    )
+                    + "\n"
+                ).encode()
+            else:
+                encoded = payload.get("content")
+                if payload.get("encoding") != "base64" or not isinstance(encoded, str):
+                    self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                    return
+                try:
+                    content = base64.b64decode(encoded, validate=True)
+                except (ValueError, binascii.Error):
+                    self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                    return
+                if not content.startswith(_PNG_SIGNATURE) or not content.endswith(_PNG_END):
+                    self._reject(400, "MALFORMED_OBSERVER_ARTIFACT")
+                    return
+            if self._exclusive_write(target, content):
+                self._response(201, {"filename": filename})
+
+        def _evidence_complete(self) -> bool:
+            entries = {path.name for path in observer_root.iterdir()}
+            allowed = UI_SESSION_OBSERVER_FILES | _UI_SESSION_INTERNAL_OBSERVER_FILES
+            if entries - allowed or not UI_SESSION_OBSERVER_FILES <= entries:
+                return False
+            for filename in UI_SESSION_OBSERVER_FILES:
+                target = observer_root / filename
+                if target.is_symlink() or not target.is_file():
+                    return False
+            try:
+                ledger = json.loads(
+                    (observer_root / "observer-ui-ledger.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                return False
+            if not self._validate_ledger(ledger):
+                return False
+            return all(
+                (observer_root / filename).read_bytes().startswith(_PNG_SIGNATURE)
+                and (observer_root / filename).read_bytes().endswith(_PNG_END)
+                for filename in UI_SESSION_OBSERVER_FILES
+                if filename.endswith(".png")
+            )
+
         def do_OPTIONS(self) -> None:  # noqa: N802
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
@@ -597,50 +757,35 @@ def _observer_binding(observer_root: Path) -> Iterator[ObserverBinding]:
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
-            try:
-                if self.path != "/observer-artifact":
-                    self._response(404, {"error": "NOT_FOUND"})
-                    return
-                length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 2_000_000:
-                    raise ValueError("invalid content length")
-                payload = json.loads(self.rfile.read(length))
-                if not isinstance(payload, dict) or not set(payload) <= {
-                    "filename",
-                    "content",
-                    "encoding",
-                }:
-                    raise ValueError("invalid observer payload")
-                filename = payload.get("filename")
-                if (
-                    not isinstance(filename, str)
-                    or re.fullmatch(
-                        r"observer-[a-z0-9][a-z0-9-]{0,95}\.(json|png)", filename
-                    )
-                    is None
-                ):
-                    raise ValueError("invalid observer filename")
-                target = (observer_root / filename).resolve()
-                if (
-                    target.parent != observer_root
-                    or target.exists()
-                    or target.is_symlink()
-                ):
-                    raise ValueError("invalid observer target")
-                if target.suffix == ".json":
-                    if payload.get("encoding") not in (None, "json"):
-                        raise ValueError("invalid observer encoding")
-                    _write_json(target, payload.get("content"))
-                else:
-                    if payload.get("encoding") != "base64" or not isinstance(
-                        payload.get("content"), str
-                    ):
-                        raise ValueError("invalid observer encoding")
-                    target.write_bytes(base64.b64decode(payload["content"], validate=True))
-            except (TypeError, ValueError, json.JSONDecodeError):
-                self._response(400, {"error": "INVALID_OBSERVER_ARTIFACT"})
+            parsed = urlsplit(self.path)
+            if parse_qs(parsed.query, keep_blank_values=True).get("capability") != [
+                capability
+            ]:
+                self._reject(401, "CAPABILITY_REQUIRED", terminal=False)
                 return
-            self._response(201, {"filename": filename})
+            if parsed.path not in {"/revalidate", "/observer-artifact", "/finalize"}:
+                self._reject(404, "NOT_FOUND")
+                return
+            payload = self._payload()
+            if payload is None or not self._valid_tuple(payload):
+                return
+            if parsed.path == "/revalidate":
+                if set(payload) != set(_UI_SESSION_TUPLE_KEYS):
+                    self._reject(400, "MALFORMED_REQUEST")
+                    return
+                self._response(200, {"status": "VALID"})
+                return
+            if parsed.path == "/observer-artifact":
+                self._write_observer_artifact(payload)
+                return
+            if set(payload) != set(_UI_SESSION_TUPLE_KEYS):
+                self._reject(400, "MALFORMED_REQUEST")
+                return
+            if not self._evidence_complete():
+                self._reject(409, "OBSERVER_EVIDENCE_INCOMPLETE")
+                return
+            finalized.set()
+            self._response(200, {"status": "FINALIZED"})
 
         def log_message(self, _format: str, *_args: object) -> None:
             return
@@ -650,7 +795,18 @@ def _observer_binding(observer_root: Path) -> Iterator[ObserverBinding]:
     thread.start()
     host, port = server.server_address
     try:
-        yield ObserverBinding(url=f"http://{host}:{port}/observer-artifact")
+        activation_url = f"http://{host}:{port}/observer-artifact?" + urlencode(
+            {
+                "capability": capability,
+                "actor": expected_tuple["actor"],
+            }
+        )
+        yield ObserverBinding(
+            activation_url=activation_url,
+            finalized=finalized,
+            failed=failed,
+            errors=errors,
+        )
     finally:
         server.shutdown()
         server.server_close()
@@ -663,6 +819,25 @@ def _start_headed_browser(
     return subprocess.Popen(command, cwd=PLAYWRIGHT, env=env)
 
 
+def _wait_for_browser_finalization(
+    binding: ObserverBinding,
+    browser_process: subprocess.Popen[bytes],
+) -> str:
+    deadline = time.monotonic() + UI_SESSION_TIMEOUT_SECONDS
+    while True:
+        if binding.failed.is_set():
+            error = binding.errors[-1] if binding.errors else "UNKNOWN_HOST_ERROR"
+            raise RuntimeError(f"observer host rejected browser state: {error}")
+        if binding.finalized.is_set():
+            return "FINALIZED"
+        if browser_process.poll() is not None:
+            return "STOPPED"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return "STOPPED"
+        binding.finalized.wait(min(0.1, remaining))
+
+
 def _run_ui_browser_session(
     args: argparse.Namespace,
     context: DemoRunContext,
@@ -671,26 +846,32 @@ def _run_ui_browser_session(
     artifact.mkdir(parents=True, exist_ok=True)
     if not context.database_path.is_file():
         raise RuntimeError("UI session database was not created")
+    session_tuple = {
+        "contract_version": UI_SESSION_CONTRACT_VERSION,
+        "run_id": context.run_id,
+        "candidate_commit": context.candidate_commit,
+        "candidate_tree": context.candidate_tree,
+        "authority_sha256": context.authority_sha,
+        "actor": str(args.actor),
+    }
     _write_json(
         artifact / "session.json",
         {
-            "contract_version": UI_SESSION_CONTRACT_VERSION,
-            "actor": args.actor,
-            "run_id": context.run_id,
+            **session_tuple,
             "run_root": str(context.run_root),
             "database_path": str(context.database_path),
             "artifact": str(artifact),
-            "candidate_commit": context.candidate_commit,
-            "candidate_tree": context.candidate_tree,
-            "authority_sha256": context.authority_sha,
         },
     )
     observer_root = (artifact / "observer").resolve()
     browser_process: subprocess.Popen[bytes] | None = None
     try:
-        with _observer_binding(observer_root) as binding:
+        with _observer_binding(observer_root, session_tuple) as binding:
             page_url = "http://127.0.0.1:5173/?" + urlencode(
-                {"fpmsObserverBinding": binding.url}
+                {"fpmsObserverBinding": binding.activation_url}
+            )
+            redacted_page_url = "http://127.0.0.1:5173/?" + urlencode(
+                {"fpmsObserverBinding": "<redacted>"}
             )
             browser_command = [
                 "node",
@@ -702,12 +883,20 @@ def _run_ui_browser_session(
             _write_json(
                 observer_root / "finalize-binding.json",
                 {
-                    "contract_version": UI_SESSION_CONTRACT_VERSION,
-                    "run_id": context.run_id,
+                    **session_tuple,
                     "observer_artifact_root": str(observer_root),
-                    "observer_binding_url": binding.url,
-                    "success_signal": UI_SESSION_FINALIZE_SIGNAL,
-                    "browser_command": browser_command,
+                    "observer_binding_origin": (
+                        f"{urlsplit(binding.activation_url).scheme}://"
+                        f"{urlsplit(binding.activation_url).netloc}"
+                    ),
+                    "capability": "<redacted>",
+                    "operations": [
+                        "/revalidate",
+                        "/observer-artifact",
+                        "/finalize",
+                    ],
+                    "required_observer_files": sorted(UI_SESSION_OBSERVER_FILES),
+                    "browser_command": [*browser_command[:-1], redacted_page_url],
                 },
             )
             browser_process = _start_headed_browser(browser_command, context.env)
@@ -715,7 +904,7 @@ def _run_ui_browser_session(
                 json.dumps(
                     {
                         "run_id": context.run_id,
-                        "url": page_url,
+                        "url": redacted_page_url,
                         "credentials": [
                             {"username": "admin", "password": "<redacted>"},
                             {
@@ -727,13 +916,7 @@ def _run_ui_browser_session(
                     ensure_ascii=False,
                 )
             )
-            try:
-                response = input(
-                    f"Type {UI_SESSION_FINALIZE_SIGNAL} to finalize, or STOP to preserve: "
-                )
-            except (EOFError, KeyboardInterrupt):
-                response = "STOP"
-            return "FINALIZED" if response == UI_SESSION_FINALIZE_SIGNAL else "STOPPED"
+            return _wait_for_browser_finalization(binding, browser_process)
     except Exception:
         _write_json(
             observer_root / "session-status.json",
