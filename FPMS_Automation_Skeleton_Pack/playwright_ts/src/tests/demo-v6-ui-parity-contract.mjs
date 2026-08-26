@@ -134,7 +134,7 @@ function canonicalFixture() {
         stage: '04',
         inputs: [
           input('04', 'oa_sequence', 'EXPLICIT_INPUT', '1', '/documents/new', label('combobox', '文件模板'), 'operator selects first OA notice template', 'INTEGER_EXACT'),
-          input('04', 'oa_notice_at', 'EXPLICIT_INPUT', '2026-08-07 09:00:00', '/documents/new', label('textbox', '文书日期'), 'operator-entered first OA notice time', 'ISO_LOCAL_DATETIME_SECONDS'),
+          input('04', 'oa_notice_at', 'EXPLICIT_INPUT', '2026-08-07 09:00:00', '/documents/new', label('textbox', '文件日期'), 'operator-entered first OA notice time', 'ISO_LOCAL_DATETIME_SECONDS'),
           input('04', 'oa_due_date', 'EXPLICIT_INPUT', '2026-09-22', '/documents/new', label('textbox', '官方截止日'), 'operator-entered first OA due date', 'ISO_DATE'),
           input('04', 'oa_notice_evidence', 'SOURCE_BOUND', 'current reviewed OA_NOTICE_1 evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case OA_NOTICE_1 evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
           input('04', 'oa_reply_output_roles', 'SOURCE_BOUND', 'OA_STATEMENT_WORD, OA_STATEMENT_PDF, OA_MODIFIED_CLAIMS for oa_sequence=1', '/official-workflows/oa-reply', label('heading', 'OA答复工作包'), 'visible current-bundle reply outputs for OA sequence 1', 'SORTED_IDENTITY_SET'),
@@ -150,7 +150,7 @@ function canonicalFixture() {
         stage: '05',
         inputs: [
           input('05', 'oa_sequence', 'EXPLICIT_INPUT', '2', '/documents/new', label('combobox', '文件模板'), 'operator selects second OA notice template', 'INTEGER_EXACT'),
-          input('05', 'oa_notice_at', 'EXPLICIT_INPUT', '2026-08-09 09:00:00', '/documents/new', label('textbox', '文书日期'), 'operator-entered second OA notice time', 'ISO_LOCAL_DATETIME_SECONDS'),
+          input('05', 'oa_notice_at', 'EXPLICIT_INPUT', '2026-08-09 09:00:00', '/documents/new', label('textbox', '文件日期'), 'operator-entered second OA notice time', 'ISO_LOCAL_DATETIME_SECONDS'),
           input('05', 'oa_due_date', 'EXPLICIT_INPUT', '2026-10-23', '/documents/new', label('textbox', '官方截止日'), 'operator-entered second OA due date', 'ISO_DATE'),
           input('05', 'oa_notice_evidence', 'SOURCE_BOUND', 'current reviewed OA_NOTICE_2 evidence', '/documents/:id', label('combobox', '已复核证据版本'), 'visible same-case OA_NOTICE_2 evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
           input('05', 'oa_reply_output_roles', 'SOURCE_BOUND', 'OA_STATEMENT_WORD, OA_STATEMENT_PDF, OA_MODIFIED_CLAIMS for oa_sequence=2', '/official-workflows/oa-reply', label('heading', 'OA答复工作包'), 'visible current-bundle reply outputs for OA sequence 2', 'SORTED_IDENTITY_SET'),
@@ -220,7 +220,7 @@ function canonicalFixture() {
           input('09', 'planned_pay_date', 'EXPLICIT_INPUT', '2026-08-25', '/fee-management/pay-lists', label('textbox', '计划缴费日期'), 'operator-entered planned payment date', 'ISO_DATE'),
           input('09', 'pay_list_remark', 'EXPLICIT_INPUT', '授权登记官费清单', '/fee-management/pay-lists', label('textbox', '备注'), 'operator-entered fixed pay-list remark', 'TRIM_EXACT'),
           input('09', 'gov_line_amounts', 'SOURCE_BOUND', 'the two current GOV draft line amounts 900.00 and 50.00 CNY', '/fee-management/pay-lists/:id', label('heading', '官费清单详情'), 'visible selected GOV draft lines', 'ORDERED_DECIMAL_2_LIST'),
-          input('09', 'official_receipt_fields', 'SOURCE_BOUND', 'empty for every GovPayment', '/fee-management/gov-payments/new', label('textbox', '收据号'), 'visible disabled evidence field in demo command mode', 'EMPTY_EXACT'),
+          input('09', 'official_receipt_fields', 'SOURCE_BOUND', 'empty for every GovPayment', '/fee-management/gov-payments/new', label('textbox', '官方收据号'), 'visible disabled evidence field in demo command mode', 'EMPTY_EXACT'),
           input('09', 'voucher_fields', 'SOURCE_BOUND', 'empty for every GovPayment', '/fee-management/pay-lists/:id', label('heading', '官费清单详情'), 'visible GovPayment evidence projection', 'EMPTY_EXACT'),
           input('09', 'invoice_fields', 'SOURCE_BOUND', 'empty for every GovPayment', '/fee-management/pay-lists/:id', label('heading', '官费清单详情'), 'visible GovPayment evidence projection', 'EMPTY_EXACT'),
         ],
@@ -236,18 +236,35 @@ function canonicalFixture() {
           input('10', 'bill_date', 'EXPLICIT_INPUT', '2026-08-25', '/billing/bills/new', label('textbox', '账单日期'), 'operator-entered bill date', 'ISO_DATE'),
           input('10', 'bill_due_date', 'EXPLICIT_INPUT', '2026-09-24', '/billing/bills/new', label('textbox', '到期日'), 'operator-entered bill due date', 'ISO_DATE'),
           input('10', 'service_locked_draft', 'SOURCE_BOUND', 'the unique locked SERVICE draft from Stage 08', '/billing/bills/new', label('combobox', '费用草稿'), 'visible domain-labelled SERVICE draft option', 'IDENTITY_AND_STATE_EXACT'),
+          input('10', 'bill_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for the bill command', '/billing/bills/new', label('button', '创建账单'), 'current browser action ledger for the bill command', 'OPAQUE_IDENTITY'),
+          input('10', 'payment_1_bill', 'SOURCE_BOUND', 'the unique Stage 10 bill selected as the first payment target', '/billing/payments/new', label('combobox', '账单编号（收款对象）'), 'visible bill option matching AR-CYZN-<run suffix>', 'IDENTITY_EXACT'),
           input('10', 'payment_1_amount', 'EXPLICIT_INPUT', '1200.00', '/billing/payments/new', label('spinbutton', '回款金额'), 'operator-entered first payment amount', 'DECIMAL_2'),
           input('10', 'payment_1_date', 'EXPLICIT_INPUT', '2026-08-25', '/billing/payments/new', label('textbox', '收款日期'), 'operator-entered first payment date', 'ISO_DATE'),
+          input('10', 'payment_1_currency', 'SOURCE_BOUND', 'CNY from the selected Stage 10 bill', '/billing/payments/new', label('combobox', '账单编号（收款对象）'), 'visible selected bill option and currency context', 'ENUM_EXACT'),
           input('10', 'payment_1_method', 'EXPLICIT_INPUT', 'BANK_TRANSFER', '/billing/payments/new', label('combobox', '付款方式'), 'operator selects 银行转账', 'ENUM_EXACT'),
           input('10', 'payment_1_no', 'EXPLICIT_INPUT', 'RCPT-CYZN-<run suffix>-01', '/billing/payments/new', label('textbox', '收款编号'), 'operator-entered first payment reference', 'RUN_SUFFIX_TEMPLATE'),
           input('10', 'payment_1_bank_ref', 'EXPLICIT_INPUT', 'BTR-CYZN-<run suffix>-01', '/billing/payments/new', label('textbox', '银行流水号'), 'operator-entered first bank reference', 'RUN_SUFFIX_TEMPLATE'),
+          input('10', 'payment_1_remark', 'EXPLICIT_INPUT', '澄岳智造技术（苏州）有限公司第一笔客户回款', '/billing/payments/new', label('textbox', '备注'), 'operator-entered fixed first payment remark', 'TRIM_EXACT'),
+          input('10', 'payment_1_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for the first payment command', '/billing/payments/new', label('button', '登记回款'), 'current browser action ledger for the first payment command', 'OPAQUE_IDENTITY'),
+          input('10', 'offset_1_payment_line', 'SOURCE_BOUND', 'the unique unapplied payment line created by payment 1', '/billing/payments', label('combobox', '付款分录'), 'visible first-payment line option', 'IDENTITY_EXACT'),
+          input('10', 'offset_1_bill', 'SOURCE_BOUND', 'the unique Stage 10 bill selected as the first offset target', '/billing/payments', label('combobox', '账单编号'), 'visible bill option matching AR-CYZN-<run suffix>', 'IDENTITY_EXACT'),
+          input('10', 'offset_1_amount', 'SOURCE_BOUND', '1200.00 from the selected payment 1 line balance', '/billing/payments', label('spinbutton', '核销金额'), 'visible selected payment-line balance', 'DECIMAL_2'),
+          input('10', 'offset_1_date', 'EXPLICIT_INPUT', '2026-08-25', '/billing/payments', label('textbox', '核销日期'), 'operator-entered first offset date matching payment 1', 'ISO_DATE'),
+          input('10', 'offset_1_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for the first offset command', '/billing/payments', label('button', '创建核销'), 'current browser action ledger for the first offset command', 'OPAQUE_IDENTITY'),
+          input('10', 'payment_2_bill', 'SOURCE_BOUND', 'the refreshed Stage 10 bill selected as the second payment target', '/billing/payments/new', label('combobox', '账单编号（收款对象）'), 'visible bill option matching AR-CYZN-<run suffix> with authoritative balance 600.00', 'IDENTITY_AND_STATE_EXACT'),
           input('10', 'payment_2_amount', 'SOURCE_BOUND', '600.00 read after refreshing the partially settled bill', '/billing/bills/:id', label('button', '刷新'), 'visible authoritative bill balance after first offset', 'DECIMAL_2'),
           input('10', 'payment_2_date', 'EXPLICIT_INPUT', '2026-08-26', '/billing/payments/new', label('textbox', '收款日期'), 'operator-entered second payment date', 'ISO_DATE'),
+          input('10', 'payment_2_currency', 'SOURCE_BOUND', 'CNY from the selected Stage 10 bill', '/billing/payments/new', label('combobox', '账单编号（收款对象）'), 'visible selected bill option and currency context', 'ENUM_EXACT'),
           input('10', 'payment_2_method', 'EXPLICIT_INPUT', 'BANK_TRANSFER', '/billing/payments/new', label('combobox', '付款方式'), 'operator selects 银行转账', 'ENUM_EXACT'),
           input('10', 'payment_2_no', 'EXPLICIT_INPUT', 'RCPT-CYZN-<run suffix>-02', '/billing/payments/new', label('textbox', '收款编号'), 'operator-entered second payment reference', 'RUN_SUFFIX_TEMPLATE'),
           input('10', 'payment_2_bank_ref', 'EXPLICIT_INPUT', 'BTR-CYZN-<run suffix>-02', '/billing/payments/new', label('textbox', '银行流水号'), 'operator-entered second bank reference', 'RUN_SUFFIX_TEMPLATE'),
-          input('10', 'offset_1_date', 'EXPLICIT_INPUT', '2026-08-25', '/billing/payments', label('textbox', '核销日期'), 'operator-entered first offset date matching payment 1', 'ISO_DATE'),
+          input('10', 'payment_2_remark', 'EXPLICIT_INPUT', '澄岳智造技术（苏州）有限公司第二笔客户回款', '/billing/payments/new', label('textbox', '备注'), 'operator-entered fixed second payment remark', 'TRIM_EXACT'),
+          input('10', 'payment_2_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for the second payment command', '/billing/payments/new', label('button', '登记回款'), 'current browser action ledger for the second payment command', 'OPAQUE_IDENTITY'),
+          input('10', 'offset_2_payment_line', 'SOURCE_BOUND', 'the unique unapplied payment line created by payment 2', '/billing/payments', label('combobox', '付款分录'), 'visible second-payment line option', 'IDENTITY_EXACT'),
+          input('10', 'offset_2_bill', 'SOURCE_BOUND', 'the unique Stage 10 bill selected as the second offset target', '/billing/payments', label('combobox', '账单编号'), 'visible bill option matching AR-CYZN-<run suffix> with authoritative balance 600.00', 'IDENTITY_AND_STATE_EXACT'),
+          input('10', 'offset_2_amount', 'SOURCE_BOUND', '600.00 from the selected payment 2 line balance', '/billing/payments', label('spinbutton', '核销金额'), 'visible selected payment-line balance', 'DECIMAL_2'),
           input('10', 'offset_2_date', 'EXPLICIT_INPUT', '2026-08-26', '/billing/payments', label('textbox', '核销日期'), 'operator-entered second offset date matching payment 2', 'ISO_DATE'),
+          input('10', 'offset_2_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for the second offset command', '/billing/payments', label('button', '创建核销'), 'current browser action ledger for the second offset command', 'OPAQUE_IDENTITY'),
         ],
         outputs: [
           output('10', 'bill_settlement_transition', 'APP_GENERATED', 'UNSETTLED→PARTIALLY_SETTLED/600.00→SETTLED/0.00', '/billing/bills/:id', label('heading', '账单详情'), 'visible authoritative bill status and balance', 'STATE_AND_DECIMAL_TRANSITION_EXACT', 'bill settlement transition is visible', 'initial UNSETTLED, after offset 1 PARTIALLY_SETTLED/600.00, after offset 2 SETTLED/0.00', '账单详情/账单结清状态'),
@@ -403,6 +420,30 @@ expectRejected('collapsed 07–11 assertion', (fixture) => {
     assertionRow('07', 'all_stage_07_to_11_conditions', 'all amounts and statuses are correct', 'strict receipt'),
   ]
 }, /collapsed, missing, extra, or drifted/)
+
+expectRejected('missing Stage 10 payment binding', (fixture) => {
+  fixture.stages[9].inputs = fixture.stages[9].inputs.filter((row) => row.field_key !== 'payment_1_bill')
+}, /missing or extra field/)
+
+expectRejected('missing Stage 10 offset binding', (fixture) => {
+  fixture.stages[9].inputs = fixture.stages[9].inputs.filter((row) => row.field_key !== 'offset_1_payment_line')
+}, /missing or extra field/)
+
+expectRejected('missing Stage 10 command idempotency key', (fixture) => {
+  fixture.stages[9].inputs = fixture.stages[9].inputs.filter((row) => row.field_key !== 'bill_idempotency_key')
+}, /missing or extra field/)
+
+expectRejected('Stage 04 old document-date locator', (fixture) => {
+  fixture.stages[3].inputs.find((row) => row.field_key === 'oa_notice_at').control.label = '文书日期'
+}, /control drift/)
+
+expectRejected('Stage 05 old document-date locator', (fixture) => {
+  fixture.stages[4].inputs.find((row) => row.field_key === 'oa_notice_at').control.label = '文书日期'
+}, /control drift/)
+
+expectRejected('Stage 09 old official-receipt locator', (fixture) => {
+  fixture.stages[8].inputs.find((row) => row.field_key === 'official_receipt_fields').control.label = '收据号'
+}, /control drift/)
 
 try {
   const canonical = JSON.parse(readFileSync(contractUrl, 'utf8'))

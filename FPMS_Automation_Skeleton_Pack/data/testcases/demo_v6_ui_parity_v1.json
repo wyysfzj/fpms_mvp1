@@ -643,7 +643,7 @@
           "ui_route": "/documents/new",
           "control": {
             "role": "textbox",
-            "label": "文书日期"
+            "label": "文件日期"
           },
           "source_selector": "operator-entered first OA notice time",
           "normalization": "ISO_LOCAL_DATETIME_SECONDS",
@@ -782,7 +782,7 @@
           "ui_route": "/documents/new",
           "control": {
             "role": "textbox",
-            "label": "文书日期"
+            "label": "文件日期"
           },
           "source_selector": "operator-entered second OA notice time",
           "normalization": "ISO_LOCAL_DATETIME_SECONDS",
@@ -1428,7 +1428,7 @@
           "ui_route": "/fee-management/gov-payments/new",
           "control": {
             "role": "textbox",
-            "label": "收据号"
+            "label": "官方收据号"
           },
           "source_selector": "visible disabled evidence field in demo command mode",
           "normalization": "EMPTY_EXACT",
@@ -1561,6 +1561,34 @@
         },
         {
           "stage": "10",
+          "field_key": "bill_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for the bill command",
+          "ui_route": "/billing/bills/new",
+          "control": {
+            "role": "button",
+            "label": "创建账单"
+          },
+          "source_selector": "current browser action ledger for the bill command",
+          "normalization": "OPAQUE_IDENTITY",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_bill",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique Stage 10 bill selected as the first payment target",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号（收款对象）"
+          },
+          "source_selector": "visible bill option matching AR-CYZN-<run suffix>",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
           "field_key": "payment_1_amount",
           "classification": "EXPLICIT_INPUT",
           "value_rule": "1200.00",
@@ -1585,6 +1613,20 @@
           },
           "source_selector": "operator-entered first payment date",
           "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_currency",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "CNY from the selected Stage 10 bill",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号（收款对象）"
+          },
+          "source_selector": "visible selected bill option and currency context",
+          "normalization": "ENUM_EXACT",
           "required": true
         },
         {
@@ -1631,6 +1673,118 @@
         },
         {
           "stage": "10",
+          "field_key": "payment_1_remark",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "澄岳智造技术（苏州）有限公司第一笔客户回款",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "textbox",
+            "label": "备注"
+          },
+          "source_selector": "operator-entered fixed first payment remark",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_1_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for the first payment command",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "button",
+            "label": "登记回款"
+          },
+          "source_selector": "current browser action ledger for the first payment command",
+          "normalization": "OPAQUE_IDENTITY",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_payment_line",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique unapplied payment line created by payment 1",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "combobox",
+            "label": "付款分录"
+          },
+          "source_selector": "visible first-payment line option",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_bill",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique Stage 10 bill selected as the first offset target",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号"
+          },
+          "source_selector": "visible bill option matching AR-CYZN-<run suffix>",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_amount",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "1200.00 from the selected payment 1 line balance",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "spinbutton",
+            "label": "核销金额"
+          },
+          "source_selector": "visible selected payment-line balance",
+          "normalization": "DECIMAL_2",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_date",
+          "classification": "EXPLICIT_INPUT",
+          "value_rule": "2026-08-25",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "textbox",
+            "label": "核销日期"
+          },
+          "source_selector": "operator-entered first offset date matching payment 1",
+          "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_1_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for the first offset command",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "button",
+            "label": "创建核销"
+          },
+          "source_selector": "current browser action ledger for the first offset command",
+          "normalization": "OPAQUE_IDENTITY",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_bill",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the refreshed Stage 10 bill selected as the second payment target",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号（收款对象）"
+          },
+          "source_selector": "visible bill option matching AR-CYZN-<run suffix> with authoritative balance 600.00",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
           "field_key": "payment_2_amount",
           "classification": "SOURCE_BOUND",
           "value_rule": "600.00 read after refreshing the partially settled bill",
@@ -1655,6 +1809,20 @@
           },
           "source_selector": "operator-entered second payment date",
           "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_currency",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "CNY from the selected Stage 10 bill",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号（收款对象）"
+          },
+          "source_selector": "visible selected bill option and currency context",
+          "normalization": "ENUM_EXACT",
           "required": true
         },
         {
@@ -1701,16 +1869,72 @@
         },
         {
           "stage": "10",
-          "field_key": "offset_1_date",
+          "field_key": "payment_2_remark",
           "classification": "EXPLICIT_INPUT",
-          "value_rule": "2026-08-25",
-          "ui_route": "/billing/payments",
+          "value_rule": "澄岳智造技术（苏州）有限公司第二笔客户回款",
+          "ui_route": "/billing/payments/new",
           "control": {
             "role": "textbox",
-            "label": "核销日期"
+            "label": "备注"
           },
-          "source_selector": "operator-entered first offset date matching payment 1",
-          "normalization": "ISO_DATE",
+          "source_selector": "operator-entered fixed second payment remark",
+          "normalization": "TRIM_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "payment_2_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for the second payment command",
+          "ui_route": "/billing/payments/new",
+          "control": {
+            "role": "button",
+            "label": "登记回款"
+          },
+          "source_selector": "current browser action ledger for the second payment command",
+          "normalization": "OPAQUE_IDENTITY",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_2_payment_line",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique unapplied payment line created by payment 2",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "combobox",
+            "label": "付款分录"
+          },
+          "source_selector": "visible second-payment line option",
+          "normalization": "IDENTITY_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_2_bill",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "the unique Stage 10 bill selected as the second offset target",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "combobox",
+            "label": "账单编号"
+          },
+          "source_selector": "visible bill option matching AR-CYZN-<run suffix> with authoritative balance 600.00",
+          "normalization": "IDENTITY_AND_STATE_EXACT",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_2_amount",
+          "classification": "SOURCE_BOUND",
+          "value_rule": "600.00 from the selected payment 2 line balance",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "spinbutton",
+            "label": "核销金额"
+          },
+          "source_selector": "visible selected payment-line balance",
+          "normalization": "DECIMAL_2",
           "required": true
         },
         {
@@ -1725,6 +1949,20 @@
           },
           "source_selector": "operator-entered second offset date matching payment 2",
           "normalization": "ISO_DATE",
+          "required": true
+        },
+        {
+          "stage": "10",
+          "field_key": "offset_2_idempotency_key",
+          "classification": "APP_GENERATED",
+          "value_rule": "unique idempotency key generated for the second offset command",
+          "ui_route": "/billing/payments",
+          "control": {
+            "role": "button",
+            "label": "创建核销"
+          },
+          "source_selector": "current browser action ledger for the second offset command",
+          "normalization": "OPAQUE_IDENTITY",
           "required": true
         }
       ],
