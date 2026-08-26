@@ -48,11 +48,11 @@ class DemoPreflightOut(DemoServiceItemOut):
     authority_classification: str
     customer_activation_eligible: bool
     readiness: str
-    run_id: str
-    candidate_commit: str
-    candidate_tree: str
+    run_id: str | None = None
+    candidate_commit: str | None = None
+    candidate_tree: str | None = None
     authority_sha256: str
-    contract_version: str
+    contract_version: str | None = None
     business_counts: DemoBusinessCountsOut
 
 

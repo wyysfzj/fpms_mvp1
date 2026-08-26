@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -12,10 +13,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator, NamedTuple
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +41,15 @@ SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6.live-backend.spec.ts"
 STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a-static-contract.mjs"
 V6_STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6-static-contract.mjs"
 DEFAULT_ARTIFACT = ROOT / "artifacts" / "FPMS-DEMO-INTEGRATED-A-DIAGNOSTIC"
-UI_SESSION_CONTRACT_VERSION = "fpms.demo-ui-session/v1"
+UI_SESSION_CONTRACT_VERSION = json.loads(
+    (
+        ROOT
+        / "FPMS_Automation_Skeleton_Pack"
+        / "data"
+        / "testcases"
+        / "demo_v6_ui_parity_v1.json"
+    ).read_text(encoding="utf-8")
+)["schema_id"]
 UI_SESSION_FINALIZE_SIGNAL = "FINALIZE_SUCCESS"
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
@@ -433,7 +446,97 @@ def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _stop_ui_process(process: subprocess.Popen[bytes] | None, *, interrupt: bool) -> None:
+class DemoRunContext(NamedTuple):
+    run_id: str
+    run_root: Path
+    database_path: Path
+    bundle: Path
+    manifest_sha: str
+    authority_sha: str
+    candidate_commit: str
+    candidate_tree: str
+    admin_password: str
+    reviewer_password: str
+    env: dict[str, str]
+
+
+class ObserverBinding(NamedTuple):
+    url: str
+
+
+def _new_run_context(
+    *,
+    run_id: str,
+    bundle: Path,
+    manifest_sha: str,
+    authority_sha: str,
+    candidate: dict[str, Any],
+    profile: str,
+    ui_session: bool,
+) -> DemoRunContext:
+    run_root = (
+        Path(tempfile.gettempdir()).resolve() / f"fpms-demo-abc-{run_id}"
+    )
+    database_path = run_root / "fpms-demo.db"
+    assert_fresh_run_paths(run_root, database_path)
+    admin_password = secrets.token_urlsafe(24)
+    reviewer_password = secrets.token_urlsafe(24)
+    env = os.environ.copy()
+    env.pop("FPMS_DEMO_UI_SESSION", None)
+    env.pop("FPMS_DEMO_CONTRACT_VERSION", None)
+    env.update(
+        FPMS_ENV="demo",
+        FPMS_DEMO_SCOPE="LOCAL_ABC_E2E",
+        FPMS_DEMO_RUN_PROFILE=profile,
+        FPMS_DEMO_RUN_ID=run_id,
+        FPMS_DEMO_BUNDLE_PATH=str(bundle),
+        FPMS_DEMO_EXPECTED_MANIFEST_SHA256=manifest_sha,
+        FPMS_DEMO_EXPECTED_AUTHORITY_SHA256=authority_sha,
+        FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION=(
+            "CUSTOMER_AUTHORIZED" if profile == "CUSTOMER_DEMO" else "SYNTHETIC_TEST_ONLY"
+        ),
+        FPMS_DEMO_CANDIDATE_COMMIT=str(candidate["commit"]),
+        FPMS_DEMO_CANDIDATE_TREE=str(candidate["tree"]),
+        FPMS_DEMO_ADMIN_USERNAME="admin",
+        FPMS_DEMO_ADMIN_PASSWORD=admin_password,
+        FPMS_DEMO_REVIEWER_USERNAME="demo_evidence_reviewer",
+        FPMS_DEMO_REVIEWER_PASSWORD=reviewer_password,
+        JWT_SECRET=secrets.token_urlsafe(48),
+        NO_PROXY="127.0.0.1,localhost",
+        no_proxy="127.0.0.1,localhost",
+    )
+    if ui_session:
+        env.update(
+            FPMS_DEMO_UI_SESSION="1",
+            FPMS_DEMO_CONTRACT_VERSION=UI_SESSION_CONTRACT_VERSION,
+        )
+    return DemoRunContext(
+        run_id=run_id,
+        run_root=run_root,
+        database_path=database_path,
+        bundle=bundle,
+        manifest_sha=manifest_sha,
+        authority_sha=authority_sha,
+        candidate_commit=str(candidate["commit"]),
+        candidate_tree=str(candidate["tree"]),
+        admin_password=admin_password,
+        reviewer_password=reviewer_password,
+        env=env,
+    )
+
+
+def _start_services(context: DemoRunContext, runner_log: Path) -> subprocess.Popen[bytes]:
+    with runner_log.open("wb") as output:
+        return subprocess.Popen(
+            [sys.executable, "-m", "scripts.run_local_demo_abc"],
+            cwd=BACKEND,
+            env=context.env,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+
+
+def _stop_process(process: subprocess.Popen[bytes] | None, *, interrupt: bool) -> None:
     if process is None or process.poll() is not None:
         return
     if interrupt:
@@ -447,21 +550,215 @@ def _stop_ui_process(process: subprocess.Popen[bytes] | None, *, interrupt: bool
         process.wait(timeout=10)
 
 
-def _remove_finalized_ui_run(artifact: Path, run_root: Path, run_id: str) -> None:
+def _remove_run_root(context: DemoRunContext) -> None:
+    run_root = context.run_root
+    run_id = context.run_id
+    abc.remove_run_root(run_root, run_id)
+
+
+def _remove_finalized_ui_run(artifact: Path, context: DemoRunContext) -> None:
     session = json.loads((artifact / "session.json").read_text(encoding="utf-8"))
     expected_root = (
-        Path(tempfile.gettempdir()).resolve() / f"fpms-demo-abc-{run_id}"
+        Path(tempfile.gettempdir()).resolve() / f"fpms-demo-abc-{context.run_id}"
     )
     if (
-        run_root.is_symlink()
-        or run_root != expected_root
-        or session.get("run_id") != run_id
-        or session.get("run_root") != str(run_root)
+        context.run_root.is_symlink()
+        or context.run_root != expected_root
+        or session.get("run_id") != context.run_id
+        or session.get("run_root") != str(context.run_root)
         or session.get("artifact") != str(artifact)
-        or not (run_root / "fpms-demo.db").is_file()
+        or not context.database_path.is_file()
     ):
-        raise RuntimeError(f"refusing invalid UI-session cleanup root: {run_root}")
-    abc.remove_run_root(run_root, run_id)
+        raise RuntimeError(f"refusing invalid UI-session cleanup root: {context.run_root}")
+    _remove_run_root(context)
+
+
+@contextmanager
+def _observer_binding(observer_root: Path) -> Iterator[ObserverBinding]:
+    observer_root = observer_root.resolve()
+    observer_root.mkdir(parents=True, exist_ok=True)
+
+    class Handler(BaseHTTPRequestHandler):
+        def _response(self, status: int, payload: dict[str, object]) -> None:
+            body = json.dumps(payload, separators=(",", ":")).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+
+        def do_POST(self) -> None:  # noqa: N802
+            try:
+                if self.path != "/observer-artifact":
+                    self._response(404, {"error": "NOT_FOUND"})
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 2_000_000:
+                    raise ValueError("invalid content length")
+                payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict) or not set(payload) <= {
+                    "filename",
+                    "content",
+                    "encoding",
+                }:
+                    raise ValueError("invalid observer payload")
+                filename = payload.get("filename")
+                if (
+                    not isinstance(filename, str)
+                    or re.fullmatch(
+                        r"observer-[a-z0-9][a-z0-9-]{0,95}\.(json|png)", filename
+                    )
+                    is None
+                ):
+                    raise ValueError("invalid observer filename")
+                target = (observer_root / filename).resolve()
+                if (
+                    target.parent != observer_root
+                    or target.exists()
+                    or target.is_symlink()
+                ):
+                    raise ValueError("invalid observer target")
+                if target.suffix == ".json":
+                    if payload.get("encoding") not in (None, "json"):
+                        raise ValueError("invalid observer encoding")
+                    _write_json(target, payload.get("content"))
+                else:
+                    if payload.get("encoding") != "base64" or not isinstance(
+                        payload.get("content"), str
+                    ):
+                        raise ValueError("invalid observer encoding")
+                    target.write_bytes(base64.b64decode(payload["content"], validate=True))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                self._response(400, {"error": "INVALID_OBSERVER_ARTIFACT"})
+                return
+            self._response(201, {"filename": filename})
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    try:
+        yield ObserverBinding(url=f"http://{host}:{port}/observer-artifact")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def _start_headed_browser(
+    command: list[str], env: dict[str, str]
+) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(command, cwd=PLAYWRIGHT, env=env)
+
+
+def _run_ui_browser_session(
+    args: argparse.Namespace,
+    context: DemoRunContext,
+    artifact: Path,
+) -> str:
+    artifact.mkdir(parents=True, exist_ok=True)
+    if not context.database_path.is_file():
+        raise RuntimeError("UI session database was not created")
+    _write_json(
+        artifact / "session.json",
+        {
+            "contract_version": UI_SESSION_CONTRACT_VERSION,
+            "actor": args.actor,
+            "run_id": context.run_id,
+            "run_root": str(context.run_root),
+            "database_path": str(context.database_path),
+            "artifact": str(artifact),
+            "candidate_commit": context.candidate_commit,
+            "candidate_tree": context.candidate_tree,
+            "authority_sha256": context.authority_sha,
+        },
+    )
+    observer_root = (artifact / "observer").resolve()
+    browser_process: subprocess.Popen[bytes] | None = None
+    try:
+        with _observer_binding(observer_root) as binding:
+            page_url = "http://127.0.0.1:5173/?" + urlencode(
+                {"fpmsObserverBinding": binding.url}
+            )
+            browser_command = [
+                "node",
+                "./node_modules/.bin/playwright",
+                "open",
+                "--browser=chromium",
+                page_url,
+            ]
+            _write_json(
+                observer_root / "finalize-binding.json",
+                {
+                    "contract_version": UI_SESSION_CONTRACT_VERSION,
+                    "run_id": context.run_id,
+                    "observer_artifact_root": str(observer_root),
+                    "observer_binding_url": binding.url,
+                    "success_signal": UI_SESSION_FINALIZE_SIGNAL,
+                    "browser_command": browser_command,
+                },
+            )
+            browser_process = _start_headed_browser(browser_command, context.env)
+            print(
+                json.dumps(
+                    {
+                        "run_id": context.run_id,
+                        "url": page_url,
+                        "credentials": [
+                            {"username": "admin", "password": "<redacted>"},
+                            {
+                                "username": "demo_evidence_reviewer",
+                                "password": "<redacted>",
+                            },
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            try:
+                response = input(
+                    f"Type {UI_SESSION_FINALIZE_SIGNAL} to finalize, or STOP to preserve: "
+                )
+            except (EOFError, KeyboardInterrupt):
+                response = "STOP"
+            return "FINALIZED" if response == UI_SESSION_FINALIZE_SIGNAL else "STOPPED"
+    except Exception:
+        _write_json(
+            observer_root / "session-status.json",
+            {"status": "FAILED", "run_id": context.run_id, "run_root_removed": False},
+        )
+        raise
+    finally:
+        _stop_process(browser_process, interrupt=False)
+
+
+def _complete_ui_session(
+    context: DemoRunContext,
+    artifact: Path,
+    status: str,
+) -> None:
+    if status == "FINALIZED":
+        _remove_finalized_ui_run(artifact, context)
+    _write_json(
+        artifact / "observer" / "session-status.json",
+        {
+            "status": status,
+            "run_id": context.run_id,
+            "run_root_removed": not context.run_root.exists(),
+        },
+    )
 
 
 def _run_ui_session(
@@ -476,128 +773,30 @@ def _run_ui_session(
     artifact = artifact.resolve()
     if artifact.exists() or artifact.is_symlink():
         raise RuntimeError(f"evidence path already exists: {artifact}")
-    run_id = f"ui-{str(args.actor).lower()}-{secrets.token_hex(6)}"
-    run_root = (
-        Path(tempfile.gettempdir()).resolve() / f"fpms-demo-abc-{run_id}"
+    context = _new_run_context(
+        run_id=f"ui-{str(args.actor).lower()}-{secrets.token_hex(6)}",
+        bundle=bundle,
+        manifest_sha=manifest_sha,
+        authority_sha=authority_sha,
+        candidate=candidate,
+        profile="TECHNICAL_REHEARSAL",
+        ui_session=True,
     )
-    database_path = run_root / "fpms-demo.db"
-    assert_fresh_run_paths(run_root, database_path)
-    admin_password = secrets.token_urlsafe(24)
-    reviewer_password = secrets.token_urlsafe(24)
-    jwt_secret = secrets.token_urlsafe(48)
-    env = os.environ.copy()
-    env.update(
-        FPMS_ENV="demo",
-        FPMS_DEMO_SCOPE="LOCAL_ABC_E2E",
-        FPMS_DEMO_RUN_PROFILE="TECHNICAL_REHEARSAL",
-        FPMS_DEMO_RUN_ID=run_id,
-        FPMS_DEMO_BUNDLE_PATH=str(bundle),
-        FPMS_DEMO_EXPECTED_MANIFEST_SHA256=manifest_sha,
-        FPMS_DEMO_EXPECTED_AUTHORITY_SHA256=authority_sha,
-        FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION="SYNTHETIC_TEST_ONLY",
-        FPMS_DEMO_CANDIDATE_COMMIT=str(candidate["commit"]),
-        FPMS_DEMO_CANDIDATE_TREE=str(candidate["tree"]),
-        FPMS_DEMO_CONTRACT_VERSION=UI_SESSION_CONTRACT_VERSION,
-        FPMS_DEMO_ADMIN_USERNAME="admin",
-        FPMS_DEMO_ADMIN_PASSWORD=admin_password,
-        FPMS_DEMO_REVIEWER_USERNAME="demo_evidence_reviewer",
-        FPMS_DEMO_REVIEWER_PASSWORD=reviewer_password,
-        JWT_SECRET=jwt_secret,
-        NO_PROXY="127.0.0.1,localhost",
-        no_proxy="127.0.0.1,localhost",
-    )
-    browser_command = [
-        "node",
-        "./node_modules/.bin/playwright",
-        "open",
-        "--browser=chromium",
-        "http://127.0.0.1:5173",
-    ]
     artifact.mkdir(parents=True)
-    service_process: subprocess.Popen[bytes] | None = None
-    browser_process: subprocess.Popen[bytes] | None = None
-    status = "FAILED"
+    service_process = _start_services(context, artifact / "runner.log")
     try:
-        with (artifact / "runner.log").open("wb") as output:
-            service_process = subprocess.Popen(
-                [sys.executable, "-m", "scripts.run_local_demo_abc"],
-                cwd=BACKEND,
-                env=env,
-                stdout=output,
-                stderr=subprocess.STDOUT,
-            )
         abc.wait_url("http://127.0.0.1:8000/healthz", service_process)
         abc.wait_url("http://127.0.0.1:5173", service_process)
-        if not database_path.is_file():
-            raise RuntimeError("UI session database was not created")
-        _write_json(
-            artifact / "session.json",
-            {
-                "contract_version": UI_SESSION_CONTRACT_VERSION,
-                "actor": args.actor,
-                "run_id": run_id,
-                "run_root": str(run_root),
-                "database_path": str(database_path),
-                "artifact": str(artifact),
-                "candidate_commit": candidate["commit"],
-                "candidate_tree": candidate["tree"],
-                "authority_sha256": authority_sha,
-            },
-        )
-        observer_root = (artifact / "observer").resolve()
-        _write_json(
-            observer_root / "finalize-binding.json",
-            {
-                "contract_version": UI_SESSION_CONTRACT_VERSION,
-                "run_id": run_id,
-                "observer_artifact_root": str(observer_root),
-                "success_signal": UI_SESSION_FINALIZE_SIGNAL,
-                "browser_command": browser_command,
-            },
-        )
-        browser_process = subprocess.Popen(browser_command, cwd=PLAYWRIGHT, env=env)
-        print(
-            json.dumps(
-                {
-                    "run_id": run_id,
-                    "url": "http://127.0.0.1:5173",
-                    "credentials": [
-                        {"username": "admin", "password": "<redacted>"},
-                        {
-                            "username": "demo_evidence_reviewer",
-                            "password": "<redacted>",
-                        },
-                    ],
-                },
-                ensure_ascii=False,
-            )
-        )
-        try:
-            response = input(
-                f"Type {UI_SESSION_FINALIZE_SIGNAL} to finalize, or STOP to preserve: "
-            )
-        except (EOFError, KeyboardInterrupt):
-            response = "STOP"
-        status = "FINALIZED" if response == UI_SESSION_FINALIZE_SIGNAL else "STOPPED"
+        status = _run_ui_browser_session(args, context, artifact)
     except Exception:
         _write_json(
             artifact / "observer" / "session-status.json",
-            {"status": "FAILED", "run_id": run_id, "run_root_removed": False},
+            {"status": "FAILED", "run_id": context.run_id, "run_root_removed": False},
         )
         raise
     finally:
-        _stop_ui_process(browser_process, interrupt=False)
-        _stop_ui_process(service_process, interrupt=True)
-    if status == "FINALIZED":
-        _remove_finalized_ui_run(artifact, run_root, run_id)
-    _write_json(
-        artifact / "observer" / "session-status.json",
-        {
-            "status": status,
-            "run_id": run_id,
-            "run_root_removed": not run_root.exists(),
-        },
-    )
+        _stop_process(service_process, interrupt=True)
+    _complete_ui_session(context, artifact, status)
 
 
 def _checkpoint_map(run_artifact: Path) -> dict[str, dict[str, Any]]:
@@ -749,9 +948,20 @@ def _run_one(
     profile: str,
 ) -> None:
     run_id = f"integrated-r{ordinal}-{secrets.token_hex(6)}"
-    run_root = (Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}").resolve()
-    database_path = run_root / "fpms-demo.db"
-    assert_fresh_run_paths(run_root, database_path)
+    context = _new_run_context(
+        run_id=run_id,
+        bundle=bundle,
+        manifest_sha=manifest_sha,
+        authority_sha=authority_sha,
+        candidate=candidate,
+        profile=profile,
+        ui_session=False,
+    )
+    run_root = context.run_root
+    database_path = context.database_path
+    admin_password = context.admin_password
+    reviewer_password = context.reviewer_password
+    env = context.env
     run_artifact = artifact / f"run{ordinal}"
     run_artifact.mkdir()
     _write_json(
@@ -768,41 +978,9 @@ def _run_one(
     rate = manifest["rates"][0]
     if rate.get("name_zh_cn") != REHEARSAL_SCENARIO["service_item_name"]:
         raise RuntimeError("integrated service item does not match the approved scenario")
-    admin_password = secrets.token_urlsafe(24)
-    reviewer_password = secrets.token_urlsafe(24)
     oa_reply_outputs = materialize_oa_reply_outputs(run_artifact / "oa-reply-outputs")
-    env = os.environ.copy()
-    env.update(
-        FPMS_ENV="demo",
-        FPMS_DEMO_SCOPE="LOCAL_ABC_E2E",
-        FPMS_DEMO_RUN_PROFILE=profile,
-        FPMS_DEMO_RUN_ID=run_id,
-        FPMS_DEMO_BUNDLE_PATH=str(bundle),
-        FPMS_DEMO_EXPECTED_MANIFEST_SHA256=manifest_sha,
-        FPMS_DEMO_EXPECTED_AUTHORITY_SHA256=authority_sha,
-        FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION=(
-            "CUSTOMER_AUTHORIZED" if profile == "CUSTOMER_DEMO" else "SYNTHETIC_TEST_ONLY"
-        ),
-        FPMS_DEMO_CANDIDATE_COMMIT=str(candidate["commit"]),
-        FPMS_DEMO_CANDIDATE_TREE=str(candidate["tree"]),
-        FPMS_DEMO_CONTRACT_VERSION=UI_SESSION_CONTRACT_VERSION,
-        FPMS_DEMO_ADMIN_USERNAME="admin",
-        FPMS_DEMO_ADMIN_PASSWORD=admin_password,
-        FPMS_DEMO_REVIEWER_USERNAME="demo_evidence_reviewer",
-        FPMS_DEMO_REVIEWER_PASSWORD=reviewer_password,
-        JWT_SECRET=secrets.token_urlsafe(48),
-        NO_PROXY="127.0.0.1,localhost",
-        no_proxy="127.0.0.1,localhost",
-    )
     runner_log = run_artifact / "runner.log"
-    with runner_log.open("wb") as output:
-        runner = subprocess.Popen(
-            [sys.executable, "-m", "scripts.run_local_demo_abc"],
-            cwd=BACKEND,
-            env=env,
-            stdout=output,
-            stderr=subprocess.STDOUT,
-        )
+    runner = _start_services(context, runner_log)
     try:
         abc.wait_url("http://127.0.0.1:8000/healthz", runner)
         abc.wait_url("http://127.0.0.1:5173", runner)
@@ -886,17 +1064,11 @@ def _run_one(
             },
         )
     finally:
-        if runner.poll() is None:
-            runner.send_signal(signal.SIGINT)
-        try:
-            runner.wait(timeout=20)
-        except subprocess.TimeoutExpired:
-            runner.kill()
-            runner.wait(timeout=10)
+        _stop_process(runner, interrupt=True)
         if run_root.exists():
             if run_root.parent != Path(tempfile.gettempdir()).resolve() or not run_root.name.startswith("fpms-demo-abc-integrated-r"):
                 raise RuntimeError(f"refusing unexpected cleanup root: {run_root}")
-            abc.remove_run_root(run_root, run_id)
+            _remove_run_root(context)
         _write_json(run_artifact / "cleanup.json", {"run_id": run_id, "run_root_removed": not run_root.exists()})
 
 

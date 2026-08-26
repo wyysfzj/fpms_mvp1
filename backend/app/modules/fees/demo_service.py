@@ -66,7 +66,15 @@ from app.modules.fees.service import get_fee_draft, list_fee_items
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SOURCE_SCHEMA = "FPMS_DEMO_SERVICE_PRICE_ITEMS_SELECTED_V2"
 _INTEGRATED_SCHEMA = "fpms.demo-input-bundle/integrated-a-v2"
-_UI_SESSION_CONTRACT_VERSION = "fpms.demo-ui-session/v1"
+_UI_SESSION_CONTRACT_VERSION = json.loads(
+    (
+        _REPO_ROOT
+        / "FPMS_Automation_Skeleton_Pack"
+        / "data"
+        / "testcases"
+        / "demo_v6_ui_parity_v1.json"
+    ).read_text(encoding="utf-8")
+)["schema_id"]
 SYSTEM_RUNTIME_TABLE_ALLOWLIST = frozenset(
     {
         "t_user",
@@ -115,11 +123,11 @@ class DemoPreflightResult(DemoServiceItems):
     authority_classification: str
     customer_activation_eligible: bool
     readiness: str
-    run_id: str
-    candidate_commit: str
-    candidate_tree: str
+    run_id: str | None
+    candidate_commit: str | None
+    candidate_tree: str | None
     authority_sha256: str
-    contract_version: str
+    contract_version: str | None
     business_counts: dict[str, int]
 
 
@@ -283,14 +291,15 @@ def get_demo_preflight(transaction: Session) -> DemoPreflightResult:
     if snapshot.schema_version != _INTEGRATED_SCHEMA:
         raise _config_required("当前输入不是集成演示方案 A 的运行包")
     item = _demo_service_items(snapshot)
-    run_id = os.environ.get("FPMS_DEMO_RUN_ID", "")
-    candidate_commit = os.environ.get("FPMS_DEMO_CANDIDATE_COMMIT", "")
-    candidate_tree = os.environ.get("FPMS_DEMO_CANDIDATE_TREE", "")
-    contract_version = os.environ.get("FPMS_DEMO_CONTRACT_VERSION", "")
-    if not run_id or not candidate_commit or not candidate_tree:
-        raise _config_required("本地演示运行身份未配置")
-    if contract_version != _UI_SESSION_CONTRACT_VERSION:
-        raise _config_required("本地演示会话契约版本无效")
+    run_id = os.environ.get("FPMS_DEMO_RUN_ID") or None
+    candidate_commit = os.environ.get("FPMS_DEMO_CANDIDATE_COMMIT") or None
+    candidate_tree = os.environ.get("FPMS_DEMO_CANDIDATE_TREE") or None
+    contract_version = os.environ.get("FPMS_DEMO_CONTRACT_VERSION") or None
+    if os.environ.get("FPMS_DEMO_UI_SESSION") == "1":
+        if not run_id or not candidate_commit or not candidate_tree:
+            raise _config_required("本地演示运行身份未配置")
+        if contract_version != _UI_SESSION_CONTRACT_VERSION:
+            raise _config_required("本地演示会话契约版本无效")
     business_tables = sorted(set(Base.metadata.tables) - SYSTEM_RUNTIME_TABLE_ALLOWLIST)
     counts = {
         name: int(
