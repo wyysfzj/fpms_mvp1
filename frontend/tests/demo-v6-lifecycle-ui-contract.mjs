@@ -202,6 +202,14 @@ const reviewedDraftReceiptDocuments = [
   },
 ]
 assert.deepEqual(documents.selectReviewedEvidenceOptions(reviewedDraftReceiptDocuments, 'case-a'), [])
+assert.equal(documents.selectReviewedEvidenceOptions.length, 2)
+const ordinaryNonFinalEvidence = [{
+  id: 'ordinary-non-final-document', case_id: 'case-a', title: '普通非最终证据', direction: 'IN', attachments: [
+    approvedAttachment({ id: 'ordinary-non-final', document_id: 'ordinary-non-final-document', role: 'OTHER', is_final: false, evidence_version_id: 'ordinary-non-final-version' }),
+  ],
+}]
+assert.deepEqual(documents.selectReviewedEvidenceOptions(ordinaryNonFinalEvidence, 'case-a'), [])
+assert.deepEqual(documents.selectReviewedEvidenceOptions(ordinaryNonFinalEvidence, 'case-a', false), [])
 assert.deepEqual(
   documents.selectReviewedReceiptEvidenceOptions(reviewedDraftReceiptDocuments, 'case-a').map((row) => row.attachment_id),
   ['draft-role', 'draft-receipt-flag', 'draft-archive-flag'],

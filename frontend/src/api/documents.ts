@@ -166,7 +166,6 @@ function mapDocument(input: BackendDocument): Document {
 export function selectReviewedEvidenceOptions(
     documents: Document[],
     caseId: string,
-    requireFinal = true,
 ): ReviewedDocumentEvidenceOption[] {
     if (!caseId.trim()) return []
     const options = documents.flatMap((document) => {
@@ -177,7 +176,7 @@ export function selectReviewedEvidenceOptions(
                 attachment.document_id && attachment.document_id !== document.id
                 || attachment.review_state !== 'APPROVED'
                 || attachment.is_current !== true
-                || (requireFinal && attachment.is_final !== true)
+                || attachment.is_final !== true
                 || !attachment.evidence_version_id
                 || !attachment.content_hash
                 || !/^sha256:[0-9a-f]{64}$/.test(attachment.content_hash)
@@ -229,17 +228,52 @@ export function selectReviewedReceiptEvidenceOptions(
     documents: Document[],
     caseId: string,
 ): ReviewedDocumentEvidenceOption[] {
+    if (!caseId.trim()) return []
     const receiptRoles = new Set(['ELECTRONIC_RECEIPT', 'RECEIPT_PDF', 'MERGED_PDF'])
-    const attachments = new Map(
-        documents.flatMap((document) => (document.attachments || []).map((attachment) => [attachment.id, attachment] as const)),
-    )
-    return selectReviewedEvidenceOptions(documents, caseId, false).filter((option) => {
-        const attachment = attachments.get(option.attachment_id)
-        return Boolean(
-            attachment
-            && (attachment.is_receipt_evidence || attachment.is_archive_evidence || receiptRoles.has(option.role))
-        )
+    const options = documents.flatMap((document) => {
+        if (document.case_id !== caseId) return []
+        return (document.attachments || []).flatMap((attachment) => {
+            const role = String(attachment.role || attachment.official_file_role || '').trim()
+            if (
+                attachment.document_id && attachment.document_id !== document.id
+                || attachment.review_state !== 'APPROVED'
+                || attachment.is_current !== true
+                || !attachment.evidence_version_id
+                || !attachment.content_hash
+                || !/^sha256:[0-9a-f]{64}$/.test(attachment.content_hash)
+                || !role
+                || !(
+                    attachment.is_receipt_evidence
+                    || attachment.is_archive_evidence
+                    || receiptRoles.has(role)
+                )
+            ) return []
+            return [{
+                document_id: document.id,
+                case_id: caseId,
+                title: document.title,
+                attachment_id: attachment.id,
+                filename: attachment.filename,
+                role,
+                evidence_version_id: attachment.evidence_version_id,
+                content_hash: attachment.content_hash,
+            }]
+        })
     })
+    const identityCounts = new Map<string, number>()
+    for (const option of options) {
+        const identity = JSON.stringify([
+            option.document_id,
+            option.evidence_version_id,
+            option.content_hash,
+        ])
+        identityCounts.set(identity, (identityCounts.get(identity) || 0) + 1)
+    }
+    return options.filter((option) => identityCounts.get(JSON.stringify([
+        option.document_id,
+        option.evidence_version_id,
+        option.content_hash,
+    ])) === 1)
 }
 
 export async function getCaseDocumentsWithEvidence(caseId: string): Promise<Document[]> {
