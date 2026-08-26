@@ -215,12 +215,54 @@ export function selectReviewedReplyDocumentOptions(
     caseId: string,
     sourceDocumentId: string,
 ): ReviewedReplyDocumentOption[] {
-    if (!sourceDocumentId.trim()) return []
-    const byDocument = new Map(documents.map((document) => [document.id, document]))
-    return selectReviewedEvidenceOptions(documents, caseId).flatMap((option) => {
-        const document = byDocument.get(option.document_id)
-        if (!document || document.direction !== 'OUT' || document.reply_to_id !== sourceDocumentId) return []
-        return [{ ...option, ref_no: document.ref_no, doc_date: document.doc_date }]
+    if (!caseId.trim() || !sourceDocumentId.trim()) return []
+    const requiredRoles = ['OA_STATEMENT_WORD', 'OA_STATEMENT_PDF', 'OA_MODIFIED_CLAIMS']
+    return documents.flatMap((document) => {
+        if (
+            document.case_id !== caseId
+            || document.direction !== 'OUT'
+            || document.reply_to_id !== sourceDocumentId
+        ) return []
+
+        const attachmentsByRole = new Map(requiredRoles.map((role) => [role, [] as Attachment[]]))
+        for (const attachment of document.attachments || []) {
+            const role = String(attachment.role || attachment.official_file_role || '').trim()
+            attachmentsByRole.get(role)?.push(attachment)
+        }
+        if (requiredRoles.some((role) => attachmentsByRole.get(role)?.length !== 1)) return []
+
+        const requiredAttachments = requiredRoles.map((role) => attachmentsByRole.get(role)![0])
+        if (requiredAttachments.some((attachment) => (
+            attachment.document_id && attachment.document_id !== document.id
+            || attachment.review_state !== 'APPROVED'
+            || attachment.is_current !== true
+            || typeof attachment.evidence_version_id !== 'string'
+            || !attachment.evidence_version_id.trim()
+            || attachment.evidence_version_id !== attachment.evidence_version_id.trim()
+            || typeof attachment.content_hash !== 'string'
+            || !/^sha256:[0-9a-f]{64}$/.test(attachment.content_hash)
+        ))) return []
+
+        const identities = requiredAttachments.map((attachment) => JSON.stringify([
+            document.id,
+            attachment.evidence_version_id,
+            attachment.content_hash,
+        ]))
+        if (new Set(identities).size !== requiredRoles.length) return []
+
+        const representative = requiredAttachments[0]
+        return [{
+            document_id: document.id,
+            case_id: caseId,
+            title: document.title,
+            attachment_id: representative.id,
+            filename: representative.filename,
+            role: requiredRoles[0],
+            evidence_version_id: representative.evidence_version_id!,
+            content_hash: representative.content_hash!,
+            ref_no: document.ref_no,
+            doc_date: document.doc_date,
+        }]
     })
 }
 

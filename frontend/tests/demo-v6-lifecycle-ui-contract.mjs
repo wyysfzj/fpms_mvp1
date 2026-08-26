@@ -40,6 +40,7 @@ for (const label of ['记录受理通知', '开始初步审查', '记录初审�
   assert.match(lifecyclePanel, new RegExp(label))
 }
 assert.match(oaPage, /答复文书/)
+assert.match(oaPage, /selectReviewedReplyDocumentOptions/)
 assert.match(oaPage, /linkReviewedOaReplyDocument/)
 assert.match(receiptPanel, /回执文件/)
 assert.match(receiptPanel, /createReviewedOfficialWorkPackageReceipt/)
@@ -93,6 +94,8 @@ const official = await importFunctions(
 
 const hashA = `sha256:${'a'.repeat(64)}`
 const hashB = `sha256:${'b'.repeat(64)}`
+const hashC = `sha256:${'c'.repeat(64)}`
+const hashD = `sha256:${'d'.repeat(64)}`
 for (const templateCode of [
   'OA_IN',
   'OFFICIAL_NOTICE_003',
@@ -163,6 +166,11 @@ const approvedAttachment = (overrides = {}) => ({
   evidence_version_id: 'evidence-approved', content_hash: hashA, role: 'ACCEPTANCE_NOTICE',
   review_state: 'APPROVED', is_current: true, is_final: true, ...overrides,
 })
+const reviewedReplyAttachments = (documentId, prefix) => [
+  approvedAttachment({ id: `${prefix}-pdf`, document_id: documentId, filename: `${prefix}-陈述意见.pdf`, role: 'OA_STATEMENT_PDF', official_file_role: 'OA_STATEMENT_PDF', evidence_version_id: `${prefix}-pdf-version`, content_hash: hashB, is_final: false }),
+  approvedAttachment({ id: `${prefix}-claims`, document_id: documentId, filename: `${prefix}-修改后权利要求书.docx`, role: 'OA_MODIFIED_CLAIMS', official_file_role: 'OA_MODIFIED_CLAIMS', evidence_version_id: `${prefix}-claims-version`, content_hash: hashC, is_final: false }),
+  approvedAttachment({ id: `${prefix}-word`, document_id: documentId, filename: `${prefix}-陈述意见.docx`, role: 'OA_STATEMENT_WORD', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: `${prefix}-word-version`, content_hash: hashA, is_final: false }),
+]
 const caseDocuments = [
   { id: 'document-acceptance', case_id: 'case-a', title: '受理通知书', direction: 'IN', attachments: [approvedAttachment()] },
   { id: 'document-unreviewed', case_id: 'case-a', title: '未复核', direction: 'IN', attachments: [approvedAttachment({ id: 'pending', review_state: 'PENDING' })] },
@@ -197,17 +205,69 @@ assert.equal(httpCalls.length, callsBeforeCollision)
 
 const replyDocuments = [
   ...caseDocuments,
-  { id: 'reply-oa1', case_id: 'case-a', title: 'OA1答复', direction: 'OUT', reply_to_id: 'oa1', attachments: [approvedAttachment({ id: 'reply-a', document_id: 'reply-oa1', filename: 'OA1答复.pdf', evidence_version_id: 'reply-evidence-a', content_hash: hashA, role: 'OA_REPLY' })] },
-  { id: 'reply-oa2', case_id: 'case-a', title: 'OA2答复', direction: 'OUT', reply_to_id: 'oa2', attachments: [approvedAttachment({ id: 'reply-b', document_id: 'reply-oa2', filename: 'OA2答复.pdf', evidence_version_id: 'reply-evidence-b', content_hash: hashB, role: 'OA_REPLY' })] },
+  { id: 'reply-oa1', case_id: 'case-a', title: 'OA1答复', direction: 'OUT', reply_to_id: 'oa1', ref_no: 'OA-REPLY-1', doc_date: '2026-08-03', attachments: reviewedReplyAttachments('reply-oa1', 'oa1') },
+  { id: 'reply-oa2', case_id: 'case-a', title: 'OA2答复', direction: 'OUT', reply_to_id: 'oa2', ref_no: 'OA-REPLY-2', doc_date: '2026-08-04', attachments: reviewedReplyAttachments('reply-oa2', 'oa2') },
 ]
-assert.deepEqual(
-  documents.selectReviewedReplyDocumentOptions(replyDocuments, 'case-a', 'oa1').map((row) => row.document_id),
-  ['reply-oa1'],
-)
+const reviewedReplyOptions = documents.selectReviewedReplyDocumentOptions(replyDocuments, 'case-a', 'oa1')
+assert.deepEqual(reviewedReplyOptions, [{
+  document_id: 'reply-oa1', case_id: 'case-a', title: 'OA1答复',
+  attachment_id: 'oa1-word', filename: 'oa1-陈述意见.docx', role: 'OA_STATEMENT_WORD',
+  evidence_version_id: 'oa1-word-version', content_hash: hashA,
+  ref_no: 'OA-REPLY-1', doc_date: '2026-08-03',
+}])
 assert.deepEqual(
   documents.selectReviewedReplyDocumentOptions(replyDocuments, 'case-a', 'oa2').map((row) => row.document_id),
   ['reply-oa2'],
 )
+assert.deepEqual(documents.selectReviewedEvidenceOptions(replyDocuments.slice(-2), 'case-a'), [])
+
+const eligibleReplyDocument = replyDocuments.at(-2)
+function assertReplyDocumentRejected(name, mutate) {
+  const candidate = structuredClone(eligibleReplyDocument)
+  mutate(candidate)
+  assert.deepEqual(documents.selectReviewedReplyDocumentOptions([candidate], 'case-a', 'oa1'), [], name)
+}
+assertReplyDocumentRejected('missing required role', (document) => {
+  document.attachments = document.attachments.filter((attachment) => attachment.role !== 'OA_STATEMENT_PDF')
+})
+assertReplyDocumentRejected('pending required role', (document) => {
+  document.attachments[0].review_state = 'PENDING'
+})
+assertReplyDocumentRejected('rejected required role', (document) => {
+  document.attachments[0].review_state = 'REJECTED'
+})
+assertReplyDocumentRejected('noncurrent required role', (document) => {
+  document.attachments[0].is_current = false
+})
+assertReplyDocumentRejected('wrong case', (document) => {
+  document.case_id = 'case-b'
+})
+assertReplyDocumentRejected('wrong source', (document) => {
+  document.reply_to_id = 'oa2'
+})
+assertReplyDocumentRejected('wrong direction', (document) => {
+  document.direction = 'IN'
+})
+assertReplyDocumentRejected('missing evidence identity', (document) => {
+  document.attachments[0].evidence_version_id = ''
+})
+assertReplyDocumentRejected('padded evidence identity', (document) => {
+  document.attachments[0].evidence_version_id = ' padded-version '
+})
+assertReplyDocumentRejected('mismatched attachment identity', (document) => {
+  document.attachments[0].document_id = 'another-document'
+})
+assertReplyDocumentRejected('invalid evidence hash', (document) => {
+  document.attachments[0].content_hash = `sha256:${'A'.repeat(64)}`
+})
+assertReplyDocumentRejected('duplicate required role', (document) => {
+  document.attachments.push(approvedAttachment({ id: 'oa1-word-duplicate', document_id: document.id, filename: '重复陈述意见.docx', role: 'OA_STATEMENT_WORD', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: 'oa1-word-duplicate-version', content_hash: hashD, is_final: false }))
+})
+assertReplyDocumentRejected('colliding required identity', (document) => {
+  const word = document.attachments.find((attachment) => attachment.role === 'OA_STATEMENT_WORD')
+  document.attachments[0].evidence_version_id = word.evidence_version_id
+  document.attachments[0].content_hash = word.content_hash
+})
 
 const time = { effective_at: '2026-08-02T10:00:00', occurred_at: null, idempotency_key: 'lifecycle-action-1' }
 for (const [action, path] of [
