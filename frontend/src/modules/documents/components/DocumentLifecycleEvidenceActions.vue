@@ -15,7 +15,7 @@
       show-icon
     />
     <el-form v-else label-position="top">
-      <el-form-item label="证据文件">
+      <el-form-item :label="isOaNoticeDocument ? '已复核证据版本' : '证据文件'">
         <el-select v-model="selectedEvidenceKey" placeholder="请选择标题、角色和文件名匹配的证据">
           <el-option
             v-for="option in evidenceOptions"
@@ -84,6 +84,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  isOaNoticeTemplateCode,
   recordDocumentLifecycleEvidence,
   selectReviewedEvidenceOptions,
 } from '../../../api/documents'
@@ -108,13 +109,18 @@ const occurredAt = ref('')
 const recordedAt = ref('')
 const runningAction = ref<DocumentLifecycleActionCode | 'GRANT_NOTICE' | ''>('')
 
-const actions: Array<{ code: DocumentLifecycleActionCode; label: string }> = [
+const baseActions: Array<{ code: DocumentLifecycleActionCode; label: string }> = [
   { code: 'ACCEPTANCE_NOTICE', label: '记录受理通知' },
   { code: 'PRELIMINARY_START', label: '开始初步审查' },
   { code: 'PRELIMINARY_PASS', label: '记录初审通过' },
   { code: 'PUBLICATION_NOTICE', label: '记录公布通知' },
   { code: 'SUBSTANTIVE_START', label: '开始实质审查' },
 ]
+const isOaNoticeDocument = computed(() => isOaNoticeTemplateCode(props.document.template_code))
+const actions = computed(() => isOaNoticeDocument.value
+  ? [...baseActions, { code: 'OA_NOTICE' as const, label: '记录审查意见通知' }]
+  : baseActions
+)
 
 const evidenceOptions = computed(() =>
   selectReviewedEvidenceOptions([props.document], props.document.case_id || '')

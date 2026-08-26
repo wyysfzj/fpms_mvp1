@@ -320,7 +320,13 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCase, getCases } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
-import { createDocument, getDocTemplates, getDocuments, previewDocumentImpact } from '../../../api/documents'
+import {
+  createDocument,
+  getDocTemplates,
+  getDocuments,
+  isOaNoticeTemplateCode,
+  previewDocumentImpact,
+} from '../../../api/documents'
 import type { DocumentCreatePayload, DocumentImpactItem, DocumentImpactPreviewResult } from '../../../api/documents.types'
 import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
@@ -491,14 +497,19 @@ function onTemplateChange(templateId: string | null) {
 let impactPreviewRequestSeq = 0
 
 async function fetchImpactPreview() {
-  if (!form.case_id || !form.title.trim() || !form.doc_date || !form.direction) {
+  const requestSeq = ++impactPreviewRequestSeq
+  const missingOaDeadline = isOaNoticeTemplateCode(selectedTemplate.value?.code) && !(
+    form.official_due_date
+    && form.official_due_date_source
+    && form.official_due_date_status
+  )
+  if (!form.case_id || !form.title.trim() || !form.doc_date || !form.direction || missingOaDeadline) {
     impactPreview.value = null
     impactPreviewError.value = null
     impactPreviewLoading.value = false
     return
   }
 
-  const requestSeq = ++impactPreviewRequestSeq
   impactPreviewLoading.value = true
   impactPreviewError.value = null
 

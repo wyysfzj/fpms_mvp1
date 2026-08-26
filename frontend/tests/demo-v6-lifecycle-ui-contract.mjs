@@ -25,6 +25,8 @@ assert.equal(documentPage.match(/<DocumentLifecycleEvidenceActions/g)?.length, 1
 for (const label of ['记录受理通知', '开始初步审查', '记录初审通过', '记录公布通知', '开始实质审查']) {
   assert.match(lifecyclePanel, new RegExp(label))
 }
+assert.match(lifecyclePanel, /已复核证据版本/)
+assert.match(lifecyclePanel, /记录审查意见通知/)
 assert.match(oaPage, /答复文书/)
 assert.match(oaPage, /linkReviewedOaReplyDocument/)
 assert.match(receiptPanel, /回执文件/)
@@ -61,6 +63,7 @@ const documents = await importFunctions(
     'selectReviewedEvidenceOptions',
     'selectReviewedReplyDocumentOptions',
     'selectReviewedReceiptEvidenceOptions',
+    'isOaNoticeTemplateCode',
     'recordDocumentLifecycleEvidence',
   ],
   'const http = globalThis.__ordinal04Http',
@@ -78,6 +81,19 @@ const official = await importFunctions(
 
 const hashA = `sha256:${'a'.repeat(64)}`
 const hashB = `sha256:${'b'.repeat(64)}`
+for (const templateCode of [
+  'OA_IN',
+  'OFFICIAL_NOTICE_003',
+  'OFFICIAL_NOTICE_005',
+  'OFFICIAL_NOTICE_021',
+  'OFFICIAL_NOTICE_024',
+  'OFFICIAL_NOTICE_029',
+]) {
+  assert.equal(documents.isOaNoticeTemplateCode(templateCode), true)
+}
+for (const templateCode of ['ACCEPTANCE_NOTICE', 'GRANT_NOTICE', 'OFFICIAL_NOTICE_001', '', null]) {
+  assert.equal(documents.isOaNoticeTemplateCode(templateCode), false)
+}
 const approvedAttachment = (overrides = {}) => ({
   id: 'attachment-approved', filename: '受理通知书.pdf', file_size: 12, created_at: '2026-08-02',
   document_id: 'document-acceptance', official_file_role: 'OFFICIAL_NOTICE_PDF',
@@ -137,6 +153,7 @@ for (const [action, path] of [
   ['PRELIMINARY_PASS', 'preliminary-pass'],
   ['PUBLICATION_NOTICE', 'publication-notice'],
   ['SUBSTANTIVE_START', 'substantive-start'],
+  ['OA_NOTICE', 'oa-notice'],
 ]) {
   await documents.recordDocumentLifecycleEvidence(action, 'case-a', evidenceOptions[0], time)
   assert.deepEqual(httpCalls.at(-1), {

@@ -226,6 +226,7 @@ export interface AttachmentEvidenceProjection {
 
 export type DocumentLifecycleActionCode =
     | 'ACCEPTANCE_NOTICE'
+    | 'OA_NOTICE'
     | 'PRELIMINARY_START'
     | 'PRELIMINARY_PASS'
     | 'PUBLICATION_NOTICE'

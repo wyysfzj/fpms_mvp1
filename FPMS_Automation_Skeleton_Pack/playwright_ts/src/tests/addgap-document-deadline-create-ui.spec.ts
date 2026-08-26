@@ -7,6 +7,12 @@ const templateId = "oa-in-template";
 test("DocumentCreate records a confirmed official deadline and previews its impact", async ({
   page,
 }) => {
+  const previewPayloads: Array<Record<string, unknown>> = [];
+  let releaseOrdinaryPreview = () => {};
+  const ordinaryPreviewGate = new Promise<void>((resolve) => {
+    releaseOrdinaryPreview = resolve;
+  });
+  let ordinaryPreviewResponseSent = false;
   let previewRequest: Request | null = null;
   let createRequest: Request | null = null;
 
@@ -37,6 +43,7 @@ test("DocumentCreate records a confirmed official deadline and previews its impa
     }
     if (method === "POST" && apiPath === "/documents/impact-preview") {
       const payload = request.postDataJSON() as Record<string, unknown>;
+      previewPayloads.push(payload);
       if (payload.doc_template_id === templateId && !hasConfirmedDeadline(payload)) {
         return fulfillJson(
           route,
@@ -49,6 +56,15 @@ test("DocumentCreate records a confirmed official deadline and previews its impa
           },
           409,
         );
+      }
+      if (payload.doc_template_id === null) {
+        await ordinaryPreviewGate;
+        await fulfillJson(route, {
+          ...impactPreview(payload),
+          risk_tips: ["过期普通文件预览不得覆盖当前 OA 输入"],
+        });
+        ordinaryPreviewResponseSent = true;
+        return;
       }
       previewRequest = request;
       return fulfillJson(route, impactPreview(payload));
@@ -71,22 +87,40 @@ test("DocumentCreate records a confirmed official deadline and previews its impa
 
   await expect(page.getByRole("heading", { name: "登记往来文件" })).toBeVisible();
   await page.getByLabel("标题").fill("第一次审查意见通知书");
+  await expect
+    .poll(() => previewPayloads.filter((payload) => payload.doc_template_id === null).length)
+    .toBeGreaterThan(0);
 
   const templateField = page.locator(".el-form-item").filter({ hasText: "文件模板" }).first();
   await templateField.getByRole("combobox").click();
   await page.getByRole("option", { name: "OA_IN — 审查意见通知书（收文）" }).click();
 
-  await expect(page.getByText("请填写并确认官方截止日")).toBeVisible();
+  await expect
+    .poll(() => previewPayloads.filter((payload) => payload.doc_template_id === templateId).length)
+    .toBe(0);
+  await expect(page.getByText("请填写并确认官方截止日")).toHaveCount(0);
+  releaseOrdinaryPreview();
+  await expect.poll(() => ordinaryPreviewResponseSent).toBe(true);
+  await expect(page.getByText("过期普通文件预览不得覆盖当前 OA 输入")).toHaveCount(0);
   await page.getByPlaceholder("请选择官方截止日").fill("2026-10-15");
+  await expect
+    .poll(() => previewPayloads.filter((payload) => payload.doc_template_id === templateId).length)
+    .toBe(0);
 
   const sourceField = page.locator(".el-form-item").filter({ hasText: "截止日来源" }).first();
   await sourceField.locator(".el-select__wrapper").click();
   await page.getByRole("option", { name: "人工核对官方通知" }).click();
+  await expect
+    .poll(() => previewPayloads.filter((payload) => payload.doc_template_id === templateId).length)
+    .toBe(0);
 
   const statusField = page.locator(".el-form-item").filter({ hasText: "确认状态" }).first();
   await statusField.locator(".el-select__wrapper").click();
   await page.getByRole("option", { name: "已确认" }).click();
 
+  await expect
+    .poll(() => previewPayloads.filter((payload) => payload.doc_template_id === templateId).length)
+    .toBe(1);
   await expect.poll(() => previewRequest?.postDataJSON()).toMatchObject({
     official_due_date: "2026-10-15",
     official_due_date_source: "MANUAL_OFFICIAL_NOTICE",

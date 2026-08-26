@@ -283,6 +283,17 @@ export async function getCaseDocumentsWithEvidence(caseId: string): Promise<Docu
     return documents.filter((document) => document.case_id === caseId)
 }
 
+export function isOaNoticeTemplateCode(templateCode: string | null | undefined): boolean {
+    return typeof templateCode === 'string' && [
+        'OA_IN',
+        'OFFICIAL_NOTICE_003',
+        'OFFICIAL_NOTICE_005',
+        'OFFICIAL_NOTICE_021',
+        'OFFICIAL_NOTICE_024',
+        'OFFICIAL_NOTICE_029',
+    ].includes(templateCode)
+}
+
 export async function recordDocumentLifecycleEvidence(
     action: DocumentLifecycleActionCode,
     caseId: string,
@@ -291,6 +302,7 @@ export async function recordDocumentLifecycleEvidence(
 ): Promise<DocumentLifecycleEvidenceResult> {
     const paths: Record<DocumentLifecycleActionCode, string> = {
         ACCEPTANCE_NOTICE: 'acceptance-notice',
+        OA_NOTICE: 'oa-notice',
         PRELIMINARY_START: 'preliminary-start',
         PRELIMINARY_PASS: 'preliminary-pass',
         PUBLICATION_NOTICE: 'publication-notice',
