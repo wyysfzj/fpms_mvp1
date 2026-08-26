@@ -69,6 +69,20 @@ _UI_SESSION_TUPLE_KEYS = (
 )
 _UI_SESSION_INTERNAL_OBSERVER_FILES = frozenset({"finalize-binding.json"})
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_STOP_REASON_RE = re.compile(r"[A-Z][A-Z0-9_]{0,95}")
+_SENSITIVE_LEDGER_KEYS = frozenset(
+    {
+        "authorization",
+        "token",
+        "password",
+        "passwd",
+        "secret",
+        "credential",
+        "cookie",
+        "capability",
+        "raw_payload",
+    }
+)
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
     "route.fulfill(",
@@ -486,6 +500,120 @@ class ObserverBinding(NamedTuple):
     errors: list[str]
 
 
+def _bounded_text(value: object, maximum: int, *, allow_empty: bool = False) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) <= maximum
+        and (allow_empty or bool(value.strip()))
+    )
+
+
+def _valid_action_id(value: object, *, nullable: bool = False) -> bool:
+    return (nullable and value is None) or _bounded_text(value, 128)
+
+
+def _valid_observer_event(event: object) -> bool:
+    if not isinstance(event, dict):
+        return False
+    kind = event.get("kind")
+    if kind == "action":
+        return (
+            set(event)
+            == {"kind", "action_id", "route", "role", "label_or_testid"}
+            and _valid_action_id(event.get("action_id"))
+            and _bounded_text(event.get("route"), 2048)
+            and _bounded_text(event.get("role"), 64)
+            and _bounded_text(event.get("label_or_testid"), 160)
+        )
+    if kind == "mutation":
+        status = event.get("status")
+        return (
+            set(event)
+            == {
+                "kind",
+                "action_id",
+                "route",
+                "role",
+                "label_or_testid",
+                "method",
+                "path",
+                "payload_sha256",
+                "status",
+            }
+            and _valid_action_id(event.get("action_id"), nullable=True)
+            and _bounded_text(event.get("route"), 2048, allow_empty=True)
+            and _bounded_text(event.get("role"), 64, allow_empty=True)
+            and _bounded_text(event.get("label_or_testid"), 160, allow_empty=True)
+            and event.get("method") in {"POST", "PUT", "PATCH", "DELETE"}
+            and _bounded_text(event.get("path"), 2048)
+            and isinstance(event.get("payload_sha256"), str)
+            and _SHA256_RE.fullmatch(event["payload_sha256"]) is not None
+            and (
+                status is None
+                or type(status) is int
+                and (status == 0 or 100 <= status <= 599)
+            )
+        )
+    if kind in {"console_failure", "network_failure"}:
+        return (
+            set(event) == {"kind", "action_id", "digest"}
+            and _valid_action_id(event.get("action_id"), nullable=True)
+            and isinstance(event.get("digest"), str)
+            and _SHA256_RE.fullmatch(event["digest"]) is not None
+        )
+    if kind == "STOP":
+        reason = event.get("reason")
+        return (
+            set(event) == {"kind", "reason"}
+            and isinstance(reason, str)
+            and _STOP_REASON_RE.fullmatch(reason) is not None
+        )
+    return False
+
+
+def _contains_sensitive_ledger_value(value: object, capability: str) -> bool:
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, dict):
+            for key, nested in current.items():
+                if (
+                    not isinstance(key, str)
+                    or key.casefold() in _SENSITIVE_LEDGER_KEYS
+                    or secrets.compare_digest(key, capability)
+                ):
+                    return True
+                pending.append(nested)
+        elif isinstance(current, list):
+            pending.extend(current)
+        elif isinstance(current, str) and secrets.compare_digest(current, capability):
+            return True
+    return False
+
+
+def _valid_stop_ledger(
+    ledger: object,
+    expected_tuple: dict[str, str],
+    capability: str,
+) -> bool:
+    if (
+        not isinstance(ledger, dict)
+        or set(ledger) != {"schema_id", "session", "events"}
+        or ledger.get("schema_id") != expected_tuple["contract_version"]
+        or ledger.get("session") != expected_tuple
+        or _contains_sensitive_ledger_value(ledger, capability)
+    ):
+        return False
+    events = ledger.get("events")
+    return (
+        isinstance(events, list)
+        and bool(events)
+        and all(_valid_observer_event(event) for event in events)
+        and sum(event.get("kind") == "STOP" for event in events) == 1
+        and events[-1].get("kind") == "STOP"
+    )
+
+
 def _valid_png(content: bytes) -> bool:
     if not content.startswith(_PNG_SIGNATURE):
         return False
@@ -793,29 +921,13 @@ def _observer_binding(
                 self._reject(400, "MALFORMED_STOP_LEDGER")
                 return
             ledger = payload.get("ledger")
-            if not isinstance(ledger, dict) or set(ledger) != {
-                "schema_id",
-                "session",
-                "events",
-            }:
-                self._reject(400, "MALFORMED_STOP_LEDGER")
-                return
-            events = ledger.get("events")
-            final_event = events[-1] if isinstance(events, list) and events else None
-            if (
-                ledger.get("schema_id") != expected_tuple["contract_version"]
-                or ledger.get("session") != expected_tuple
-                or not isinstance(final_event, dict)
-                or set(final_event) != {"kind", "reason"}
-                or final_event.get("kind") != "STOP"
-                or not isinstance(final_event.get("reason"), str)
-                or not final_event["reason"].strip()
-            ):
+            if not _valid_stop_ledger(ledger, expected_tuple, capability):
                 self._reject(400, "MALFORMED_STOP_LEDGER")
                 return
             if stopped.is_set() or finalized.is_set():
                 self._reject(409, "OBSERVER_EVIDENCE_CONFLICT")
                 return
+            assert isinstance(ledger, dict)
             content = (
                 json.dumps(ledger, ensure_ascii=False, indent=2) + "\n"
             ).encode()

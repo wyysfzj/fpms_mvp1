@@ -324,14 +324,20 @@ def _ledger_payload(session_tuple: dict[str, str]) -> dict[str, object]:
 
 
 def _stop_payload(
-    session_tuple: dict[str, str], reason: str = "OBSERVER_STOPPED"
+    session_tuple: dict[str, str],
+    reason: str = "OBSERVER_STOPPED",
+    events: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     return {
         **session_tuple,
         "ledger": {
             "schema_id": session_tuple["contract_version"],
             "session": session_tuple,
-            "events": [{"kind": "STOP", "reason": reason}],
+            "events": (
+                events
+                if events is not None
+                else [{"kind": "STOP", "reason": reason}]
+            ),
         },
     }
 
@@ -494,6 +500,116 @@ def test_observer_stop_rejects_wrong_binding_tuple_and_malformed_ledgers(
         assert not binding.stopped.is_set()
         assert not (observer_root / "observer-stop-ledger.json").exists()
 
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
+def test_observer_stop_rejects_unredacted_or_out_of_schema_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    action = {
+        "kind": "action",
+        "action_id": "action-1",
+        "route": "/cases",
+        "role": "button",
+        "label_or_testid": "save-case",
+    }
+    stop = {"kind": "STOP", "reason": "OBSERVER_STOPPED"}
+    invalid_events = (
+        lambda capability: [{**action, "label_or_testid": capability}, stop],
+        lambda _capability: [
+            {**action, "raw_payload": {"password": "not-redacted"}},
+            stop,
+        ],
+        lambda _capability: [{"kind": "STOP", "reason": "browser closed"}],
+        lambda _capability: [{"kind": "STOP", "reason": "A" * 97}],
+        lambda _capability: [stop, stop],
+        lambda _capability: [stop, action],
+        lambda _capability: [
+            {"kind": "screenshot", "stage": 1, "sha256": "a" * 64},
+            stop,
+        ],
+        lambda _capability: [{**action, "label_or_testid": "x" * 161}, stop],
+        lambda _capability: [
+            {
+                "kind": "mutation",
+                "action_id": "action-1",
+                "route": "/cases",
+                "role": "button",
+                "label_or_testid": "save-case",
+                "method": "POST",
+                "path": "/api/v1/cases",
+                "payload_sha256": "g" * 64,
+                "status": 201,
+            },
+            stop,
+        ],
+        lambda _capability: [
+            {
+                "kind": "mutation",
+                "action_id": "action-1",
+                "route": "/cases",
+                "role": "button",
+                "label_or_testid": "save-case",
+                "method": "POST",
+                "path": "/api/v1/cases",
+                "payload_sha256": "a" * 64,
+                "status": 42,
+            },
+            stop,
+        ],
+    )
+    observations = []
+    for index, events_for_capability in enumerate(invalid_events):
+        observer_root = (tmp_path / f"artifact-stop-schema-{index}").resolve()
+        with module._observer_binding(observer_root, session_tuple) as binding:
+            capability = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(binding.activation_url).query
+            )["capability"][0]
+            status = _host_post(
+                binding.activation_url,
+                "stop",
+                _stop_payload(
+                    session_tuple, events=events_for_capability(capability)
+                ),
+            )[0]
+            observations.append(
+                (
+                    status,
+                    binding.stopped.is_set(),
+                    (observer_root / "observer-stop-ledger.json").exists(),
+                )
+            )
+
+    legal_events = [
+        action,
+        {
+            "kind": "mutation",
+            "action_id": "action-1",
+            "route": "/cases",
+            "role": "button",
+            "label_or_testid": "save-case",
+            "method": "POST",
+            "path": "/api/v1/cases",
+            "payload_sha256": "a" * 64,
+            "status": 201,
+        },
+        {"kind": "console_failure", "action_id": "action-1", "digest": "b" * 64},
+        {"kind": "network_failure", "action_id": None, "digest": "c" * 64},
+        stop,
+    ]
+    legal_root = (tmp_path / "artifact-stop-schema-legal").resolve()
+    with module._observer_binding(legal_root, session_tuple) as binding:
+        assert _host_post(
+            binding.activation_url,
+            "stop",
+            _stop_payload(session_tuple, events=legal_events),
+        )[0] == 200
+        assert binding.stopped.is_set()
+
+    assert observations == [(400, False, False)] * len(invalid_events)
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 
