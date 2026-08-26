@@ -18,6 +18,39 @@
       <el-tabs v-model="activeTab" class="create-tabs">
         <!-- From Drafts Tab -->
         <el-tab-pane label="从费用草稿生成" name="drafts">
+          <div v-if="demoSessionEnabled" class="form-section" data-testid="demo-service-bill-inputs">
+            <h3 class="form-section-title">服务费账单</h3>
+            <el-form-item label="服务费草稿">
+              <el-select v-model="demoBillForm.draftId" class="full-width" placeholder="请选择唯一的已锁定服务费草稿">
+                <el-option
+                  v-for="draft in demoServiceDrafts"
+                  :key="draft.id"
+                  :label="`服务费草稿 · ${draft.currency} ${draft.amount}`"
+                  :value="draft.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <el-form-item label="账单编号">
+                  <el-input v-model.trim="demoBillForm.billNo" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="账单日期">
+                  <el-date-picker v-model="demoBillForm.billDate" value-format="YYYY-MM-DD" class="full-width" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="到期日期">
+                  <el-date-picker v-model="demoBillForm.dueDate" value-format="YYYY-MM-DD" class="full-width" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-button type="primary" :loading="demoBillSaving" @click="handleCreateDemoBill">
+              生成服务费账单
+            </el-button>
+          </div>
           <el-form
             ref="draftsFormRef"
             :model="draftsForm"
@@ -306,7 +339,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
@@ -321,6 +354,13 @@ import type { Case } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { createDemoBill, readDemoDraft } from '../../demo/demo.api'
+import type { DemoDraft } from '../../demo/demo.api'
+import {
+  DEMO_UI_SESSION_CHANGE_EVENT,
+  getDemoUiSession,
+  isDemoUiSessionActive,
+} from '../../demo/demoUiSession'
 
 const router = useRouter()
 
@@ -334,6 +374,10 @@ const clientOptionsLoading = ref(false)
 const caseOptionsLoading = ref(false)
 const clientOptions = ref<Client[]>([])
 const caseOptions = ref<Case[]>([])
+const demoSessionEnabled = ref(false)
+const demoServiceDrafts = ref<DemoDraft[]>([])
+const demoBillSaving = ref(false)
+const demoBillIdempotencyKey = crypto.randomUUID()
 
 const draftsFormRef = ref<FormInstance>()
 const manualFormRef = ref<FormInstance>()
@@ -343,6 +387,13 @@ const draftsForm = reactive({
   draft_ids: [] as string[],
   currency: 'CNY',
   notes: '',
+})
+
+const demoBillForm = reactive({
+  draftId: '',
+  billNo: '',
+  billDate: new Date().toISOString().split('T')[0],
+  dueDate: '',
 })
 
 // Form for manual creation
@@ -359,6 +410,47 @@ const directionOptions = [
   { label: '应收账单', value: 'AR' as BillDirection },
   { label: '应付账单', value: 'AP' as BillDirection },
 ]
+
+function isEligibleDemoServiceDraft(draft: DemoDraft): boolean {
+  return draft.status === 'LOCKED'
+    && draft.currency === 'CNY'
+    && draft.total_gov === '0.00'
+    && draft.total_misc === '0.00'
+    && draft.total_service === draft.amount
+    && draft.amount !== '0.00'
+}
+
+function selectDemoServiceDraft(drafts: DemoDraft[], selectedId: string): DemoDraft | null {
+  const eligible = drafts.filter(isEligibleDemoServiceDraft)
+  return eligible.length === 1 && eligible[0].id === selectedId ? eligible[0] : null
+}
+
+function canCreateDemoBill(
+  sessionActive: boolean,
+  session: unknown,
+  draft: DemoDraft | null,
+  billNo: string,
+  billDate: string,
+  dueDate: string,
+  pending: boolean,
+): boolean {
+  return sessionActive
+    && session !== null
+    && draft !== null
+    && billNo.trim().length > 0
+    && /^\d{4}-\d{2}-\d{2}$/.test(billDate)
+    && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+    && dueDate >= billDate
+    && !pending
+}
+
+function syncDemoSession() {
+  demoSessionEnabled.value = isDemoUiSessionActive() && getDemoUiSession() !== null
+  if (!demoSessionEnabled.value) {
+    demoServiceDrafts.value = []
+    demoBillForm.draftId = ''
+  }
+}
 
 const manualRules: FormRules = {
   client_id: [
@@ -421,10 +513,52 @@ async function fetchAvailableDrafts() {
   try {
     const result = await getFeeDrafts({ page: 1, page_size: 100, status: 'LOCKED' })
     availableDrafts.value = result.items.filter((draft) => asNumericAmount(draft.amount) > 0)
+    if (demoSessionEnabled.value) {
+      const details = await Promise.all(result.items.map((draft) => readDemoDraft(draft.id)))
+      demoServiceDrafts.value = details.filter(isEligibleDemoServiceDraft)
+      demoBillForm.draftId = demoServiceDrafts.value.length === 1 ? demoServiceDrafts.value[0].id : ''
+    }
   } catch (err) {
     error.value = err as ApiError
   } finally {
     draftOptionsLoading.value = false
+  }
+}
+
+async function handleCreateDemoBill() {
+  const draft = selectDemoServiceDraft(demoServiceDrafts.value, demoBillForm.draftId)
+  if (!canCreateDemoBill(
+    isDemoUiSessionActive(),
+    getDemoUiSession(),
+    draft,
+    demoBillForm.billNo,
+    demoBillForm.billDate,
+    demoBillForm.dueDate,
+    demoBillSaving.value,
+  )) {
+    ElMessage.warning('请完整确认服务费草稿与账单信息')
+    return
+  }
+  demoBillSaving.value = true
+  error.value = null
+  try {
+    const result = await createDemoBill(
+      draft!.id,
+      demoBillForm.billNo,
+      demoBillForm.billDate,
+      demoBillForm.dueDate,
+      demoBillIdempotencyKey,
+    )
+    if (
+      result.bill.source_draft_ids[0] !== draft!.id
+      || result.bill.total_service !== draft!.total_service
+    ) throw new Error('账单与服务费草稿不一致')
+    ElMessage.success('服务费账单已生成')
+    router.push({ path: '/billing/payments/new', query: { bill_id: result.bill.id } })
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    demoBillSaving.value = false
   }
 }
 
@@ -568,8 +702,14 @@ watch(
 )
 
 onMounted(() => {
+  syncDemoSession()
+  window.addEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
   fetchAvailableDrafts()
   fetchClientOptions()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
 })
 </script>
 

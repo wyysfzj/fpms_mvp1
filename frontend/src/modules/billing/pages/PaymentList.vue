@@ -215,6 +215,20 @@
       当前后端暂不提供完整核销列表筛选能力，现阶段支持创建与冲销。
     </div>
 
+    <el-alert
+      v-if="demoOffsetResult"
+      type="success"
+      :closable="false"
+      :title="`账单状态：${demoOffsetResult.bill.status}`"
+      :description="`最新余额：CNY ${demoOffsetResult.bill.balance}`"
+    />
+    <router-link
+      v-if="demoOffsetResult?.bill.status === 'PARTIALLY_SETTLED'"
+      :to="{ path: '/billing/payments/new', query: { bill_id: demoOffsetResult.bill.id } }"
+    >
+      <el-button type="primary" size="small">按最新余额登记下一笔回款</el-button>
+    </router-link>
+
     <div v-if="offsetsLoading" class="page-loading">
       <el-skeleton :rows="5" animated />
     </div>
@@ -357,6 +371,15 @@
           />
         </el-form-item>
 
+        <el-form-item label="核销日期" prop="offset_date">
+          <el-date-picker
+            v-model="offsetForm.offset_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            class="full-width"
+          />
+        </el-form-item>
+
       </el-form>
 
       <template #footer>
@@ -370,7 +393,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -398,6 +421,19 @@ import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 import { getPrepaymentStatusText as getPrepaymentStatusLabel } from '../../../constants/displayText'
+import {
+  createDemoFullOffset,
+  readDemoPaymentCommand,
+} from '../../demo/demo.api'
+import type {
+  DemoBankReceiptResponse,
+  DemoOffsetResponse,
+} from '../../demo/demo.api'
+import {
+  DEMO_UI_SESSION_CHANGE_EVENT,
+  getDemoUiSession,
+  isDemoUiSessionActive,
+} from '../../demo/demoUiSession'
 
 const route = useRoute()
 const payments = ref<PaymentListItem[]>([])
@@ -455,6 +491,10 @@ const offsetPaymentOptions = ref<PaymentListItem[]>([])
 const offsetBillOptions = ref<BillListItem[]>([])
 const paymentLines = ref<PaymentLineItem[]>([])
 const pendingOffsetTarget = ref<Pick<PaymentListItem, 'id' | 'bill_id'> | null>(null)
+const demoSessionEnabled = ref(false)
+const demoPaymentCommand = ref<DemoBankReceiptResponse | null>(null)
+const demoOffsetResult = ref<DemoOffsetResponse | null>(null)
+const demoOffsetIdempotencyKey = crypto.randomUUID()
 
 const offsetForm = reactive({
   payment_id: '',
@@ -477,6 +517,52 @@ const offsetRules: FormRules = {
   offset_amt: [
     { required: true, message: '核销金额为必填项', trigger: 'blur' },
   ],
+}
+
+function canCreateDemoOffset(
+  sessionActive: boolean,
+  session: unknown,
+  payment: DemoBankReceiptResponse | null,
+  selectedPaymentIdValue: string,
+  paymentLineId: string,
+  billId: string,
+  amount: string,
+  offsetDate: string,
+  pending: boolean,
+): boolean {
+  return sessionActive
+    && session !== null
+    && payment !== null
+    && payment.bill.status !== 'SETTLED'
+    && payment.payment.id === selectedPaymentIdValue
+    && payment.line.id === paymentLineId
+    && payment.bill.id === billId
+    && payment.line.balance_amt === amount
+    && amount !== '0.00'
+    && /^\d{4}-\d{2}-\d{2}$/.test(offsetDate)
+    && !pending
+}
+
+function syncDemoSession() {
+  demoSessionEnabled.value = isDemoUiSessionActive() && getDemoUiSession() !== null
+  if (!demoSessionEnabled.value) demoPaymentCommand.value = null
+}
+
+async function loadDemoPaymentCommand() {
+  const commandKey = typeof route.query.demo_payment_key === 'string'
+    ? route.query.demo_payment_key
+    : ''
+  if (!demoSessionEnabled.value || !commandKey) return
+  try {
+    const result = await readDemoPaymentCommand(commandKey)
+    if (
+      result
+      && result.payment.id === selectedPaymentId.value
+      && result.bill.id === filters.bill_id
+    ) demoPaymentCommand.value = result
+  } catch (err) {
+    error.value = err as ApiError
+  }
 }
 
 const selectedOffsetPayment = computed(() =>
@@ -676,6 +762,12 @@ async function handleOffsetDialogOpen() {
       offsetForm.bill_id = pendingOffsetTarget.value.bill_id
     }
   }
+  if (demoPaymentCommand.value) {
+    offsetForm.payment_id = demoPaymentCommand.value.payment.id
+    offsetForm.payment_line_id = demoPaymentCommand.value.line.id
+    offsetForm.bill_id = demoPaymentCommand.value.bill.id
+    offsetForm.offset_amt = Number(demoPaymentCommand.value.line.balance_amt)
+  }
 }
 
 function restoreOffsetTriggerFocus() {
@@ -684,6 +776,7 @@ function restoreOffsetTriggerFocus() {
 }
 
 async function handleCreateOffset() {
+  if (offsetSaving.value) return
   offsetFieldErrors.value = new Map()
 
   const valid = await offsetFormRef.value?.validate().catch(() => false)
@@ -693,6 +786,32 @@ async function handleCreateOffset() {
   offsetError.value = null
 
   try {
+    if (demoSessionEnabled.value) {
+      const amount = offsetForm.offset_amt.toFixed(2)
+      if (!canCreateDemoOffset(
+        isDemoUiSessionActive(),
+        getDemoUiSession(),
+        demoPaymentCommand.value,
+        offsetForm.payment_id,
+        offsetForm.payment_line_id,
+        offsetForm.bill_id,
+        amount,
+        offsetForm.offset_date,
+        false,
+      )) throw new Error('核销输入与当前回款或账单不一致')
+      demoOffsetResult.value = await createDemoFullOffset(
+        demoPaymentCommand.value!.line,
+        demoPaymentCommand.value!.bill,
+        offsetForm.offset_date,
+        demoOffsetIdempotencyKey,
+        amount,
+      )
+      ElMessage.success('核销创建成功，账单余额已更新')
+      showOffsetDialog.value = false
+      resetOffsetForm()
+      fetchOffsets()
+      return
+    }
     await createOffset({
       payment_line_id: offsetForm.payment_line_id,
       bill_id: offsetForm.bill_id,
@@ -809,10 +928,17 @@ watch(
 )
 
 onMounted(() => {
+  syncDemoSession()
+  window.addEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
   fetchPayments()
   fetchOffsets()
   fetchClientOptions()
   fetchBillFilterOptions()
+  void loadDemoPaymentCommand()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(DEMO_UI_SESSION_CHANGE_EVENT, syncDemoSession)
 })
 </script>
 

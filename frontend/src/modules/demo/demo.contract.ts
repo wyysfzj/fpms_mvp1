@@ -234,7 +234,7 @@ export interface DemoBillDetail {
   case_id: string
   currency: 'CNY'
   direction: 'AR'
-  status: 'UNSETTLED' | 'SETTLED'
+  status: 'UNSETTLED' | 'PARTIALLY_SETTLED' | 'SETTLED'
   total_gov: string
   total_service: string
   total_misc: string
@@ -426,7 +426,11 @@ export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   id(row.case_id, 'bill.case_id')
   literal(row.currency, ['CNY'], 'bill.currency')
   literal(row.direction, ['AR'], 'bill.direction')
-  const status = literal(row.status, ['UNSETTLED', 'SETTLED'], 'bill.status')
+  const status = literal(
+    row.status,
+    ['UNSETTLED', 'PARTIALLY_SETTLED', 'SETTLED'],
+    'bill.status',
+  )
   const totalGov = money(row.total_gov, 'bill.total_gov')
   const totalService = money(row.total_service, 'bill.total_service')
   const totalMisc = money(row.total_misc, 'bill.total_misc')
@@ -450,7 +454,16 @@ export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   if (amount === '0.00') invalid('bill.amount')
   equal(totalService, amount, 'bill.total_service')
   equal(itemAmount, amount, 'bill.items[0].amount')
-  equal(balance, status === 'SETTLED' ? '0.00' : amount, 'bill.balance')
+  if (status === 'UNSETTLED') {
+    equal(balance, amount, 'bill.balance')
+  } else if (status === 'PARTIALLY_SETTLED') {
+    if (
+      balance === '0.00' ||
+      BigInt(balance.replace('.', '')) >= BigInt(amount.replace('.', ''))
+    ) invalid('bill.balance')
+  } else {
+    equal(balance, '0.00', 'bill.balance')
+  }
   return value as DemoBillDetail
 }
 
@@ -474,7 +487,10 @@ export function parseDemoBillCommandResponse(value: unknown): DemoBillCommandRes
   return value as DemoBillCommandResponse
 }
 
-export function parseDemoBankReceiptResponse(value: unknown): DemoBankReceiptResponse {
+export function parseDemoBankReceiptResponse(
+  value: unknown,
+  expectedAmount?: string,
+): DemoBankReceiptResponse {
   const row = record(value, 'bank_receipt')
   const payment = record(row.payment, 'bank_receipt.payment')
   const paymentId = id(payment.id, 'bank_receipt.payment.id')
@@ -497,9 +513,14 @@ export function parseDemoBankReceiptResponse(value: unknown): DemoBankReceiptRes
   equal(line.balance_amt, paymentAmount, 'bank_receipt.line.balance_amt')
   equal(line.status, 'UNALLOCATED', 'bank_receipt.line.status')
   equal(clientId, bill.client_id, 'bank_receipt.payment.client_id')
-  equal(paymentAmount, bill.amount, 'bank_receipt.payment.amount')
+  if (expectedAmount !== undefined) {
+    equal(paymentAmount, money(expectedAmount, 'bank_receipt.expected_amount'), 'bank_receipt.payment.amount')
+  }
+  if (BigInt(paymentAmount.replace('.', '')) > BigInt(bill.balance.replace('.', ''))) {
+    invalid('bank_receipt.payment.amount')
+  }
   equal(targetBillId, bill.id, 'bank_receipt.target_bill_id')
-  equal(bill.status, 'UNSETTLED', 'bank_receipt.bill.status')
+  if (bill.status === 'SETTLED') invalid('bank_receipt.bill.status')
   return value as DemoBankReceiptResponse
 }
 
@@ -542,13 +563,17 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   equal(line.allocated_amt, offsetAmount, 'offset_response.line.allocated_amt')
   equal(line.balance_amt, '0.00', 'offset_response.line.balance_amt')
   equal(line.status, 'FULLY_ALLOCATED', 'offset_response.line.status')
-  equal(bill.status, 'SETTLED', 'offset_response.bill.status')
-  equal(bill.balance, '0.00', 'offset_response.bill.balance')
-  equal(bill.amount, offsetAmount, 'offset_response.bill.amount')
+  if (bill.status === 'UNSETTLED') invalid('offset_response.bill.status')
   equal(receiptCaseId, bill.case_id, 'offset_response.case_receipt.case_id')
   equal(receiptFeeCode, bill.items[0].fee_code, 'offset_response.case_receipt.fee_code')
-  equal(receivableAmount, offsetAmount, 'offset_response.case_receipt.receivable_amt')
-  equal(receivedAmount, offsetAmount, 'offset_response.case_receipt.received_amt')
+  equal(receivableAmount, bill.amount, 'offset_response.case_receipt.receivable_amt')
+  const remaining = BigInt(bill.balance.replace('.', ''))
+  const receivable = BigInt(receivableAmount.replace('.', ''))
+  const received = BigInt(receivedAmount.replace('.', ''))
+  const offsetMinor = BigInt(offsetAmount.replace('.', ''))
+  if (received !== receivable - remaining || offsetMinor > received) {
+    invalid('offset_response.case_receipt.received_amt')
+  }
   equal(receiptDate, offsetDate, 'offset_response.case_receipt.last_receipt_date')
   return value as DemoOffsetResponse
 }

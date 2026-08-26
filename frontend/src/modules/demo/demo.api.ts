@@ -3,6 +3,7 @@ import { getLifecycleOverlay } from '../../api/lifecycleOverlay'
 import {
   parseDemoBankReceiptResponse,
   parseDemoBillCommandResponse,
+  parseDemoBillDetail,
   parseDemoDraft,
   parseDemoFeeObligationResponse,
   parseDemoOffsetResponse,
@@ -368,6 +369,10 @@ export async function readDemoBillCommand(
   )
 }
 
+export async function readDemoBill(billId: string): Promise<DemoBillDetail> {
+  return parseDemoBillDetail((await http.get(`/bills/${billId}`)).data)
+}
+
 export async function readDemoPaymentCommand(
   idempotencyKey: string,
 ): Promise<DemoBankReceiptResponse | undefined> {
@@ -402,16 +407,27 @@ export async function createDemoBill(
     idempotency_key: idempotencyKey,
   }
   const retryMutation = () => http.post('/bills/demo-from-draft', payload)
+  const parseResponse = (value: unknown) => {
+    const result = parseDemoBillCommandResponse(value)
+    if (
+      result.bill.bill_no !== billNo
+      || result.bill.bill_date !== billDate
+      || result.bill.due_date !== dueDate
+      || result.bill.source_draft_ids[0] !== draftId
+      || result.idempotency_key !== idempotencyKey
+    ) throw new Error('演示账单与可见输入不一致')
+    return result
+  }
   let response
   try {
     response = await retryMutation()
   } catch (error) {
-    return reconcileUnknownCommand(endpoint, error, retryMutation, parseDemoBillCommandResponse)
+    return reconcileUnknownCommand(endpoint, error, retryMutation, parseResponse)
   }
   return resolveCommandMutationResponse(
     response,
     () => readCommand(endpoint),
-    parseDemoBillCommandResponse,
+    parseResponse,
   )
 }
 
@@ -421,30 +437,50 @@ export async function createDemoBankReceipt(
   bankRefNo: string,
   payDate: string,
   idempotencyKey: string,
+  amount: string = bill.balance,
+  remark = '澄岳智造技术（苏州）有限公司客户回款',
 ): Promise<DemoBankReceiptResponse> {
   const endpoint = `/payments/idempotency/${encodeURIComponent(idempotencyKey)}`
   const payload = {
     target_bill_id: bill.id,
-    amount: bill.balance,
+    amount,
     pay_no: payNo,
     pay_date: payDate,
     currency: 'CNY',
     pay_method: 'BANK_TRANSFER',
     bank_ref_no: bankRefNo,
-    remark: '澄岳智造技术（苏州）有限公司客户回款',
+    remark,
     idempotency_key: idempotencyKey,
   }
   const retryMutation = () => http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', payload)
+  const parseResponse = (value: unknown) => {
+    const result = parseDemoBankReceiptResponse(value, amount)
+    if (
+      result.payment.pay_no !== payNo
+      || result.payment.pay_date !== payDate
+      || result.payment.bank_ref_no !== bankRefNo
+      || result.target_bill_id !== bill.id
+      || result.bill.id !== bill.id
+      || result.bill.balance !== bill.balance
+      || result.idempotency_key !== idempotencyKey
+    ) throw new Error('演示回款与可见输入或当前账单不一致')
+    return result
+  }
   let response
   try {
     response = await retryMutation()
   } catch (error) {
-    return reconcileUnknownCommand(endpoint, error, retryMutation, parseDemoBankReceiptResponse)
+    return reconcileUnknownCommand(
+      endpoint,
+      error,
+      retryMutation,
+      parseResponse,
+    )
   }
   return resolveCommandMutationResponse(
     response,
     () => readCommand(endpoint),
-    parseDemoBankReceiptResponse,
+    parseResponse,
   )
 }
 
@@ -453,25 +489,45 @@ export async function createDemoFullOffset(
   bill: DemoBillDetail,
   offsetDate: string,
   idempotencyKey: string,
+  offsetAmount: string = paymentLine.balance_amt,
 ): Promise<DemoOffsetResponse> {
   const endpoint = `/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`
   const payload = {
     payment_line_id: paymentLine.id,
     bill_id: bill.id,
-    offset_amt: paymentLine.balance_amt,
+    offset_amt: offsetAmount,
     offset_date: offsetDate,
     idempotency_key: idempotencyKey,
   }
   const retryMutation = () => http.post<DemoOffsetResponse>('/offsets/demo-full', payload)
+  const parseResponse = (value: unknown) => {
+    const result = parseDemoOffsetResponse(value)
+    const currentBalance = BigInt(bill.balance.replace('.', ''))
+    const offsetMinor = BigInt(offsetAmount.replace('.', ''))
+    const resultBalance = BigInt(result.bill.balance.replace('.', ''))
+    if (
+      result.offset.payment_line_id !== paymentLine.id
+      || result.offset.bill_id !== bill.id
+      || result.offset.offset_amt !== offsetAmount
+      || result.offset.offset_date !== offsetDate
+      || result.bill.id !== bill.id
+      || result.bill.amount !== bill.amount
+      || offsetMinor > currentBalance
+      || resultBalance !== currentBalance - offsetMinor
+      || result.bill.status !== (resultBalance === 0n ? 'SETTLED' : 'PARTIALLY_SETTLED')
+      || result.idempotency_key !== idempotencyKey
+    ) throw new Error('演示核销与可见输入或当前账单不一致')
+    return result
+  }
   let response
   try {
     response = await retryMutation()
   } catch (error) {
-    return reconcileUnknownCommand(endpoint, error, retryMutation, parseDemoOffsetResponse)
+    return reconcileUnknownCommand(endpoint, error, retryMutation, parseResponse)
   }
   return resolveCommandMutationResponse(
     response,
     () => readCommand(endpoint),
-    parseDemoOffsetResponse,
+    parseResponse,
   )
 }
