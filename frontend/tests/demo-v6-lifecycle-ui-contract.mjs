@@ -167,9 +167,9 @@ const approvedAttachment = (overrides = {}) => ({
   review_state: 'APPROVED', is_current: true, is_final: true, ...overrides,
 })
 const reviewedReplyAttachments = (documentId, prefix) => [
-  approvedAttachment({ id: `${prefix}-pdf`, document_id: documentId, filename: `${prefix}-陈述意见.pdf`, role: 'OA_STATEMENT_PDF', official_file_role: 'OA_STATEMENT_PDF', evidence_version_id: `${prefix}-pdf-version`, content_hash: hashB, is_final: false }),
-  approvedAttachment({ id: `${prefix}-claims`, document_id: documentId, filename: `${prefix}-修改后权利要求书.docx`, role: 'OA_MODIFIED_CLAIMS', official_file_role: 'OA_MODIFIED_CLAIMS', evidence_version_id: `${prefix}-claims-version`, content_hash: hashC, is_final: false }),
-  approvedAttachment({ id: `${prefix}-word`, document_id: documentId, filename: `${prefix}-陈述意见.docx`, role: 'OA_STATEMENT_WORD', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: `${prefix}-word-version`, content_hash: hashA, is_final: false }),
+  approvedAttachment({ id: `${prefix}-pdf`, document_id: documentId, filename: `${prefix}-陈述意见.pdf`, role: 'RAW_ATTACHMENT', official_file_role: 'OA_STATEMENT_PDF', evidence_version_id: `${prefix}-pdf-version`, content_hash: hashB, is_final: false }),
+  approvedAttachment({ id: `${prefix}-claims`, document_id: documentId, filename: `${prefix}-修改后权利要求书.docx`, role: 'RAW_ATTACHMENT', official_file_role: 'OA_MODIFIED_CLAIMS', evidence_version_id: `${prefix}-claims-version`, content_hash: hashC, is_final: false }),
+  approvedAttachment({ id: `${prefix}-word`, document_id: documentId, filename: `${prefix}-陈述意见.docx`, role: 'RAW_ATTACHMENT', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: `${prefix}-word-version`, content_hash: hashA, is_final: false }),
 ]
 const caseDocuments = [
   { id: 'document-acceptance', case_id: 'case-a', title: '受理通知书', direction: 'IN', attachments: [approvedAttachment()] },
@@ -228,7 +228,7 @@ function assertReplyDocumentRejected(name, mutate) {
   assert.deepEqual(documents.selectReviewedReplyDocumentOptions([candidate], 'case-a', 'oa1'), [], name)
 }
 assertReplyDocumentRejected('missing required role', (document) => {
-  document.attachments = document.attachments.filter((attachment) => attachment.role !== 'OA_STATEMENT_PDF')
+  document.attachments = document.attachments.filter((attachment) => attachment.official_file_role !== 'OA_STATEMENT_PDF')
 })
 assertReplyDocumentRejected('pending required role', (document) => {
   document.attachments[0].review_state = 'PENDING'
@@ -260,11 +260,15 @@ assertReplyDocumentRejected('mismatched attachment identity', (document) => {
 assertReplyDocumentRejected('invalid evidence hash', (document) => {
   document.attachments[0].content_hash = `sha256:${'A'.repeat(64)}`
 })
+assertReplyDocumentRejected('misleading generic role cannot replace official role', (document) => {
+  document.attachments[0].official_file_role = 'OA_OTHER_PROOF'
+  document.attachments[0].role = 'OA_STATEMENT_PDF'
+})
 assertReplyDocumentRejected('duplicate required role', (document) => {
-  document.attachments.push(approvedAttachment({ id: 'oa1-word-duplicate', document_id: document.id, filename: '重复陈述意见.docx', role: 'OA_STATEMENT_WORD', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: 'oa1-word-duplicate-version', content_hash: hashD, is_final: false }))
+  document.attachments.push(approvedAttachment({ id: 'oa1-word-duplicate', document_id: document.id, filename: '重复陈述意见.docx', role: 'RAW_ATTACHMENT', official_file_role: 'OA_STATEMENT_WORD', evidence_version_id: 'oa1-word-duplicate-version', content_hash: hashD, is_final: false }))
 })
 assertReplyDocumentRejected('colliding required identity', (document) => {
-  const word = document.attachments.find((attachment) => attachment.role === 'OA_STATEMENT_WORD')
+  const word = document.attachments.find((attachment) => attachment.official_file_role === 'OA_STATEMENT_WORD')
   document.attachments[0].evidence_version_id = word.evidence_version_id
   document.attachments[0].content_hash = word.content_hash
 })

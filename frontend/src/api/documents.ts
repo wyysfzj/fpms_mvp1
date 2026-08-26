@@ -226,7 +226,7 @@ export function selectReviewedReplyDocumentOptions(
 
         const attachmentsByRole = new Map(requiredRoles.map((role) => [role, [] as Attachment[]]))
         for (const attachment of document.attachments || []) {
-            const role = String(attachment.role || attachment.official_file_role || '').trim()
+            const role = String(attachment.official_file_role || '').trim()
             attachmentsByRole.get(role)?.push(attachment)
         }
         if (requiredRoles.some((role) => attachmentsByRole.get(role)?.length !== 1)) return []
