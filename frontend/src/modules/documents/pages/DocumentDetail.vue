@@ -69,7 +69,11 @@
             </div>
           </div>
           <GrantEvidenceReviewPanel :document-id="doc.id" />
-          <DocumentLifecycleEvidenceActions :document="doc" @error="error = $event" />
+          <DocumentLifecycleEvidenceActions
+            :document="doc"
+            :template-code="docTemplate?.code || doc.template_code"
+            @error="error = $event"
+          />
           <LetterHandoffPanel
             v-if="showLetterHandoffAction"
             class="letter-handoff-section"

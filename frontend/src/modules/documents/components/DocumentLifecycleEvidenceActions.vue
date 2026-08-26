@@ -97,7 +97,11 @@ import type {
 import type { GrantFeeTaskListItem } from '../../../api/grantFees.types'
 import type { ApiError } from '../../../api/types'
 
-const props = defineProps<{ document: Document; grantTask?: GrantFeeTaskListItem }>()
+const props = defineProps<{
+  document: Document
+  grantTask?: GrantFeeTaskListItem
+  templateCode?: string
+}>()
 const emit = defineEmits<{
   (event: 'error', error: ApiError): void
   (event: 'recorded'): void
@@ -116,7 +120,9 @@ const baseActions: Array<{ code: DocumentLifecycleActionCode; label: string }> =
   { code: 'PUBLICATION_NOTICE', label: '记录公布通知' },
   { code: 'SUBSTANTIVE_START', label: '开始实质审查' },
 ]
-const isOaNoticeDocument = computed(() => isOaNoticeTemplateCode(props.document.template_code))
+const isOaNoticeDocument = computed(() =>
+  isOaNoticeTemplateCode(props.templateCode || props.document.template_code)
+)
 const actions = computed(() => isOaNoticeDocument.value
   ? [...baseActions, { code: 'OA_NOTICE' as const, label: '记录审查意见通知' }]
   : baseActions
