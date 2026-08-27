@@ -120,6 +120,7 @@ const handlerHarness = {
   postCount: 0,
   refreshCount: 0,
   draftRefreshCount: 0,
+  lastOverlayQuery: null,
 }
 globalThis.__ordinal06HandlerHarness = handlerHarness
 const handler = await importFunctions(
@@ -151,8 +152,9 @@ const handler = await importFunctions(
       harness.postCount += 1
       return { reused: false, name_zh_cn: '代理服务费', currency: 'CNY', amount: '1500.00' }
     }
-    const getLifecycleOverlay = async () => {
+    const getLifecycleOverlay = async (_caseId, query) => {
       harness.refreshCount += 1
+      harness.lastOverlayQuery = query
       if (harness.refreshFailure) throw harness.refreshFailure
       return harness.overlay
     }
@@ -175,6 +177,7 @@ assert.equal(handlerHarness.refreshCount, 2)
 assert.equal(handlerHarness.draftRefreshCount, 2)
 assert.equal(handlerHarness.refreshError.value, '')
 assert.equal(handlerHarness.refreshedOverlay.value, handlerHarness.overlay)
+assert.deepEqual(handlerHarness.lastOverlayQuery, { afterSequence: 0, limit: 200, asOfRevision: null })
 
 handlerHarness.pending.value = false
 handlerHarness.attempted.value = false

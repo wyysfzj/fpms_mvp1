@@ -385,7 +385,7 @@ function errorMessage(error: unknown): string {
 
 async function reloadDemoFeeView() {
   const [overlay] = await Promise.all([
-    getLifecycleOverlay(props.caseId, { afterSequence: 0, limit: 50, asOfRevision: null }),
+    getLifecycleOverlay(props.caseId, { afterSequence: 0, limit: 200, asOfRevision: null }),
     loadFeeDrafts(),
   ])
   if (isLifecycleOverlayManaged.value) {
