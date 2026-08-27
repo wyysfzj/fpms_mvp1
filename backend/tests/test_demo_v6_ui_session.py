@@ -311,7 +311,10 @@ def _host_post(
         return error.code, json.loads(error.read())
 
 
-def _ledger_payload(session_tuple: dict[str, str]) -> dict[str, object]:
+def _ledger_payload(
+    session_tuple: dict[str, str],
+    events: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     return {
         **session_tuple,
         "filename": "observer-ui-ledger.json",
@@ -319,7 +322,7 @@ def _ledger_payload(session_tuple: dict[str, str]) -> dict[str, object]:
         "content": {
             "schema_id": session_tuple["contract_version"],
             "session": session_tuple,
-            "events": [],
+            "events": events or [],
         },
     }
 
@@ -343,28 +346,73 @@ def _stop_payload(
     }
 
 
+def _stage_png(stage: int) -> bytes:
+    return (
+        PNG_SIGNATURE
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        + _png_chunk(b"IDAT", bytes([stage]))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
 def _screenshot_payload(
-    session_tuple: dict[str, str], filename: str
+    session_tuple: dict[str, str], filename: str, content: bytes = PNG_1X1
 ) -> dict[str, object]:
     return {
         **session_tuple,
         "filename": filename,
         "encoding": "base64",
-        "content": base64.b64encode(PNG_1X1).decode(),
+        "content": base64.b64encode(content).decode(),
     }
 
 
 def _upload_complete_evidence(
     activation_url: str, session_tuple: dict[str, str]
 ) -> None:
+    events: list[dict[str, object]] = []
+    for stage in range(1, 12):
+        action_id = f"raw-action-{stage}"
+        route = f"/cases/11111111-1111-1111-1111-{stage:012d}"
+        events.extend(
+            [
+                {
+                    "kind": "action",
+                    "action_id": action_id,
+                    "route": route,
+                    "role": "button",
+                    "label_or_testid": f"阶段 {stage:02d} 保存",
+                },
+                {
+                    "kind": "mutation",
+                    "action_id": action_id,
+                    "route": route,
+                    "role": "button",
+                    "label_or_testid": f"阶段 {stage:02d} 保存",
+                    "method": "POST",
+                    "path": f"/api/v1/cases/11111111-1111-1111-1111-{stage:012d}",
+                    "payload_sha256": f"{stage:064x}",
+                    "status": 201,
+                },
+                {
+                    "kind": "screenshot",
+                    "stage": stage,
+                    "sha256": hashlib.sha256(_stage_png(stage)).hexdigest(),
+                    "width": 1,
+                    "height": 1,
+                },
+            ]
+        )
     assert _host_post(
-        activation_url, "observer-artifact", _ledger_payload(session_tuple)
+        activation_url,
+        "observer-artifact",
+        _ledger_payload(session_tuple, events),
     )[0] == 201
-    for filename in sorted(EXPECTED_OBSERVER_FILES - {"observer-ui-ledger.json"}):
+    for stage in range(1, 12):
+        filename = f"observer-stage-{stage:02d}.png"
         assert _host_post(
             activation_url,
             "observer-artifact",
-            _screenshot_payload(session_tuple, filename),
+            _screenshot_payload(session_tuple, filename, _stage_png(stage)),
         )[0] == 201
 
 
@@ -922,6 +970,19 @@ def test_browser_finalization_requires_complete_evidence_and_cleans_exact_run(
         "run_id": context.run_id,
         "run_root_removed": True,
     }
+    receipt = json.loads((artifact / "pass-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "PASS"
+    assert receipt["actor"] == "HUMAN"
+    assert receipt["account_id"] == "ui-actor:HUMAN"
+    assert len(receipt["input_ledger"]) == 103
+    assert len(receipt["output_ledger"]) == 30
+    assert len(receipt["mutation_ledger"]) == 11
+    assert len(receipt["screenshots"]) == 11
+    assert receipt["network_errors"] == []
+    assert receipt["console_errors"] == []
+    assert receipt["mutation_ledger"][0]["action_id"] == "stage-01-mutation-001"
+    assert receipt["mutation_ledger"][0]["route"] == "/cases/<id>"
+    assert receipt["mutation_ledger"][0]["path"] == "/cases/<id>"
 
 
 def test_strict_ui_runner_finalizes_observer_from_generated_stage_evidence(
@@ -952,6 +1013,56 @@ def test_strict_ui_runner_finalizes_observer_from_generated_stage_evidence(
         assert not binding.failed.is_set()
 
     assert {path.name for path in observer_root.iterdir()} == EXPECTED_OBSERVER_FILES
+
+
+def test_finalized_ui_session_without_complete_actor_ledger_preserves_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    artifact = (tmp_path / "artifact-incomplete-receipt").resolve()
+    observer_root = artifact / "observer"
+    observer_root.mkdir(parents=True)
+    session_tuple = _session_tuple(module, context, actor="CODEX")
+    (artifact / "session.json").write_text(
+        json.dumps(
+            {
+                **session_tuple,
+                "run_root": str(context.run_root),
+                "database_path": str(context.database_path),
+                "artifact": str(artifact),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (observer_root / "observer-ui-ledger.json").write_text(
+        json.dumps(
+            {
+                "schema_id": session_tuple["contract_version"],
+                "session": session_tuple,
+                "events": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    for stage in range(1, 12):
+        (observer_root / f"observer-stage-{stage:02d}.png").write_bytes(
+            _stage_png(stage)
+        )
+
+    with pytest.raises(RuntimeError, match="observer PASS ledger is incomplete"):
+        module._complete_ui_session(context, artifact, "FINALIZED")
+
+    assert context.run_root.is_dir()
+    assert not (artifact / "pass-receipt.json").exists()
+    assert json.loads(
+        (observer_root / "session-status.json").read_text(encoding="utf-8")
+    ) == {
+        "status": "FAILED",
+        "run_id": context.run_id,
+        "run_root_removed": False,
+    }
+    module.abc.remove_run_root(context.run_root, context.run_id)
 
 
 @pytest.mark.parametrize("stop_reason", ["browser-exit", "timeout"])

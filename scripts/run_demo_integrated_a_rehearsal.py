@@ -196,6 +196,17 @@ V6_CUSTOMER_STAGES = (
 CUSTOMER_STAGE_ORDER = tuple(stage for stage, _label in V6_CUSTOMER_STAGES)
 LEGACY_CUSTOMER_STAGE_ORDER = tuple(f"{index:02d}" for index in range(1, 10))
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_UUID_SEGMENT_RE = re.compile(
+    r"(?i)(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])"
+)
+UI_RECEIPT_ALLOWED_DIFFERENCES = [
+    "run suffix",
+    "UUID/autoincrement ID",
+    "database/file path",
+    "dynamic credential",
+    "idempotency key",
+    "system timestamp",
+]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -807,6 +818,175 @@ def _remove_finalized_ui_run(artifact: Path, context: DemoRunContext) -> None:
     _remove_run_root(context)
 
 
+def _canonical_ui_ledgers() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    contract = json.loads(UI_PARITY_CONTRACT.read_text(encoding="utf-8"))
+    if contract.get("schema_id") != UI_SESSION_CONTRACT_VERSION:
+        raise RuntimeError("UI parity contract schema drift")
+    inputs = [
+        {
+            "stage": stage["stage"],
+            "field_key": row["field_key"],
+            "classification": row["classification"],
+            "normalization": row["normalization"],
+            "source_selector": row["source_selector"],
+            "normalized_value": row["value_rule"],
+        }
+        for stage in contract["stages"]
+        for row in stage["inputs"]
+    ]
+    outputs = [
+        {
+            "stage": stage["stage"],
+            "field_key": row["field_key"],
+            "classification": row["classification"],
+            "normalization": row["normalization"],
+            "observable": row["observable"],
+            "expected_rule": row["expected_rule"],
+            "normalized_value": row["value_rule"],
+        }
+        for stage in contract["stages"]
+        for row in stage["outputs"]
+    ]
+    if len(inputs) != 103 or len(outputs) != 30:
+        raise RuntimeError("UI parity contract field count drift")
+    return inputs, outputs
+
+
+def _normalize_observer_location(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("observer route/path is missing")
+    location = urlsplit(value).path
+    location = re.sub(r"^/api/v1", "", location)
+    location = _UUID_SEGMENT_RE.sub("<id>", location)
+    location = re.sub(r"/\d+(?=/|$)", "/<id>", location)
+    return re.sub(
+        r"(CYIP-CN-INV|AR-CYZN|RCPT-CYZN|BTR-CYZN)-[A-Za-z0-9-]+",
+        r"\1-<run suffix>",
+        location,
+    )
+
+
+def _normalized_actor_mutations(
+    events: object,
+) -> tuple[list[dict[str, Any]], dict[int, str]]:
+    if not isinstance(events, list):
+        raise RuntimeError("observer event ledger is missing")
+    actions: dict[str, dict[str, Any]] = {}
+    used_actions: set[str] = set()
+    mutation_counts: dict[int, int] = {}
+    mutations: list[dict[str, Any]] = []
+    screenshot_digests: dict[int, str] = {}
+    next_stage = 1
+    for event in events:
+        if not isinstance(event, dict):
+            raise RuntimeError("observer event is invalid")
+        kind = event.get("kind")
+        if kind == "action":
+            action_id = event.get("action_id")
+            if not isinstance(action_id, str) or not action_id or action_id in actions:
+                raise RuntimeError("observer visible action identity is invalid")
+            actions[action_id] = event
+        elif kind == "mutation":
+            action_id = event.get("action_id")
+            action = actions.get(action_id) if isinstance(action_id, str) else None
+            if (
+                action is None
+                or action_id in used_actions
+                or any(
+                    event.get(key) != action.get(key)
+                    for key in ("route", "role", "label_or_testid")
+                )
+                or event.get("method") not in {"POST", "PUT", "PATCH", "DELETE"}
+                or type(event.get("status")) is not int
+                or not 200 <= event["status"] < 400
+                or next_stage > 11
+            ):
+                raise RuntimeError("observer mutation lacks one successful visible action")
+            used_actions.add(action_id)
+            mutation_counts[next_stage] = mutation_counts.get(next_stage, 0) + 1
+            mutations.append(
+                {
+                    "stage": f"{next_stage:02d}",
+                    "action_id": (
+                        f"stage-{next_stage:02d}-mutation-{mutation_counts[next_stage]:03d}"
+                    ),
+                    "method": event["method"],
+                    "path": _normalize_observer_location(event.get("path")),
+                    "status": event["status"],
+                    "route": _normalize_observer_location(event.get("route")),
+                    "role": event.get("role"),
+                    "label_or_testid": event.get("label_or_testid"),
+                }
+            )
+        elif kind == "screenshot":
+            stage = event.get("stage")
+            digest = event.get("sha256")
+            if (
+                type(stage) is not int
+                or stage != next_stage
+                or not isinstance(digest, str)
+                or _SHA256_RE.fullmatch(digest) is None
+            ):
+                raise RuntimeError("observer screenshot sequence is invalid")
+            screenshot_digests[stage] = digest
+            next_stage += 1
+        elif kind in {"network_failure", "console_failure", "STOP", "FINALIZED"}:
+            raise RuntimeError(f"observer PASS ledger contains terminal event: {kind}")
+        else:
+            raise RuntimeError("observer event kind is invalid")
+    if next_stage != 12 or not mutations:
+        raise RuntimeError("observer PASS ledger is incomplete")
+    return mutations, screenshot_digests
+
+
+def _write_actor_pass_receipt(artifact: Path, context: DemoRunContext) -> None:
+    session = json.loads((artifact / "session.json").read_text(encoding="utf-8"))
+    actor = session.get("actor")
+    if actor not in {"HUMAN", "CODEX"}:
+        raise RuntimeError("UI actor is invalid")
+    observer_root = artifact / "observer"
+    observer_ledger = json.loads(
+        (observer_root / "observer-ui-ledger.json").read_text(encoding="utf-8")
+    )
+    mutations, observed_screenshots = _normalized_actor_mutations(
+        observer_ledger.get("events")
+    )
+    screenshots = []
+    for stage in range(1, 12):
+        screenshot = observer_root / f"observer-stage-{stage:02d}.png"
+        digest = hashlib.sha256(screenshot.read_bytes()).hexdigest()
+        if observed_screenshots.get(stage) != digest:
+            raise RuntimeError("observer screenshot digest drift")
+        screenshots.append(
+            {"stage": f"{stage:02d}", "path": str(screenshot), "sha256": digest}
+        )
+    inputs, outputs = _canonical_ui_ledgers()
+    _write_json(
+        artifact / "pass-receipt.json",
+        {
+            "schema_id": UI_SESSION_CONTRACT_VERSION,
+            "status": "PASS",
+            "actor": actor,
+            "account_id": f"ui-actor:{actor}",
+            "run_id": context.run_id,
+            "run_root": str(context.run_root),
+            "database_path": str(context.database_path),
+            "candidate_commit": context.candidate_commit,
+            "candidate_tree": context.candidate_tree,
+            "contract_version": UI_SESSION_CONTRACT_VERSION,
+            "bundle_manifest_sha256": context.manifest_sha,
+            "authority_sha256": context.authority_sha,
+            "allowed_differences": UI_RECEIPT_ALLOWED_DIFFERENCES,
+            "input_ledger": inputs,
+            "output_ledger": outputs,
+            "mutation_ledger": mutations,
+            "screenshots": screenshots,
+            "network_errors": [],
+            "console_errors": [],
+        },
+    )
+
+
 @contextmanager
 def _observer_binding(
     observer_root: Path,
@@ -1265,7 +1445,19 @@ def _complete_ui_session(
     status: str,
 ) -> None:
     if status == "FINALIZED":
-        _remove_finalized_ui_run(artifact, context)
+        try:
+            _write_actor_pass_receipt(artifact, context)
+            _remove_finalized_ui_run(artifact, context)
+        except Exception:
+            _write_json(
+                artifact / "observer" / "session-status.json",
+                {
+                    "status": "FAILED",
+                    "run_id": context.run_id,
+                    "run_root_removed": False,
+                },
+            )
+            raise
     _write_json(
         artifact / "observer" / "session-status.json",
         {
