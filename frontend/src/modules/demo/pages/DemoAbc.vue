@@ -252,7 +252,6 @@ async function createObligation() {
   await run('obligation', async () => {
     obligation.value = await createDemoServiceObligation(
       selectedCase.value!.id,
-      bundle.value!.item_code,
       idempotencyKeys.obligation,
     )
     persistSession()

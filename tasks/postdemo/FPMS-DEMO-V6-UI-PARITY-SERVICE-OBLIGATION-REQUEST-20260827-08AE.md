@@ -17,8 +17,9 @@ Chosen runbook: `P0-single-lane-story`
 ## Exact Closure Slice
 
 Remove the retired `item_code` argument and JSON field from the existing frontend
-`createDemoServiceObligation` request. Keep the prior validated runtime-item read and response
-comparison unchanged, so the server-owned multi-line runtime bundle remains authoritative.
+`createDemoServiceObligation` request and its two frontend call sites. Keep the prior validated
+runtime-item read and response comparison unchanged, so the server-owned multi-line runtime bundle
+remains authoritative.
 
 ## Scope decision — FIXED
 
@@ -34,6 +35,7 @@ comparison unchanged, so the server-owned multi-line runtime bundle remains auth
 
 - `tasks/postdemo/FPMS-DEMO-V6-UI-PARITY-SERVICE-OBLIGATION-REQUEST-20260827-08AE.md`
 - `frontend/src/modules/demo/demo.api.ts`
+- `frontend/src/modules/demo/pages/DemoAbc.vue`
 - `frontend/tests/demo-v6-fee-ui-parity-contract.mjs`
 
 ## Explicit Non-Closure
