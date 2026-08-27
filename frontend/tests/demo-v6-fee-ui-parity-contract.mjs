@@ -7,6 +7,7 @@ import ts from 'typescript'
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
 const demoApi = read('src/modules/demo/demo.api.ts')
+const govPaymentsApi = read('src/api/govPayments.ts')
 const demoAbc = read('src/modules/demo/pages/DemoAbc.vue')
 const caseFees = read('src/modules/cases/components/CaseFeesTab.vue')
 const feeLane = read('src/modules/cases/components/FeeObligationLane.vue')
@@ -66,8 +67,12 @@ const demo = await importFunctions(
 const guards = await importFunctions(script(caseFees), ['canStartDemoServiceObligation'])
 const payListRoutes = await importFunctions(script(payList), ['buildPaymentRegistrationQuery'])
 const paymentRoutes = await importFunctions(script(payment), ['buildPaymentResultNavigation'])
+const govPaymentMoney = await importFunctions(govPaymentsApi, ['toDemoMoney'])
 const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdjustmentQuantity'])
 const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
+
+assert.equal(govPaymentMoney.toDemoMoney(50), '50.00')
+assert.equal(govPaymentMoney.toDemoMoney('900.00'), '900.00')
 
 const nullableServiceItem = { id: 'service-item-a', quantity: 0 }
 const serviceSourceFacts = {

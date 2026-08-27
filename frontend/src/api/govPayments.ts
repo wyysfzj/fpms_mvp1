@@ -735,12 +735,16 @@ export async function addManualGovPayment(
     }
 }
 
+function toDemoMoney(value: number | string): string {
+    return Number(value).toFixed(2)
+}
+
 export async function createDemoGovPaymentCommand(
     payload: DemoGovPaymentCommandPayload,
 ): Promise<DemoGovPaymentCommandResult> {
     const post = () => http.post<DemoGovPaymentCommandResult>(
         '/gov-payments/demo-command',
-        payload,
+        { ...payload, paid_amount: toDemoMoney(payload.paid_amount) },
         { validateStatus: status => status === 200 || status === 201 || status === 202 },
     )
     let response: Awaited<ReturnType<typeof post>> | undefined
