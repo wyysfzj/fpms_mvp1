@@ -73,6 +73,20 @@ const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdju
 const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
 const billItems = await importFunctions(demoContract, ['serviceItemAmountsEqualBill', 'serviceReceiptFeeCodeMatchesBill'])
 
+for (const [code, label] of [
+  ['GRANT_REGISTRATION_OFFICIAL_FEES', '授权登记官费义务'],
+  ['RECOGNIZED', '已确认'],
+  ['SUPERSEDED', '已被替代'],
+  ['PAY', '缴费'],
+  ['CREATED', '已创建'],
+  ['NOT_CREATED', '未创建'],
+  ['UNPAID', '未缴费'],
+  ['NOT_APPLICABLE', '不适用'],
+  ['PAY_LIST', '缴费清单'],
+]) {
+  assert.match(feeLane, new RegExp(`${code}: '${label}'`))
+}
+
 assert.equal(govPaymentMoney.toDemoMoney(50), '50.00')
 assert.equal(govPaymentMoney.toDemoMoney('900.00'), '900.00')
 assert.equal(billItems.serviceItemAmountsEqualBill(['1200.00', '600.00'], '1800.00'), true)
