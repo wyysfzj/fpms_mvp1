@@ -7,6 +7,7 @@ import ts from 'typescript'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
+const indexPage = read('index.html')
 const filingPage = read('src/modules/cases/pages/FilingPreparation.vue')
 const documentCreatePage = read('src/modules/documents/pages/DocumentCreate.vue')
 const documentPage = read('src/modules/documents/pages/DocumentDetail.vue')
@@ -32,6 +33,7 @@ const documentsApi = read('src/api/documents.ts')
 const officialApi = read('src/api/officialWorkflows.ts')
 const documentCreateScript = documentCreatePage.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1] || ''
 
+assert.doesNotMatch(indexPage, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/)
 assert.match(filingPage, /记录人工递交完成/)
 assert.match(filingPage, /submissionForm\.occurredAt/)
 assert.match(filingPage, /submissionForm\.note/)
