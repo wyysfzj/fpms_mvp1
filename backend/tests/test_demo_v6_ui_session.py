@@ -1068,6 +1068,43 @@ def test_finalized_ui_session_without_complete_actor_ledger_preserves_run(
     module.abc.remove_run_root(context.run_root, context.run_id)
 
 
+def test_actor_pass_receipt_is_removed_when_final_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    module, context = _real_ui_context(tmp_path, monkeypatch)
+    artifact = (tmp_path / "artifact-cleanup-failure").resolve()
+    args = module.parse_args(
+        ["--ui-session", "--actor", "HUMAN", "--artifact", str(artifact)]
+    )
+    session_tuple = _session_tuple(module, context, actor="HUMAN")
+
+    def launch_browser(command, _env):
+        page_query = urllib.parse.parse_qs(urllib.parse.urlsplit(command[-1]).query)
+        activation_url = page_query["fpmsObserverBinding"][0]
+        _upload_complete_evidence(activation_url, session_tuple)
+        assert _host_post(activation_url, "finalize", session_tuple)[0] == 200
+        return _BrowserProcess()
+
+    monkeypatch.setattr(module, "_start_headed_browser", launch_browser)
+    assert module._run_ui_browser_session(args, context, artifact) == "FINALIZED"
+    monkeypatch.setattr(
+        module,
+        "_remove_finalized_ui_run",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("cleanup failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        module._complete_ui_session(context, artifact, "FINALIZED")
+
+    assert context.run_root.is_dir()
+    assert not (artifact / "pass-receipt.json").exists()
+    assert json.loads(
+        (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
+    )["status"] == "FAILED"
+    module.abc.remove_run_root(context.run_root, context.run_id)
+
+
 @pytest.mark.parametrize("stop_reason", ["browser-exit", "timeout"])
 def test_browser_exit_or_timeout_stops_without_cleanup(
     tmp_path: Path,

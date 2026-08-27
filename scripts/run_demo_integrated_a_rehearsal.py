@@ -1453,6 +1453,7 @@ def _complete_ui_session(
             _write_actor_pass_receipt(artifact, context)
             _remove_finalized_ui_run(artifact, context)
         except Exception:
+            (artifact / "pass-receipt.json").unlink(missing_ok=True)
             _write_json(
                 artifact / "observer" / "session-status.json",
                 {
