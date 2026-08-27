@@ -955,13 +955,16 @@ def test_browser_finalization_requires_complete_evidence_and_cleans_exact_run(
 
     assert not context.run_root.exists()
     assert captured_capability
-    serialized = capsys.readouterr().out + "".join(
+    captured = capsys.readouterr()
+    serialized = captured.out + "".join(
         path.read_text(encoding="utf-8")
         for path in artifact.rglob("*.json")
     )
     assert captured_capability not in serialized
     assert context.admin_password not in serialized
     assert context.reviewer_password not in serialized
+    assert f"本地一次性登录：admin / {context.admin_password}" in captured.err
+    assert context.reviewer_password not in captured.err
     final_status = json.loads(
         (artifact / "observer" / "session-status.json").read_text(encoding="utf-8")
     )

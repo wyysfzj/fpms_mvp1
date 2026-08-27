@@ -1428,6 +1428,10 @@ def _run_ui_browser_session(
                     ensure_ascii=False,
                 )
             )
+            print(
+                f"本地一次性登录：admin / {context.admin_password}",
+                file=sys.stderr,
+            )
             return _wait_for_browser_finalization(binding, browser_process)
     except Exception:
         _write_json(
