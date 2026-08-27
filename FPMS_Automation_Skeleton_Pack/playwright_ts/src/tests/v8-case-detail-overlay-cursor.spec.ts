@@ -25,6 +25,15 @@ test('case overlay traverses one frozen revision with milestone dedupe and hidde
     await expect.poll(() => overlayRequests.length).toBe(1)
     expectOverlayQuery(overlayRequests[0], '0', null)
     await expect(page.getByText(`快照修订：${firstRevision}`, { exact: true })).toBeVisible()
+    await expect(page.getByTestId('lifecycle-summary-document')).toBeVisible()
+    await expect(page.getByTestId('lifecycle-summary-lifecycle')).toContainText('官方程序阶段：实质审查')
+    await expect(page.getByTestId('lifecycle-summary-fee')).toBeVisible()
+    await expect(page.getByText('尚有历史未加载，完整状态待确认', { exact: true })).toHaveCount(8)
+    await expect(page.getByTestId('lifecycle-history-details')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '加载更多生命周期记录', exact: true })).toHaveCount(0)
+
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     await expectMilestoneActivities(page, ['activity-010', 'activity-020', 'activity-030'])
     await expectGateDiagnosticsHidden(page)
     await expectProjectionLabels(page)
@@ -69,6 +78,8 @@ test('case overlay traverses one frozen revision with milestone dedupe and hidde
     await expect(page.getByText(`快照修订：${firstRevision}`, { exact: true })).toBeVisible()
     await expect(loadMore).toHaveCount(0)
     await expect(page.getByText('已加载全部生命周期记录', { exact: true })).toBeVisible()
+    await expect(page.getByText('尚有历史未加载，完整状态待确认', { exact: true })).toHaveCount(0)
+    await expect(page.getByTestId('lifecycle-summary-lifecycle')).toContainText('2026-08-10T07:00:00Z')
     await page.waitForTimeout(250)
     expect(overlayRequests).toHaveLength(3)
     expect(mutationRequests).toEqual([])
@@ -126,6 +137,8 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const loadMore = page.getByRole('button', { name: '加载更多生命周期记录', exact: true })
     await expect(loadMore).toBeVisible()
     for (const [index, message] of invalidMessages.entries()) {

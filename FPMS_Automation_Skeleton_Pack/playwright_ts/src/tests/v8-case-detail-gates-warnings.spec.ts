@@ -37,9 +37,12 @@ test('案件详情隐藏 29 个内部客户决策及其警告，保留普通警�
     await expect(page.locator('[data-gate-key]')).toHaveCount(0)
     await expect(page.getByText('DG-FEE-APPLICATION-DRAFT', { exact: false })).toHaveCount(0)
     await expect(page.getByText('DG-LEGACY-FORM-CLASS', { exact: false })).toHaveCount(0)
+    await expect(page.getByTestId('lifecycle-history-details')).toHaveCount(0)
+    await expect(page.getByTestId('lifecycle-history-toggle')).toBeVisible()
 
     const snapshotWarnings = page.getByTestId('overlay-snapshot-warnings')
     const activityWarnings = page.getByTestId('overlay-activity-warnings-activity-warning')
+    await expect(page.getByText('活动层重复警告', { exact: true })).toHaveCount(1)
     await expect(snapshotWarnings.getByText('快照层重复警告', { exact: true })).toBeVisible()
     await expect(snapshotWarnings.getByText('快照层客户警告', { exact: true })).toHaveCount(0)
     await expect(snapshotWarnings.getByText('快照层客户来源警告', { exact: true })).toHaveCount(0)
@@ -90,9 +93,7 @@ test('案件详情隐藏 29 个内部客户决策及其警告，保留普通警�
         ],
     ])
 
-    expect(overlayGetUrls.length).toBeGreaterThanOrEqual(1)
-    expect(overlayGetUrls.length).toBeLessThanOrEqual(2)
-    expect(new Set(overlayGetUrls).size).toBe(1)
+    expect(overlayGetUrls).toHaveLength(1)
     const overlayUrl = new URL(overlayGetUrls[0])
     expect(overlayUrl.searchParams.get('after_sequence')).toBe('0')
     expect(overlayUrl.searchParams.get('limit')).toBe('200')
@@ -262,6 +263,7 @@ function overlayResponse() {
         ],
         decision_gates: decisionGates(),
         warnings: [
+            warning('CONFLICT', '活动层重复警告', 'activity-warning'),
             warning('UNVERIFIED', '快照层重复警告', null),
             warning('CUSTOMER_DECISION_GATE', '快照层客户警告', null),
             warning(

@@ -77,24 +77,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { OverlayMilestone } from '../../../api/lifecycleOverlay.types'
-
-const ACTIVITY_TYPE_LABELS: Readonly<Record<string, string>> = {
-  FILING_PREPARATION_STARTED: '申请文件准备已开始',
-  DOCUMENT_EVIDENCE_VERSION_REGISTERED: '文件证据版本已登记',
-  DOCUMENT_EVIDENCE_REVIEW_DECIDED: '文件证据复核结论已记录',
-  DOCUMENT_EVIDENCE_EXTERNAL_SUBMISSION_FINALIZED: '外部递交文件已定稿',
-  FILING_EXTERNAL_SUBMISSION_RECORDED: '申请文件已递交',
-  FILING_RECEIPT_ARCHIVED: '申请回执已归档',
-  ACCEPTANCE_NOTICE_RECORDED: '受理通知已登记',
-  PRELIMINARY_EXAMINATION_STARTED: '初步审查已开始',
-  PRELIMINARY_EXAMINATION_PASSED: '初步审查已通过',
-  PUBLICATION_NOTICE_RECORDED: '公布通知已登记',
-  SUBSTANTIVE_EXAMINATION_STARTED: '实质审查已开始',
-  OA_NOTICE_RECORDED: '审查意见通知已登记',
-  OA_EXTERNAL_SUBMISSION_RECORDED: '审查意见答复已递交',
-  OA_RECEIPT_ARCHIVED: '审查意见答复回执已归档',
-  GRANT_REGISTRATION_NOTICE_RECORDED: '授权登记通知已登记',
-}
+import { activityTypeText } from './lifecycleOverlayDisplay'
 
 const props = defineProps<{
   milestones: readonly OverlayMilestone[]
@@ -114,7 +97,7 @@ function displayValue(value: string | null): string {
 }
 
 function activityTypeLabel(activityType: string): string {
-  return ACTIVITY_TYPE_LABELS[activityType] ?? '活动类型待确认'
+  return activityTypeText(activityType)
 }
 
 function displayList(values: readonly string[]): string {

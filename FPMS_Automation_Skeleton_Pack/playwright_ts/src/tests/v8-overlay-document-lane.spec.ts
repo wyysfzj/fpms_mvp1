@@ -10,6 +10,8 @@ test('文件驱动线只展示版本、派生、工作包、回执和任务事�
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByRole('heading', { name: '文件驱动' })).toBeVisible()
     await expect(lane.getByText('活动类型：审查意见答复已递交', { exact: true })).toBeVisible()
@@ -34,6 +36,8 @@ test('未知活动类型显示待确认且不暴露原始枚举', async ({ page 
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByText('活动类型：活动类型待确认', { exact: true })).toBeVisible()
     await expect(lane.getByText('UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: false })).toHaveCount(0)
@@ -46,6 +50,8 @@ test('授权登记通知活动以中文显示', async ({ page }) => {
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByText('活动类型：授权登记通知已登记', { exact: true })).toBeVisible()
     await expect(lane.getByText('GRANT_REGISTRATION_NOTICE_RECORDED', { exact: false })).toHaveCount(0)

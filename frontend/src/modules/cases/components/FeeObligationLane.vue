@@ -64,6 +64,7 @@ import type {
   OverlayFeeRelatedFact,
   OverlayMilestone,
 } from '../../../api/lifecycleOverlay.types'
+import { feeStatusText } from './lifecycleOverlayDisplay'
 
 const props = defineProps<{
   milestones: readonly OverlayMilestone[]
@@ -101,46 +102,8 @@ const obligations = computed<readonly OverlayFeeObligation[]>(() =>
 const govObligations = computed(() => obligations.value.filter((item) => item.feeDomain === 'GOV'))
 const serviceObligations = computed(() => obligations.value.filter((item) => item.feeDomain === 'SERVICE'))
 
-const STATUS_TEXT: Readonly<Record<string, string>> = {
-  GOV: '官费',
-  SERVICE: '服务费',
-  OFFICIAL_FEE: '官费缴费义务',
-  GRANT_REGISTRATION_OFFICIAL_FEES: '授权登记官费义务',
-  SERVICE_FEE: '服务费应收义务',
-  RECOGNIZED: '已确认',
-  SUPERSEDED: '已被替代',
-  PAY: '缴费',
-  CREATED: '已创建',
-  NOT_CREATED: '未创建',
-  UNPAID: '未缴费',
-  NOT_APPLICABLE: '不适用',
-  OPEN: '处理中',
-  LOCKED: '已锁定',
-  DRAFT: '草稿',
-  PAY_LIST: '缴费清单',
-  PLANNED: '已计划',
-  RECORDED: '已登记，待官方凭证核验',
-  PAID: '已缴费',
-  PARTIAL: '部分完成',
-  UNSETTLED: '未结清',
-  PARTIALLY_SETTLED: '部分结清',
-  SETTLED: '已结清',
-  PENDING: '待处理',
-  NOT_AVAILABLE: '暂无',
-  NOT_REQUIRED: '不需要',
-  UNVERIFIED: '待核验',
-  VERIFIED: '已核验',
-  MATCHED: '一致',
-  DIFFERENT: '存在差额',
-  BILL: '客户账单',
-  PAYMENT: '客户回款',
-  OFFSET: '账单核销',
-  GOV_PAYMENT: '官费登记',
-}
-
 function statusText(value: string | null): string {
-  if (!value) return '暂无'
-  return STATUS_TEXT[value.toUpperCase()] || '未识别状态'
+  return feeStatusText(value)
 }
 
 function displayValue(value: string | null): string {

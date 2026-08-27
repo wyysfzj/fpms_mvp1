@@ -94,6 +94,14 @@ async function captureStage(page: Page, stage: string): Promise<void> {
   })
 }
 
+async function expandLifecycleHistory(page: Page): Promise<void> {
+  const details = page.getByTestId('lifecycle-history-details')
+  if (await details.count() === 0) {
+    await page.getByTestId('lifecycle-history-toggle').click()
+  }
+  await expect(details).toBeVisible()
+}
+
 test('strict V6 normal-UI journey', async ({ page, browser }) => {
   test.setTimeout(9 * 60 * 1000)
   page.setDefaultTimeout(10_000)
@@ -614,6 +622,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await reviewerContext.close()
     await page.getByRole('link', { name: caseNo }).first().click()
     await page.waitForURL(url => url.pathname === `/cases/${currentCaseId}` || url.pathname === `/cases/no/${caseNo}`)
+    await expandLifecycleHistory(page)
     const evidenceLane = page.getByTestId('document-evidence-lane')
     const evidenceMilestone = (label: string) => evidenceLane.locator('article').filter({
       hasText: `活动类型：${label}`,
@@ -904,6 +913,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     uiPhase = 'stage-04-case-detail'
     await page.getByRole('link', { name: '查看案件' }).click()
     await page.waitForURL(url => url.pathname === `/cases/${currentCaseId}`)
+    await expandLifecycleHistory(page)
     const evidenceLane = page.getByTestId('document-evidence-lane')
     const noticeMilestone = evidenceLane.locator('article').filter({ hasText: '活动类型：审查意见通知已登记' })
     await expect(noticeMilestone.getByText(`内容哈希：sha256:${noticeEvidence.sha256}`, { exact: true })).toBeVisible()
@@ -1175,6 +1185,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     uiPhase = 'stage-05-case-detail'
     await page.getByRole('link', { name: '查看案件' }).click()
     await page.waitForURL(url => url.pathname === `/cases/${currentCaseId}`)
+    await expandLifecycleHistory(page)
     const evidenceLane = page.getByTestId('document-evidence-lane')
     const noticeMilestones = evidenceLane.locator('article').filter({ hasText: '活动类型：审查意见通知已登记' })
     await expect(noticeMilestones).toHaveCount(2)
@@ -1392,6 +1403,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
 
     await paidReplacementRow.getByRole('link', { name: new RegExp(caseNo) }).click()
     await page.waitForURL(url => url.pathname === `/cases/no/${caseNo}`)
+    await expandLifecycleHistory(page)
     const feeLane = page.getByTestId('fee-obligation-lane')
     await expect(feeLane).toContainText('官费轨：0 项')
     await reviewerContext.close()
@@ -1657,6 +1669,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
 
     uiPhase = 'stage-08-verify-service-supersession'
     await page.goto(`${baseUrl}/cases/no/${caseNo}`, { waitUntil: 'networkidle' })
+    await expandLifecycleHistory(page)
     const feeLane = page.getByTestId('fee-obligation-lane')
     const originalServiceCard = feeLane.getByTestId(`fee-obligation-${originalServiceObligationId}`)
     const supersedingServiceCard = feeLane.getByTestId(`fee-obligation-${supersedingServiceObligationId}`)
@@ -2086,6 +2099,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await page.getByRole('link').filter({ hasText: caseNo }).first().click()
     await page.waitForURL(url => url.pathname === `/cases/${currentCaseId}`)
 
+    await expandLifecycleHistory(page)
     const feeLane = page.getByTestId('fee-obligation-lane')
     await expect(feeLane.getByRole('heading', { name: '同案双轨费用概览' })).toBeVisible()
     await expect(feeLane).toContainText('官费轨：1 项')

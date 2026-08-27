@@ -205,6 +205,14 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
     true,
   );
 
+  await expect(page.getByTestId("lifecycle-summary-document")).toBeVisible();
+  await expect(page.getByTestId("lifecycle-summary-lifecycle")).toBeVisible();
+  await expect(page.getByTestId("lifecycle-summary-fee")).toBeVisible();
+  await expect(
+    page.getByText("尚有历史未加载，完整状态待确认", { exact: true }),
+  ).toHaveCount(8);
+  await page.getByTestId("lifecycle-history-toggle").click();
+  await expect(page.getByTestId("lifecycle-history-details")).toBeVisible();
   await expect(page.getByTestId("lifecycle-center-lane")).toBeVisible();
   await expect(page.getByTestId("document-evidence-lane")).toBeVisible();
   await expect(page.getByTestId("fee-obligation-lane")).toBeVisible();
@@ -273,6 +281,9 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
 
   await expectGateDiagnosticsHidden(page);
   await expect(page.getByText("已加载全部生命周期记录", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("尚有历史未加载，完整状态待确认", { exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByTestId("lifecycle-center-lane")).toBeVisible();
   await expect(page.getByTestId("document-evidence-lane")).toBeVisible();
   await expect(page.getByTestId("fee-obligation-lane")).toBeVisible();

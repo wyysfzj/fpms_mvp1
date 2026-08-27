@@ -11,6 +11,8 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
     })
     await page.goto(`/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
 
+    await page.getByTestId('lifecycle-history-toggle').click()
+    await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('lifecycle-center-lane')
     await expect(lane.getByRole('heading', { name: '案件生命周期' })).toBeVisible()
     await expect(lane.getByText('业务阶段：流程管理', { exact: true })).toBeVisible()
