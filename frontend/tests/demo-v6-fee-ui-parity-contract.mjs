@@ -10,6 +10,7 @@ const demoApi = read('src/modules/demo/demo.api.ts')
 const demoAbc = read('src/modules/demo/pages/DemoAbc.vue')
 const caseFees = read('src/modules/cases/components/CaseFeesTab.vue')
 const feeItems = read('src/modules/fees/components/FeeDraftItemsTable.vue')
+const feeDetail = read('src/modules/fees/pages/FeeDraftDetail.vue')
 const payList = read('src/modules/annuity/pages/PayListDetail.vue')
 const payment = read('src/modules/annuity/pages/GovPaymentCreate.vue')
 const script = (source) => source.split('<script setup lang="ts">', 2)[1].split('</script>', 1)[0]
@@ -252,6 +253,8 @@ assert.match(payment, /登记下一行/)
 assert.match(payment, /返回当前清单/)
 assert.match(payment, /parseQueryText\(route\.query\.next_fee_item_id\)/)
 assert.doesNotMatch(caseFees + payment, /<el-input[^>]+(?:obligationId|itemCode|payListId|feeItemId|义务ID|项目代码|清单ID|费用项ID)/i)
+assert.match(feeDetail, /调整前摘要：sha256:\{\{ row\.adjustment_before_digest \}\}/)
+assert.match(feeDetail, /调整后摘要：sha256:\{\{ row\.adjustment_after_digest \}\}/)
 
 delete globalThis.__ordinal06ReadItem
 delete globalThis.__ordinal06Create

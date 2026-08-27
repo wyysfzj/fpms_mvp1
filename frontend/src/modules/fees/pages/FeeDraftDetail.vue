@@ -170,7 +170,12 @@
                   <el-table-column prop="activation_status" label="启用状态" width="120" />
                   <el-table-column label="调整记录" min-width="180">
                     <template #default="{ row }">
-                      {{ row.adjustment_reason || (row.adjustable ? '尚未调整' : '不可调整') }}
+                      <template v-if="row.adjustment_reason && row.adjustment_before_digest && row.adjustment_after_digest">
+                        <div>{{ row.adjustment_reason }}</div>
+                        <div>调整前摘要：sha256:{{ row.adjustment_before_digest }}</div>
+                        <div>调整后摘要：sha256:{{ row.adjustment_after_digest }}</div>
+                      </template>
+                      <template v-else>{{ row.adjustable ? '尚未调整' : '不可调整' }}</template>
                     </template>
                   </el-table-column>
                 </el-table>
