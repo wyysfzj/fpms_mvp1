@@ -71,13 +71,16 @@ const paymentRoutes = await importFunctions(script(payment), ['buildPaymentResul
 const govPaymentMoney = await importFunctions(govPaymentsApi, ['toDemoMoney'])
 const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdjustmentQuantity'])
 const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
-const billItems = await importFunctions(demoContract, ['serviceItemAmountsEqualBill'])
+const billItems = await importFunctions(demoContract, ['serviceItemAmountsEqualBill', 'serviceReceiptFeeCodeMatchesBill'])
 
 assert.equal(govPaymentMoney.toDemoMoney(50), '50.00')
 assert.equal(govPaymentMoney.toDemoMoney('900.00'), '900.00')
 assert.equal(billItems.serviceItemAmountsEqualBill(['1200.00', '600.00'], '1800.00'), true)
 assert.equal(billItems.serviceItemAmountsEqualBill(['1200.00', '500.00'], '1800.00'), false)
 assert.equal(billItems.serviceItemAmountsEqualBill([], '1800.00'), false)
+assert.equal(billItems.serviceReceiptFeeCodeMatchesBill(undefined, ['BASE', 'ADDON']), true)
+assert.equal(billItems.serviceReceiptFeeCodeMatchesBill('ADDON', ['BASE', 'ADDON']), true)
+assert.equal(billItems.serviceReceiptFeeCodeMatchesBill('GOV', ['BASE', 'ADDON']), false)
 
 const nullableServiceItem = { id: 'service-item-a', quantity: 0 }
 const serviceSourceFacts = {

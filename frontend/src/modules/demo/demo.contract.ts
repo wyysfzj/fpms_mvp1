@@ -289,7 +289,7 @@ export interface DemoOffsetResponse {
     id: string
     case_id: string
     fee_type: 'SERVICE'
-    fee_code: string
+    fee_code: string | null
     currency: 'CNY'
     receivable_amt: string
     received_amt: string
@@ -426,6 +426,13 @@ export function serviceItemAmountsEqualBill(itemAmounts: readonly string[], bill
   ) === BigInt(billAmount.replace('.', ''))
 }
 
+export function serviceReceiptFeeCodeMatchesBill(
+  receiptFeeCode: string | undefined,
+  billItemCodes: readonly string[],
+): boolean {
+  return receiptFeeCode === undefined || billItemCodes.includes(receiptFeeCode)
+}
+
 export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   const row = record(value, 'bill')
   id(row.id, 'bill.id')
@@ -549,7 +556,7 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   id(receipt.id, 'offset_response.case_receipt.id')
   const receiptCaseId = id(receipt.case_id, 'offset_response.case_receipt.case_id')
   literal(receipt.fee_type, ['SERVICE'], 'offset_response.case_receipt.fee_type')
-  const receiptFeeCode = string(receipt.fee_code, 'offset_response.case_receipt.fee_code')
+  const receiptFeeCode = optionalString(receipt.fee_code, 'offset_response.case_receipt.fee_code')
   literal(receipt.currency, ['CNY'], 'offset_response.case_receipt.currency')
   const receivableAmount = money(
     receipt.receivable_amt,
@@ -575,7 +582,9 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   equal(line.status, 'FULLY_ALLOCATED', 'offset_response.line.status')
   if (bill.status === 'UNSETTLED') invalid('offset_response.bill.status')
   equal(receiptCaseId, bill.case_id, 'offset_response.case_receipt.case_id')
-  equal(receiptFeeCode, bill.items[0].fee_code, 'offset_response.case_receipt.fee_code')
+  if (!serviceReceiptFeeCodeMatchesBill(receiptFeeCode, bill.items.map((item) => item.fee_code))) {
+    invalid('offset_response.case_receipt.fee_code')
+  }
   equal(receivableAmount, bill.amount, 'offset_response.case_receipt.receivable_amt')
   const remaining = BigInt(bill.balance.replace('.', ''))
   const receivable = BigInt(receivableAmount.replace('.', ''))

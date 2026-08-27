@@ -96,7 +96,7 @@ export interface DemoOffsetResponse {
     id: string
     case_id: string
     fee_type: string
-    fee_code: string
+    fee_code: string | null
     currency: string
     receivable_amt: string
     received_amt: string
