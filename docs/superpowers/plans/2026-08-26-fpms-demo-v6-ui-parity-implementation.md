@@ -483,10 +483,10 @@ cd "$ACTOR_CLONE/backend" && python3 -m venv .venv && .venv/bin/pip install -e "
 cd "$ACTOR_CLONE/frontend" && npm ci
 cd "$ACTOR_CLONE/FPMS_Automation_Skeleton_Pack/playwright_ts" && npm ci && npx playwright install chromium
 cd "$ACTOR_CLONE" && backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
-  --profile TECHNICAL_REHEARSAL --ui-session --actor HUMAN \
+  --ui-session --actor HUMAN \
   --artifact "$HUMAN_RECEIPT_ROOT"
 cd "$ACTOR_CLONE" && backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
-  --profile TECHNICAL_REHEARSAL --ui-session --actor CODEX \
+  --ui-session --actor CODEX \
   --artifact "$CODEX_RECEIPT_ROOT"
 ```
 
@@ -496,8 +496,14 @@ syntax, not permission to execute both from one actor.
 3. Compare only after both report PASS:
 
 ```bash
+mkdir -p "$ACTOR_ACCEPTANCE_ROOT"
+CANDIDATE_JSON="$ACTOR_ACCEPTANCE_ROOT/candidate.json"
+test -z "$(git -C "$ACTOR_CLONE" status --porcelain)"
+CANDIDATE_TREE="$(git -C "$ACTOR_CLONE" rev-parse 'HEAD^{tree}')"
+printf '{"commit":"%s","tree":"%s","status":"CLEAN"}\n' \
+  "$CANDIDATE_SHA" "$CANDIDATE_TREE" > "$CANDIDATE_JSON"
 backend/.venv/bin/python scripts/compare_demo_v6_ui_receipts.py \
-  --candidate "$CANDIDATE_SHA" \
+  --candidate "$CANDIDATE_JSON" \
   --human "$HUMAN_RECEIPT_ROOT/pass-receipt.json" \
   --codex "$CODEX_RECEIPT_ROOT/pass-receipt.json" \
   --output "$ACTOR_ACCEPTANCE_ROOT/comparison.json"
@@ -550,10 +556,13 @@ cd "$FINAL_CLONE"
 backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
   --profile TECHNICAL_REHEARSAL --runs 2 --headless --artifact "$FINAL_ROOT/a-two-runs"
 backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
-  --profile TECHNICAL_REHEARSAL --strict-ui --runs 2 --headless \
-  --artifact "$FINAL_ROOT/strict-two-runs"
+  --profile TECHNICAL_REHEARSAL --strict-ui --runs 1 --headless \
+  --artifact "$FINAL_ROOT/strict-run-1"
+backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
+  --profile TECHNICAL_REHEARSAL --strict-ui --runs 1 --headless \
+  --artifact "$FINAL_ROOT/strict-run-2"
 backend/.venv/bin/python scripts/compare_demo_v6_ui_receipts.py \
-  --candidate "$CANDIDATE_SHA" \
+  --candidate "$CANDIDATE_JSON" \
   --human "$HUMAN_RECEIPT_ROOT/pass-receipt.json" \
   --codex "$CODEX_RECEIPT_ROOT/pass-receipt.json" \
   --output "$FINAL_ROOT/actor-comparison.json"
