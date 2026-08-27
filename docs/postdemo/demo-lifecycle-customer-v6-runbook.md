@@ -4,9 +4,57 @@
 受众：客户业务、流程与财务负责人
 数据边界：`SYNTHETIC_TEST_ONLY`，采用真实业务形态的合成测试数据，非客户授权、非生产输入。
 
-演示前由主持人在不共享的终端运行一次全新 run。必须确认数据库、WAL、SHM 与证据目录均不存在，runtime bundle、authority、官费费率簿和服务费来源摘要匹配，并且网络预检通过。任何预检失败都停止，不进入客户共享页面。
+## 演示前重置与预检
+
+演示前由主持人在不共享的终端启动一个全新隔离 run；不得把旧 run 作为 reset 输入，也不得在 preflight 删除旧 run 或在旧数据库中按表删行后复用。必须使用新的 run ID、run root、数据库、业务号和证据目录，并确认新的数据库、WAL、SHM 与证据目录均不存在，runtime bundle、authority、官费费率簿和服务费来源摘要匹配，Network Error 与 console 采集已开启且网络预检通过。旧 run 只可在演示结束后通过已验证 exact run root 的独立 cleanup/归档流程处理；失败 artifact 必须保留。任何预检失败都停止，不进入客户共享页面，也不得靠重试或过滤错误继续演示。
 
 统一场景：澄岳智造技术（苏州）有限公司；联系人周岚；案件 `CYIP-CN-INV-<run suffix>`；案名“一种柔性制造产线中视觉检测工位的自适应标定方法”。客户共享屏幕只出现正常业务页面，不出现主持人控制页面。
+
+## 冻结的 UI-only 执行合同
+
+- 唯一合同：`FPMS_Automation_Skeleton_Pack/data/testcases/demo_v6_ui_parity_v1.json`，schema 为 `fpms.demo-v6-ui-parity/v1`；共 103 个输入/来源字段和 30 个可见输出字段。
+- `EXPLICIT_INPUT` 必须由 HUMAN 与 CODEX 在正常页面输入相同固定值或相同 `<run suffix>` 模板；`SOURCE_BOUND` 必须从当前页面读取并选择；`APP_GENERATED` 只能由系统生成。
+- 允许不同的只有 run suffix、UUID/自增 ID、数据库/文件路径、动态凭据、幂等键和系统时间戳。日期、金额、原因、来源摘要及业务状态不得不同。
+- 允许页面为 `/demo/inputs` 只读预检、客户/案件/文书/流程/授权费用/草单/清单/回款/核销等正常页面；禁止进入隐藏演示控制路由，禁止 curl、直接 HTTP/SQL、内部 ID 抄写、旧 artifact 复用或 observer 发起 mutation。
+- 每阶段结束点击页面顶部“记录阶段 NN 截图”。第 11 阶段后回到 `/demo/inputs`，点击“完成并导出本轮证据”。只有 11 张不同截图、可见 action/mutation 一一对应且 Network/console 为零，才生成 actor `pass-receipt.json`。
+
+### 正常页面路线
+
+| 阶段 | 路线（动态 ID 由当前页面链接带入，不手抄） |
+| --- | --- |
+| `01` | `/clients/new` → `/clients/:id` → `/cases/new` → `/cases/:id` |
+| `02` | `/documents/wizard` → `/official-workflows/filing-preparation` |
+| `03` | `/documents/:id` → `/official-workflows/filing-preparation` → `/cases/:id` |
+| `04` | `/documents/new` → `/documents/:id` → `/official-workflows/oa-reply` |
+| `05` | `/documents/new` → `/documents/:id` → `/official-workflows/oa-reply` → `/cases/:id` |
+| `06` | `/grant-fee/tasks` → `/cases/:id` |
+| `07` | `/grant-fee/tasks` → `/fees/drafts/:id` |
+| `08` | `/fees/drafts/new` → `/fees/drafts/:id` → `/fees/drafts` |
+| `09` | `/fee-management/pay-lists` → `/fee-management/pay-lists/:id` → `/fee-management/gov-payments/new` |
+| `10` | `/billing/bills/new` → `/billing/bills/:id` → `/billing/payments/new` → `/billing/payments` |
+| `11` | `/cases/:id`（只读，无新业务写入） |
+
+### 完整字段分类索引
+
+字段的值、控件、来源选择器和 normalization 以唯一 JSON 合同为准；本表覆盖全部字段键，防止人工或 Codex 自行改分类。
+
+| 阶段 | `EXPLICIT_INPUT` | `SOURCE_BOUND` | `APP_GENERATED` | 可见输出及分类 |
+| --- | --- | --- | --- | --- |
+| `01` | customer_name, customer_code, customer_email, contact_name, contact_title, contact_email, contact_is_primary, case_no, case_title, case_type, patent_category, flow_direction, fee_reduction | client_binding, first_applicant | — | unique_customer_and_primary_contact [APP_GENERATED], unique_case [APP_GENERATED], same_case_primary_contact_and_first_applicant [APP_GENERATED] |
+| `02` | — | current_case, filing_catalog_60 | — | same_filing_package [APP_GENERATED], catalog_execution_boundary [SOURCE_BOUND] |
+| `03` | filing_submission_completed_at, filing_submission_note, filing_receipt_no, filing_receipt_received_at, filing_receipt_receiver | filing_final_submission_evidence, filing_receipt_evidence, acceptance_notice_evidence, preliminary_examination_evidence, publication_notice_evidence, substantive_examination_evidence | — | submission_and_receipt_lineage, acceptance_projection, preliminary_projection, publication_and_substantive_projection [APP_GENERATED] |
+| `04` | oa_sequence, oa_notice_at, oa_due_date | oa_notice_evidence, oa_reply_output_roles, oa_receipt_evidence, oa_receipt_received_at | — | oa1_unique_chain, oa1_reply_output_bindings [APP_GENERATED] |
+| `05` | oa_sequence, oa_notice_at, oa_due_date | oa_notice_evidence, oa_reply_output_roles, oa_receipt_evidence, oa_receipt_received_at | — | oa2_unique_chain, oa_round_identity_separation [APP_GENERATED] |
+| `06` | original_grant_notice_at, original_grant_due_date, replacement_grant_notice_at, replacement_grant_due_date, replacement_grant_reason, current_task_instruction | original_grant_evidence, replacement_grant_evidence, current_task_waiting_client | — | original_task_superseded_read_only, current_task_pay_once, no_gov_before_confirmation [APP_GENERATED] |
+| `07` | — | current_grant_task, reviewed_replacement_evidence, rate_book_digest, rate_row_digests, preview_digest, preview_line_amounts | confirmation_time, confirmation_idempotency_key | gov_preview_total [SOURCE_BOUND], unique_gov_obligation_and_draft, gov_lines_read_only [APP_GENERATED] |
+| `08` | service_item_1, service_item_2, service_item_2_quantity_before, service_item_2_quantity_after, service_adjustment_reason | — | — | one_gov_and_one_service_draft, service_adjustment_total, both_drafts_locked [APP_GENERATED] |
+| `09` | planned_pay_date, pay_list_remark | gov_line_amounts, official_receipt_fields, voucher_fields, invoice_fields | — | one_two_line_pay_list, pending_official_evidence_per_line [APP_GENERATED] |
+| `10` | bill_no, bill_date, bill_due_date, payment_1_amount, payment_1_date, payment_1_method, payment_1_no, payment_1_bank_ref, payment_1_remark, offset_1_date, payment_2_date, payment_2_method, payment_2_no, payment_2_bank_ref, payment_2_remark, offset_2_date | service_locked_draft, payment_1_bill, payment_1_currency, offset_1_payment_line, offset_1_bill, offset_1_amount, payment_2_bill, payment_2_amount, payment_2_currency, offset_2_payment_line, offset_2_bill, offset_2_amount | bill_idempotency_key, payment_1_idempotency_key, offset_1_idempotency_key, payment_2_idempotency_key, offset_2_idempotency_key | bill_settlement_transition, two_payments_and_offsets, payment_offset_bill_equation [APP_GENERATED] |
+| `11` | — | — | — | same_case_gov_pending_evidence, same_case_service_settled [SOURCE_BOUND], cross_track_consistency [APP_GENERATED] |
+
+## 两轮技术演练收据
+
+冻结证据显示两轮 `TECHNICAL_REHEARSAL` 均通过：每轮 13 个 canonical 检查点、11 个 V6 阶段、12 个证据绑定，业务身份集合互不重叠；Network Error 与 console 错误数组均为空。官费合计 950.00 CNY；服务费草单从 1,500.00 调整为 1,800.00 CNY；两次回款与核销为 1,200.00 + 600.00 = 1,800.00 CNY，最终 `SETTLED`、余额 0.00 CNY。
 
 ## 阶段 01：客户与案件
 
@@ -86,7 +134,7 @@
 **UI/操作**：打开授权费用任务正常页面，选择“预览官费”，核对来源、版本、生效日、摘要和逐行金额，再确认。
 **输入**：当前任务、已复核更正通知版本、active rate-book digest、逐行确认金额和幂等键。
 **屏幕输出**：多行 GOV 候选、合计、source authority、rate-book version、SHA-256 和预览摘要。
-**期待结果**：确认后形成唯一 GOV obligation 与 GOV 草单；重放返回相同对象。
+**期待结果**：确认后形成唯一 GOV obligation 与 GOV 草单；多行官费合计 950.00 CNY，重放返回相同对象。
 **验证方法**：比对 preview digest、证据版本/哈希、费率簿摘要、行数和草单 ID。
 **事实边界**：预览不是缴费义务；只有确认成功才形成只读官费草单。
 **停止条件**：来源未激活、摘要漂移、少于两行、金额不一致或产生重复草单。
@@ -99,10 +147,10 @@
 **输入**：`FWSQDJ001`、`FWSQDJ002`；将可调整项目数量从 1 改为 2；原因“客户确认增加一份附加文件处理”。
 **屏幕输出**：GOV 只读多行；SERVICE 两行；before/after total、adjustment activity、来源摘要；两份草单均已锁定。
 **期待结果**：GOV 无编辑入口；SERVICE 只产生一次 superseding revision，金额从 1,500.00 CNY 变为 1,800.00 CNY。
-**验证方法**：读取 `/source-facts`，核对 fee domain、adjustable、adjustment activity、数量、金额和 LOCKED。
+**验证方法**：在页面“关联事实”中核对 fee domain、adjustable、adjustment activity、数量、金额和 LOCKED；被动 receipt 证明 persisted-only adjustment read seam 与 revision-aware overlay 指向当前 revision。
 **事实边界**：服务费来自 runtime 服务费来源，不是官费；通用编辑不能替代审计活动。
 **停止条件**：GOV 可编辑、SERVICE 可重复调整、原因/活动缺失或锁定后仍可编辑。
-**最近新增**：GOV/SERVICE 双草单、一次可追溯 SERVICE adjustment 和 fail-closed source facts。
+**最近新增**：GOV/SERVICE 双草单、一次可追溯 SERVICE adjustment、persisted-only adjustment read seam、revision-aware overlay 和 fail-closed source facts。
 
 ## 阶段 09：官费清单与待凭证登记
 
@@ -111,7 +159,7 @@
 **输入**：GOV fee item IDs、计划缴费日、每行 planned amount、同一命令幂等键；收据/凭证/发票均为 null。
 **屏幕输出**：“已登记，待官方凭证核验”；official receipt、voucher、invoice 均为空。
 **期待结果**：每个 GOV 行恰好一条 GovPayment；技术状态不得被显示成绿色支付成功。
-**验证方法**：按 idempotency key GET 对账，核对 `REGISTERED_PENDING_OFFICIAL_EVIDENCE`、对象 ID 和三个空凭证字段。
+**验证方法**：刷新正常清单页对账，核对 `REGISTERED_PENDING_OFFICIAL_EVIDENCE`、对象身份和三个空凭证字段；transport unknown 时只允许页面自身执行 GET-first 恢复。
 **事实边界**：内部登记事实不等于已取得、核验或匹配官方凭证。
 **停止条件**：Network Error、重复 GovPayment、任一空凭证被填充或页面显示“已缴费成功”。
 **最近新增**：per-line GovPayment、待凭证事实边界以及 transport unknown 的 GET-first 恢复。

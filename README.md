@@ -35,6 +35,18 @@ npm run dev
 - Frontend: http://localhost:5173
 - Backend OpenAPI: http://localhost:8000/docs
 
+## Customer Demo V6 handoff
+
+For the verified V6 lifecycle and dual-track fee rehearsal, start with
+`docs/postdemo/demo-v6-clone-deploy-handoff.md`. It contains the exact fresh-clone install,
+build, Playwright acceptance, and alternate-Codex-account workflow.
+
+The frozen `fpms.demo-v6-ui-parity/v1` path supports A technical regression plus B-HUMAN and
+B-CODEX setup-only, normal-UI sessions. Its bundle remains `SYNTHETIC_TEST_ONLY`: it may be shown
+to a customer only as a transparent synthetic technical demonstration, never as production data,
+formal pricing, official submission, or official-payment proof. Do not use the generic Docker demo
+as a substitute for the V6 handoff path.
+
 ## Docker demo (SQLite)
 
 Use this path when the team needs a single-container demo on a laptop or a simple cloud container host while still using SQLite.
