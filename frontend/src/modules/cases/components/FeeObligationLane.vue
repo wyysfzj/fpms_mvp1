@@ -59,11 +59,26 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { OverlayFeeObligation, OverlayMilestone } from '../../../api/lifecycleOverlay.types'
+import type {
+  OverlayFeeObligation,
+  OverlayFeeRelatedFact,
+  OverlayMilestone,
+} from '../../../api/lifecycleOverlay.types'
 
 const props = defineProps<{
   milestones: readonly OverlayMilestone[]
 }>()
+
+function mergeRelatedFacts(
+  previous: readonly OverlayFeeRelatedFact[],
+  current: readonly OverlayFeeRelatedFact[],
+): readonly OverlayFeeRelatedFact[] {
+  const merged = new Map<string, OverlayFeeRelatedFact>()
+  for (const fact of [...previous, ...current]) {
+    merged.set(`${fact.kind}:${fact.objectId}`, fact)
+  }
+  return [...merged.values()]
+}
 
 function latestObligationsById(
   milestones: readonly OverlayMilestone[],
@@ -71,7 +86,10 @@ function latestObligationsById(
   const latest = new Map<string, OverlayFeeObligation>()
   for (const milestone of milestones) {
     for (const obligation of milestone.feeObligations) {
-      latest.set(obligation.obligationId, obligation)
+      const previous = latest.get(obligation.obligationId)
+      latest.set(obligation.obligationId, previous
+        ? { ...obligation, relatedFacts: mergeRelatedFacts(previous.relatedFacts, obligation.relatedFacts) }
+        : obligation)
     }
   }
   return [...latest.values()]

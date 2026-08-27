@@ -67,7 +67,7 @@ const guards = await importFunctions(script(caseFees), ['canStartDemoServiceObli
 const payListRoutes = await importFunctions(script(payList), ['buildPaymentRegistrationQuery'])
 const paymentRoutes = await importFunctions(script(payment), ['buildPaymentResultNavigation'])
 const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdjustmentQuantity'])
-const feeLaneProjection = await importFunctions(script(feeLane), ['latestObligationsById'])
+const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
 
 const nullableServiceItem = { id: 'service-item-a', quantity: 0 }
 const serviceSourceFacts = {
@@ -77,13 +77,16 @@ const serviceSourceFacts = {
 assert.equal(adjustmentQuantity.resolveAdjustmentQuantity(nullableServiceItem, serviceSourceFacts), 1)
 assert.equal(adjustmentQuantity.resolveAdjustmentQuantity(nullableServiceItem, null), 0)
 assert.equal(adjustmentQuantity.resolveAdjustmentQuantity(nullableServiceItem, { ...serviceSourceFacts, fee_domain: 'GOV' }), 0)
-const obligationV1 = { obligationId: 'obligation-a', marker: 'old' }
-const obligationV2 = { obligationId: 'obligation-a', marker: 'latest' }
-const obligationB = { obligationId: 'obligation-b', marker: 'only' }
+const draftFactOpen = { kind: 'DRAFT', objectId: 'draft-a', status: 'OPEN' }
+const draftFactLocked = { ...draftFactOpen, status: 'LOCKED' }
+const paymentFact = { kind: 'PAYMENT', objectId: 'payment-a', status: 'PAID' }
+const obligationV1 = { obligationId: 'obligation-a', marker: 'old', relatedFacts: [draftFactOpen, paymentFact] }
+const obligationV2 = { obligationId: 'obligation-a', marker: 'latest', relatedFacts: [draftFactLocked] }
+const obligationB = { obligationId: 'obligation-b', marker: 'only', relatedFacts: [] }
 assert.deepEqual(feeLaneProjection.latestObligationsById([
   { feeObligations: [obligationV1] },
   { feeObligations: [obligationV2, obligationB] },
-]), [obligationV2, obligationB])
+]), [{ ...obligationV2, relatedFacts: [draftFactLocked, paymentFact] }, obligationB])
 
 const tuple = {
   contract_version: 'fpms.demo-v6-ui-parity/v1', run_id: 'run-1', candidate_commit: '1'.repeat(40),
