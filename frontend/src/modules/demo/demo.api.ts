@@ -116,14 +116,12 @@ export async function readDemoPreflight(): Promise<DemoPreflight> {
 
 export async function createDemoServiceObligation(
   caseId: string,
-  itemCode: string,
   idempotencyKey: string,
 ): Promise<DemoFeeObligationResponse> {
   return parseDemoFeeObligationResponse(
     (
       await http.post('/fees/demo-service-obligations', {
         case_id: caseId,
-        item_code: itemCode,
         idempotency_key: idempotencyKey,
       })
     ).data,
@@ -135,7 +133,7 @@ export async function createValidatedDemoServiceObligation(
   idempotencyKey: string,
 ): Promise<DemoFeeObligationResponse> {
   const item = await readDemoServiceItem()
-  const result = await createDemoServiceObligation(caseId, item.item_code, idempotencyKey)
+  const result = await createDemoServiceObligation(caseId, idempotencyKey)
   const obligation = result.obligation as unknown as Record<string, unknown>
   const exactItem = result.classification === item.classification
     && result.bundle_id === item.bundle_id

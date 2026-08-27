@@ -50,8 +50,8 @@ globalThis.__ordinal06ReadItem = async () => {
   if (itemValue instanceof Error) throw itemValue
   return itemValue
 }
-globalThis.__ordinal06Create = async (caseId, itemCode, key) => {
-  serviceCalls.push({ method: 'POST', path: '/fees/demo-service-obligations', caseId, itemCode, key })
+globalThis.__ordinal06Create = async (caseId, key) => {
+  serviceCalls.push({ method: 'POST', path: '/fees/demo-service-obligations', caseId, key })
   return createValue
 }
 const demo = await importFunctions(
@@ -84,8 +84,7 @@ assert.equal(created.obligation.case_id, 'case-a')
 assert.deepEqual(serviceCalls.slice(-2), [
   { method: 'GET', path: '/fees/demo-service-item' },
   {
-    method: 'POST', path: '/fees/demo-service-obligations', caseId: 'case-a',
-    itemCode: serviceItem.item_code, key: 'service-intent-1',
+    method: 'POST', path: '/fees/demo-service-obligations', caseId: 'case-a', key: 'service-intent-1',
   },
 ])
 
