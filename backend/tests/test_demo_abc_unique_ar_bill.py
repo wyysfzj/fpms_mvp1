@@ -26,14 +26,13 @@ def _locked_demo_draft(
     monkeypatch,
 ) -> tuple[str, str, str]:
     helpers = _runtime_helpers()
-    helpers["_configure_bundle"](tmp_path, monkeypatch)
+    helpers["_configure_bundle"](tmp_path, monkeypatch, integrated=True)
     client_id, case_id = helpers["_seed_case"](session_factory)
     intent = uuid4().hex
     obligation_response = client.post(
         "/api/v1/fees/demo-service-obligations",
         json={
             "case_id": case_id,
-            "item_code": "DEMO_SERVICE_1",
             "idempotency_key": f"bill-source-{intent}",
         },
         headers=auth_headers,
@@ -131,13 +130,13 @@ def test_demo_bill_is_exactly_once_and_billed_draft_cannot_unlock(
     assert created["bill"]["status"] == "UNSETTLED"
     assert created["bill"]["bill_date"] == "2026-08-16"
     assert created["bill"]["due_date"] == "2026-08-31"
-    assert created["bill"]["amount"] == "1200.00"
-    assert created["bill"]["balance"] == "1200.00"
-    assert created["bill"]["total_service"] == "1200.00"
+    assert created["bill"]["amount"] == "1500.00"
+    assert created["bill"]["balance"] == "1500.00"
+    assert created["bill"]["total_service"] == "1500.00"
     assert created["bill"]["total_gov"] == "0.00"
     assert created["bill"]["source_draft_ids"] == [draft_id]
-    assert len(created["bill"]["items"]) == 1
-    assert created["bill"]["items"][0]["fee_type"] == "SERVICE"
+    assert len(created["bill"]["items"]) == 2
+    assert all(item["fee_type"] == "SERVICE" for item in created["bill"]["items"])
 
     replay_response = client.post(
         "/api/v1/bills/demo-from-draft", json=command, headers=auth_headers
@@ -173,7 +172,7 @@ def test_demo_bill_is_exactly_once_and_billed_draft_cannot_unlock(
 
     with session_factory() as db:
         assert db.query(Bill).count() == 1
-        assert db.query(BillItem).count() == 1
+        assert db.query(BillItem).count() == 2
         assert db.query(BillDraftSource).count() == 1
         assert db.query(DemoFinanceCommand).count() == 1
         durable = db.query(DemoFinanceCommand).one()
