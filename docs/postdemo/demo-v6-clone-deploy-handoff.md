@@ -146,13 +146,13 @@ Runner 每次创建全新数据库、业务号、密码和证据目录，并通�
 两个 actor 必须使用不同 clean clone、不同外部 evidence root 和不同操作者账号。下面只展示共同命令形式；不能由一个 actor 冒充两次。`--ui-session` 不接受 `--profile`、`--runs` 或 `--headless`。
 
 ```bash
-FPMS_V6_ACTOR_PARENT="$(mktemp -d)"
-FPMS_V6_ACTOR_ROOT="$FPMS_V6_ACTOR_PARENT/human-receipt"  # CODEX 改为独立父目录/codex-receipt
+FPMS_V6_HUMAN_PARENT="$(mktemp -d)"
+export HUMAN_RECEIPT_ROOT="$FPMS_V6_HUMAN_PARENT/human-receipt"
 
 backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
   --ui-session \
   --actor HUMAN \
-  --artifact "$FPMS_V6_ACTOR_ROOT"
+  --artifact "$HUMAN_RECEIPT_ROOT"
 ```
 
 命令会启动 8000/5173 和一个长期保持的 headed 浏览器。stdout 只显示脱敏会话信息；当前 run 的一次性 `admin` 密码只显示在本地 terminal stderr，不写入 artifact/receipt。用它在正常登录页登录，然后：
@@ -161,9 +161,21 @@ backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
 2. 严格按 `docs/postdemo/demo-lifecycle-customer-v6-runbook.md` 的 01–11 顺序操作，只使用页面填入、选择、上传、点击和正常链接导航。
 3. 每阶段结束点击顶部“记录阶段 NN 截图”；截图必须互不相同。
 4. 第 11 阶段只读核对后回 `/demo/inputs`，点击“完成并导出本轮证据”。等待 terminal 正常退出。
-5. 检查 `$FPMS_V6_ACTOR_ROOT/pass-receipt.json`：actor、candidate、103/30 ledger、11 screenshots、Network/console 空数组均完整。
+5. 检查 `$HUMAN_RECEIPT_ROOT/pass-receipt.json`：actor、candidate、103/30 ledger、11 screenshots、Network/console 空数组均完整。
 
-CODEX actor 将 `--actor HUMAN` 改为 `--actor CODEX`，除此以外不改变业务值。给另一 Codex 账号的指令是：
+CODEX actor 在另一个 clean clone/账号执行下面的独立命令，除此以外不改变业务值：
+
+```bash
+FPMS_V6_CODEX_PARENT="$(mktemp -d)"
+export CODEX_RECEIPT_ROOT="$FPMS_V6_CODEX_PARENT/codex-receipt"
+
+backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
+  --ui-session \
+  --actor CODEX \
+  --artifact "$CODEX_RECEIPT_ROOT"
+```
+
+给另一 Codex 账号的指令是：
 
 ```text
 读取 AGENTS.md、docs/postdemo/demo-v6-clone-deploy-handoff.md、
@@ -176,6 +188,38 @@ docs/postdemo/demo-lifecycle-customer-v6-runbook.md 和唯一 JSON contract。
 ### 两份 receipt 比较
 
 ```bash
+export HUMAN_RECEIPT_ROOT="/absolute/path/to/retained/human-receipt"
+export CODEX_RECEIPT_ROOT="/absolute/path/to/retained/codex-receipt"
+FPMS_V6_ACCEPTANCE_PARENT="$(mktemp -d)"
+export ACCEPTANCE_ROOT="$FPMS_V6_ACCEPTANCE_PARENT/actor-acceptance"
+mkdir "$ACCEPTANCE_ROOT"
+export CANDIDATE_JSON="$ACCEPTANCE_ROOT/candidate.json"
+
+python3 - <<'PY'
+import json
+import os
+import subprocess
+from pathlib import Path
+
+def git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+status = git("status", "--porcelain")
+if status:
+    raise SystemExit("candidate clone is not clean")
+Path(os.environ["CANDIDATE_JSON"]).write_text(
+    json.dumps(
+        {
+            "commit": git("rev-parse", "HEAD"),
+            "tree": git("rev-parse", "HEAD^{tree}"),
+            "status": "CLEAN",
+        },
+        indent=2,
+    ) + "\n",
+    encoding="utf-8",
+)
+PY
+
 backend/.venv/bin/python scripts/compare_demo_v6_ui_receipts.py \
   --candidate "$CANDIDATE_JSON" \
   --human "$HUMAN_RECEIPT_ROOT/pass-receipt.json" \
