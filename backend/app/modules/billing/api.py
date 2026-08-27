@@ -911,7 +911,7 @@ def _demo_full_offset_command_response(
             id=receipt.id,
             case_id=receipt.case_id,
             fee_type=receipt.fee_type or "",
-            fee_code=receipt.fee_code or "",
+            fee_code=receipt.fee_code,
             currency=receipt.currency,
             receivable_amt=receipt.receivable_amt,
             received_amt=receipt.received_amt,

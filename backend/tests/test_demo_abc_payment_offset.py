@@ -127,6 +127,7 @@ def test_demo_two_receipts_and_offsets_settle_multiline_service_bill(
     assert first_offset["bill"]["status"] == "PARTIALLY_SETTLED"
     assert first_offset["bill"]["balance"] == "600.00"
     assert first_offset["line"]["status"] == "FULLY_ALLOCATED"
+    assert first_offset["case_receipt"]["fee_code"] is None
 
     second_receipt_command = {
         **first_receipt_command,

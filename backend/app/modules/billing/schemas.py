@@ -338,7 +338,7 @@ class DemoCaseReceiptOut(BaseModel):
     id: str
     case_id: str
     fee_type: str
-    fee_code: str
+    fee_code: str | None
     currency: str
     receivable_amt: Decimal
     received_amt: Decimal
