@@ -7,6 +7,7 @@ import ts from 'typescript'
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
 const demoApi = read('src/modules/demo/demo.api.ts')
+const demoContract = read('src/modules/demo/demo.contract.ts')
 const govPaymentsApi = read('src/api/govPayments.ts')
 const demoAbc = read('src/modules/demo/pages/DemoAbc.vue')
 const caseFees = read('src/modules/cases/components/CaseFeesTab.vue')
@@ -70,9 +71,13 @@ const paymentRoutes = await importFunctions(script(payment), ['buildPaymentResul
 const govPaymentMoney = await importFunctions(govPaymentsApi, ['toDemoMoney'])
 const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdjustmentQuantity'])
 const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
+const billItems = await importFunctions(demoContract, ['serviceItemAmountsEqualBill'])
 
 assert.equal(govPaymentMoney.toDemoMoney(50), '50.00')
 assert.equal(govPaymentMoney.toDemoMoney('900.00'), '900.00')
+assert.equal(billItems.serviceItemAmountsEqualBill(['1200.00', '600.00'], '1800.00'), true)
+assert.equal(billItems.serviceItemAmountsEqualBill(['1200.00', '500.00'], '1800.00'), false)
+assert.equal(billItems.serviceItemAmountsEqualBill([], '1800.00'), false)
 
 const nullableServiceItem = { id: 'service-item-a', quantity: 0 }
 const serviceSourceFacts = {

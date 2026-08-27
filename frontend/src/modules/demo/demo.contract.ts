@@ -418,6 +418,14 @@ export function parseDemoDraft(value: unknown): DemoDraft {
   return value as DemoDraft
 }
 
+export function serviceItemAmountsEqualBill(itemAmounts: readonly string[], billAmount: string): boolean {
+  if (itemAmounts.length === 0) return false
+  return itemAmounts.reduce(
+    (total, itemAmount) => total + BigInt(itemAmount.replace('.', '')),
+    0n,
+  ) === BigInt(billAmount.replace('.', ''))
+}
+
 export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   const row = record(value, 'bill')
   id(row.id, 'bill.id')
@@ -443,17 +451,19 @@ export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   }
   const sourceDraftIds = stringArray(row.source_draft_ids, 'bill.source_draft_ids', id)
   if (sourceDraftIds.length !== 1) invalid('bill.source_draft_ids')
-  if (!Array.isArray(row.items) || row.items.length !== 1) invalid('bill.items')
-  const item = record(row.items[0], 'bill.items[0]')
-  id(item.id, 'bill.items[0].id')
-  literal(item.fee_type, ['SERVICE'], 'bill.items[0].fee_type')
-  string(item.fee_code, 'bill.items[0].fee_code')
-  const itemAmount = money(item.amount, 'bill.items[0].amount')
+  if (!Array.isArray(row.items) || row.items.length === 0) invalid('bill.items')
+  const itemAmounts = row.items.map((value, index) => {
+    const item = record(value, `bill.items[${index}]`)
+    id(item.id, `bill.items[${index}].id`)
+    literal(item.fee_type, ['SERVICE'], `bill.items[${index}].fee_type`)
+    string(item.fee_code, `bill.items[${index}].fee_code`)
+    return money(item.amount, `bill.items[${index}].amount`)
+  })
   equal(totalGov, '0.00', 'bill.total_gov')
   equal(totalMisc, '0.00', 'bill.total_misc')
   if (amount === '0.00') invalid('bill.amount')
   equal(totalService, amount, 'bill.total_service')
-  equal(itemAmount, amount, 'bill.items[0].amount')
+  if (!serviceItemAmountsEqualBill(itemAmounts, amount)) invalid('bill.items.amount')
   if (status === 'UNSETTLED') {
     equal(balance, amount, 'bill.balance')
   } else if (status === 'PARTIALLY_SETTLED') {
