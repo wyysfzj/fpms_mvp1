@@ -243,6 +243,24 @@ const fakeAxios = { interceptors: {
   request: { use(ok, bad) { const id = interceptorState.next++; interceptorState.request.set(id, { ok, bad }); return id }, eject(id) { interceptorState.request.delete(id); interceptorState.requestEjects++ } },
   response: { use(ok, bad) { const id = interceptorState.next++; interceptorState.response.set(id, { ok, bad }); return id }, eject(id) { interceptorState.response.delete(id); interceptorState.responseEjects++ } },
 } }
+
+const readOnlyPreviewSession = await sessionImport()
+assert.equal(readOnlyPreviewSession.configureDemoObserverBinding(pageUrl), true)
+assert.equal(await readOnlyPreviewSession.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)
+const retainedActionId = readOnlyPreviewSession.recordVisibleAction({
+  route: '/documents/new', role: 'button', label_or_testid: '预览文书影响',
+})
+readOnlyPreviewSession.observeMutationRequest({
+  method: 'post', url: '/documents/impact-preview', data: { case_id: 'case-1' },
+})
+assert.equal(readOnlyPreviewSession.getDemoObserverLedger().some((event) => event.kind === 'mutation'), false)
+assert.equal(readOnlyPreviewSession.isDemoUiSessionActive(), true)
+readOnlyPreviewSession.observeMutationRequest({
+  method: 'post', url: '/documents', data: { title: '客户来文' },
+})
+assert.equal(readOnlyPreviewSession.getDemoObserverLedger().find((event) => event.kind === 'mutation')?.action_id, retainedActionId)
+assert.equal(readOnlyPreviewSession.isDemoUiSessionActive(), true)
+
 const axiosSession = await sessionImport()
 assert.equal(axiosSession.configureDemoObserverBinding(pageUrl), true)
 assert.equal(await axiosSession.activateDemoUiSession(preflight, new MemoryStorage(), hostFetch), true)

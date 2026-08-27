@@ -555,6 +555,7 @@ function mutationPath(config: AxiosRequestConfig): string {
 export function observeMutationRequest<T extends AxiosRequestConfig>(config: T): T {
   const method = (config.method ?? 'GET').toUpperCase()
   if (!active || !routeIsObserved() || !mutationMethods.has(method)) return config
+  if (method === 'POST' && config.url === '/documents/impact-preview') return config
   const action = lastVisibleAction
   const observation: MutationObservation = {
     kind: 'mutation', action_id: action?.action_id ?? null, route: action?.route ?? '',
