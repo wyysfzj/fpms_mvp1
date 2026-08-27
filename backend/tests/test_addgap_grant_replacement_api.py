@@ -120,11 +120,14 @@ def test_replacement_notice_api_returns_explicit_composite_and_stable_200_retry(
     assert first_body["document"]["case_id"] == case_id
     assert first_body["document"]["case_no"] == case_no
     assert first_body["document"]["template_code"] == "OFFICIAL_NOTICE_009"
+    assert first_body["document"]["doc_type"] == "OFFICIAL_IN"
     assert first_body["document"]["official_due_date"] == "2026-09-15"
     assert first_body["replacement_task"]["case_id"] == case_id
     assert first_body["replacement_task"]["status"] == "OPEN"
     assert first_body["replacement_task"]["due_date"] == "2026-09-15"
     assert _counts(session_factory, case_id=case_id) == (2, 2)
+    with session_factory() as db:
+        assert db.get(Document, first_body["document"]["id"]).doc_type == "OFFICIAL_IN"
 
     retry = client.post(
         f"{BASE}/{old_task_id}/replacement-notice",
@@ -136,6 +139,7 @@ def test_replacement_notice_api_returns_explicit_composite_and_stable_200_retry(
     retry_body = retry.json()
     assert retry_body["reused"] is True
     assert retry_body["document"]["id"] == first_body["document"]["id"]
+    assert retry_body["document"]["doc_type"] == "OFFICIAL_IN"
     assert retry_body["replacement_task"]["task_id"] == first_body["replacement_task"]["task_id"]
     assert _counts(session_factory, case_id=case_id) == (2, 2)
 

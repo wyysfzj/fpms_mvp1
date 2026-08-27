@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.lifecycle_contracts import LifecycleTransitionResult
 from app.modules.cases.models import Case
-from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.documents.schemas import DocumentCreateIn, DocumentOut
@@ -357,7 +357,8 @@ def post_grant_fee_task_replacement_notice_endpoint(
     replacement_document = DocumentCreateIn(
         case_id=old_state["case_id"],
         direction=DocumentDirection.IN,
-        **payload.document.model_dump(exclude_unset=True),
+        doc_type=DocumentDocType.OFFICIAL_IN,
+        **payload.document.model_dump(exclude_unset=True, exclude={"doc_type"}),
     )
     result = replace_grant_fee_task_with_notice(
         db,
