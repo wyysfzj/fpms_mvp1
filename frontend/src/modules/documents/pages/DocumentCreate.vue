@@ -496,14 +496,31 @@ function onTemplateChange(templateId: string | null) {
 
 let impactPreviewRequestSeq = 0
 
+function hasPartialOfficialDeadline(
+  dueDate: DocumentCreatePayload['official_due_date'],
+  source: DocumentCreatePayload['official_due_date_source'],
+  status: DocumentCreatePayload['official_due_date_status'],
+): boolean {
+  const populatedFields = [dueDate, source, status].filter(Boolean).length
+  return populatedFields > 0 && populatedFields < 3
+}
+
 async function fetchImpactPreview() {
   const requestSeq = ++impactPreviewRequestSeq
+  const partialOfficialDeadline = hasPartialOfficialDeadline(
+    form.official_due_date,
+    form.official_due_date_source,
+    form.official_due_date_status,
+  )
   const missingOaDeadline = isOaNoticeTemplateCode(selectedTemplate.value?.code) && !(
     form.official_due_date
     && form.official_due_date_source
     && form.official_due_date_status
   )
-  if (!form.case_id || !form.title.trim() || !form.doc_date || !form.direction || missingOaDeadline) {
+  if (
+    !form.case_id || !form.title.trim() || !form.doc_date || !form.direction
+    || partialOfficialDeadline || missingOaDeadline
+  ) {
     impactPreview.value = null
     impactPreviewError.value = null
     impactPreviewLoading.value = false

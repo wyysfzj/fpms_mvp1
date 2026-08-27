@@ -8,6 +8,7 @@ import ts from 'typescript'
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
 const filingPage = read('src/modules/cases/pages/FilingPreparation.vue')
+const documentCreatePage = read('src/modules/documents/pages/DocumentCreate.vue')
 const documentPage = read('src/modules/documents/pages/DocumentDetail.vue')
 const oaPage = read('src/modules/documents/pages/OAReplyPackage.vue')
 const receiptPanel = read('src/modules/officialWorkflows/components/ReceiptArchivePanel.vue')
@@ -29,6 +30,7 @@ assert.ok(evidenceLabelExpression)
 const renderEvidenceLabel = new Function('isOaNoticeDocument', `return ${evidenceLabelExpression}`)
 const documentsApi = read('src/api/documents.ts')
 const officialApi = read('src/api/officialWorkflows.ts')
+const documentCreateScript = documentCreatePage.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1] || ''
 
 assert.match(filingPage, /记录人工递交完成/)
 assert.match(filingPage, /submissionForm\.occurredAt/)
@@ -91,6 +93,27 @@ const official = await importFunctions(
   ],
   'const http = globalThis.__ordinal04Http',
 )
+const documentCreateSourceFile = ts.createSourceFile(
+  'DocumentCreate.ts', documentCreateScript, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+)
+const deadlineGuardDeclaration = documentCreateSourceFile.statements.find(
+  (statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === 'hasPartialOfficialDeadline',
+)
+assert.ok(deadlineGuardDeclaration)
+const deadlineGuardModule = ts.transpileModule(
+  `${deadlineGuardDeclaration.getText(documentCreateSourceFile)}\nexport { hasPartialOfficialDeadline }`,
+  { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
+).outputText
+const documentCreate = await import(
+  `data:text/javascript;base64,${Buffer.from(deadlineGuardModule).toString('base64')}#${Math.random()}`,
+)
+
+assert.equal(documentCreate.hasPartialOfficialDeadline(null, null, null), false)
+assert.equal(documentCreate.hasPartialOfficialDeadline('2026-11-23', null, null), true)
+assert.equal(documentCreate.hasPartialOfficialDeadline('2026-11-23', 'IMPORTED_OFFICIAL_NOTICE', null), true)
+assert.equal(documentCreate.hasPartialOfficialDeadline(
+  '2026-11-23', 'IMPORTED_OFFICIAL_NOTICE', 'CONFIRMED',
+), false)
 
 const hashA = `sha256:${'a'.repeat(64)}`
 const hashB = `sha256:${'b'.repeat(64)}`
