@@ -65,8 +65,20 @@ const props = defineProps<{
   milestones: readonly OverlayMilestone[]
 }>()
 
+function latestObligationsById(
+  milestones: readonly OverlayMilestone[],
+): readonly OverlayFeeObligation[] {
+  const latest = new Map<string, OverlayFeeObligation>()
+  for (const milestone of milestones) {
+    for (const obligation of milestone.feeObligations) {
+      latest.set(obligation.obligationId, obligation)
+    }
+  }
+  return [...latest.values()]
+}
+
 const obligations = computed<readonly OverlayFeeObligation[]>(() =>
-  props.milestones.flatMap((milestone) => milestone.feeObligations),
+  latestObligationsById(props.milestones),
 )
 const govObligations = computed(() => obligations.value.filter((item) => item.feeDomain === 'GOV'))
 const serviceObligations = computed(() => obligations.value.filter((item) => item.feeDomain === 'SERVICE'))
