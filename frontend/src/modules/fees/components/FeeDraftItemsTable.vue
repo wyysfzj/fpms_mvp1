@@ -69,7 +69,7 @@
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column label="数量" width="80" align="right">
           <template #default="{ row }">
-            <span class="mono-num">{{ row.quantity }}</span>
+            <span class="mono-num">{{ resolveAdjustmentQuantity(row, sourceFacts) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="单价" width="120" align="right">
@@ -171,7 +171,7 @@
           <el-input :model-value="adjustingItem?.fee_name || adjustingItem?.description || '—'" disabled />
         </el-form-item>
         <el-form-item label="当前数量">
-          <el-input :model-value="String(adjustingItem?.quantity ?? '')" disabled />
+          <el-input :model-value="String(adjustmentForm.expected_quantity)" disabled />
         </el-form-item>
         <el-form-item label="调整后数量">
           <el-input-number v-model="adjustmentForm.new_quantity" :min="1" :precision="0" style="width: 100%" />
@@ -276,6 +276,7 @@ const adjustingItem = ref<FeeItem | null>(null)
 const adjusting = ref(false)
 
 const adjustmentForm = reactive({
+  expected_quantity: 1,
   new_quantity: 1,
   reason: '',
   idempotency_key: crypto.randomUUID(),
@@ -364,20 +365,34 @@ function sourceFactFor(item: FeeItem) {
   return props.sourceFacts?.lines.find(line => line.current_item_id === item.id)
 }
 
+function resolveAdjustmentQuantity(
+  item: Pick<FeeItem, 'id' | 'quantity'>,
+  sourceFacts: DemoV6DraftSourceFacts | null | undefined,
+): number {
+  if (sourceFacts?.fee_domain !== 'SERVICE') return item.quantity
+  const quantity = sourceFacts.lines.find(line => line.current_item_id === item.id)?.quantity
+  return Number.isInteger(quantity) && Number(quantity) > 0 ? Number(quantity) : item.quantity
+}
+
 function canAdjustItem(item: FeeItem): boolean {
   const fact = sourceFactFor(item)
+  const quantity = resolveAdjustmentQuantity(item, props.sourceFacts)
   return Boolean(
     !props.readonly
     && props.sourceFacts?.fee_domain === 'SERVICE'
     && fact?.adjustable
-    && !fact.adjustment_activity_id,
+    && !fact.adjustment_activity_id
+    && Number.isInteger(quantity)
+    && quantity > 0,
   )
 }
 
 function openAdjustmentDialog(item: FeeItem) {
   if (!canAdjustItem(item)) return
+  const currentQuantity = resolveAdjustmentQuantity(item, props.sourceFacts)
   adjustingItem.value = item
-  adjustmentForm.new_quantity = item.quantity
+  adjustmentForm.expected_quantity = currentQuantity
+  adjustmentForm.new_quantity = currentQuantity
   adjustmentForm.reason = ''
   adjustmentForm.idempotency_key = crypto.randomUUID()
   adjustmentDialogVisible.value = true
@@ -391,7 +406,7 @@ async function submitAdjustment() {
     ElMessage.warning('请输入包含中文的调整原因。')
     return
   }
-  if (adjustmentForm.new_quantity === item.quantity) {
+  if (adjustmentForm.new_quantity === adjustmentForm.expected_quantity) {
     ElMessage.warning('调整后数量必须与当前数量不同。')
     return
   }
@@ -399,7 +414,7 @@ async function submitAdjustment() {
   try {
     await adjustDemoServiceDraft(props.draftId, {
       item_id: item.id,
-      expected_quantity: item.quantity,
+      expected_quantity: adjustmentForm.expected_quantity,
       new_quantity: adjustmentForm.new_quantity,
       reason,
       idempotency_key: adjustmentForm.idempotency_key,
