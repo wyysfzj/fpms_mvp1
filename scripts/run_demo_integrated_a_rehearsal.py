@@ -20,6 +20,7 @@ import zipfile
 import zlib
 from contextlib import contextmanager
 from datetime import datetime
+from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator, NamedTuple
@@ -41,17 +42,19 @@ from app.core.demo_bundle import load_demo_bundle  # noqa: E402
 PLAYWRIGHT = ROOT / "FPMS_Automation_Skeleton_Pack" / "playwright_ts"
 LEGACY_SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"
 SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6.live-backend.spec.ts"
+STRICT_UI_SPEC = PLAYWRIGHT / "src" / "tests" / "demo-v6-ui-parity.live-backend.spec.ts"
 STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a-static-contract.mjs"
 V6_STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-v6-static-contract.mjs"
 DEFAULT_ARTIFACT = ROOT / "artifacts" / "FPMS-DEMO-INTEGRATED-A-DIAGNOSTIC"
+UI_PARITY_CONTRACT = (
+    ROOT
+    / "FPMS_Automation_Skeleton_Pack"
+    / "data"
+    / "testcases"
+    / "demo_v6_ui_parity_v1.json"
+)
 UI_SESSION_CONTRACT_VERSION = json.loads(
-    (
-        ROOT
-        / "FPMS_Automation_Skeleton_Pack"
-        / "data"
-        / "testcases"
-        / "demo_v6_ui_parity_v1.json"
-    ).read_text(encoding="utf-8")
+    UI_PARITY_CONTRACT.read_text(encoding="utf-8")
 )["schema_id"]
 UI_SESSION_TIMEOUT_SECONDS = 12 * 60 * 60
 UI_SESSION_MAX_BODY_BYTES = 2_000_000
@@ -208,8 +211,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--runs", type=int, choices=(1, 2))
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--ui-session", action="store_true")
+    parser.add_argument("--strict-ui", action="store_true")
     parser.add_argument("--actor", choices=("HUMAN", "CODEX"))
     args = parser.parse_args(argv)
+    if args.ui_session and args.strict_ui:
+        parser.error("--ui-session and --strict-ui are mutually exclusive")
     if args.ui_session:
         forbidden = (
             args.profile,
@@ -226,6 +232,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         if any(value not in (None, False) for value in forbidden):
             parser.error("--ui-session accepts only --actor and --artifact")
         args.profile = "TECHNICAL_REHEARSAL"
+        args.runs = 1
+        return args
+    if args.strict_ui:
+        if args.actor is not None:
+            parser.error("--actor requires --ui-session")
+        if args.profile != "TECHNICAL_REHEARSAL":
+            parser.error("--strict-ui requires --profile TECHNICAL_REHEARSAL")
+        if args.artifact is None or not args.artifact.is_absolute():
+            parser.error("--strict-ui requires an absolute --artifact")
+        if args.runs not in (None, 1):
+            parser.error("--strict-ui requires --runs 1")
+        if any(value is not None for value in (
+            args.bundle,
+            args.expected_manifest_sha256,
+            args.expected_authority_sha256,
+        )):
+            parser.error("--strict-ui uses only the frozen synthetic bundle")
         args.runs = 1
         return args
     if args.actor is not None:
@@ -693,6 +716,7 @@ def _new_run_context(
     env = os.environ.copy()
     env.pop("FPMS_DEMO_UI_SESSION", None)
     env.pop("FPMS_DEMO_CONTRACT_VERSION", None)
+    env.pop("FPMS_DEMO_UI_PARITY_CONTRACT_PATH", None)
     env.update(
         FPMS_ENV="demo",
         FPMS_DEMO_SCOPE="LOCAL_ABC_E2E",
@@ -718,6 +742,7 @@ def _new_run_context(
         env.update(
             FPMS_DEMO_UI_SESSION="1",
             FPMS_DEMO_CONTRACT_VERSION=UI_SESSION_CONTRACT_VERSION,
+            FPMS_DEMO_UI_PARITY_CONTRACT_PATH=str(UI_PARITY_CONTRACT),
         )
     return DemoRunContext(
         run_id=run_id,
@@ -1049,6 +1074,74 @@ def _observer_binding(
         thread.join(timeout=2)
 
 
+def _post_observer_operation(
+    activation_url: str,
+    operation: str,
+    payload: dict[str, object],
+) -> None:
+    parsed = urlsplit(activation_url)
+    capabilities = parse_qs(parsed.query).get("capability")
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname != "127.0.0.1"
+        or not parsed.port
+        or not capabilities
+    ):
+        raise RuntimeError("invalid strict UI observer binding")
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    connection = HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+    try:
+        connection.request(
+            "POST",
+            f"/{operation}?{urlencode({'capability': capabilities[0]})}",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        response.read()
+        if not 200 <= response.status < 300:
+            raise RuntimeError(
+                f"strict UI observer {operation} failed: {response.status}"
+            )
+    finally:
+        connection.close()
+
+
+def _finalize_strict_ui_observer(
+    activation_url: str,
+    session_tuple: dict[str, str],
+    run_artifact: Path,
+) -> None:
+    ledger = {
+        "schema_id": session_tuple["contract_version"],
+        "session": session_tuple,
+        "events": [],
+    }
+    _post_observer_operation(
+        activation_url,
+        "observer-artifact",
+        {
+            **session_tuple,
+            "filename": "observer-ui-ledger.json",
+            "encoding": "json",
+            "content": ledger,
+        },
+    )
+    for stage in range(1, 12):
+        screenshot = run_artifact / f"stage-{stage:02d}.png"
+        _post_observer_operation(
+            activation_url,
+            "observer-artifact",
+            {
+                **session_tuple,
+                "filename": f"observer-stage-{stage:02d}.png",
+                "encoding": "base64",
+                "content": base64.b64encode(screenshot.read_bytes()).decode(),
+            },
+        )
+    _post_observer_operation(activation_url, "finalize", session_tuple)
+
+
 def _start_headed_browser(
     command: list[str], env: dict[str, str]
 ) -> subprocess.Popen[bytes]:
@@ -1219,6 +1312,150 @@ def _run_ui_session(
     finally:
         _stop_process(service_process, interrupt=True)
     _complete_ui_session(context, artifact, status)
+
+
+def _validate_strict_ui_artifacts(run_artifact: Path, context: DemoRunContext) -> None:
+    required = {
+        "ui-input-ledger.json",
+        "ui-output-ledger.json",
+        "ui-mutation-ledger.json",
+        "network-errors.json",
+        "console-errors.json",
+        "strict-pass-receipt.json",
+    } | {f"stage-{stage:02d}.png" for stage in range(1, 12)}
+    missing = sorted(name for name in required if not (run_artifact / name).is_file())
+    if missing:
+        raise RuntimeError(f"strict UI evidence is incomplete: {missing}")
+    receipt = json.loads((run_artifact / "strict-pass-receipt.json").read_text(encoding="utf-8"))
+    if (
+        receipt.get("schema_id") != UI_SESSION_CONTRACT_VERSION
+        or receipt.get("status") != "PASS"
+        or receipt.get("actor") != "STRICT_UI_TECHNICAL"
+        or receipt.get("run_id") != context.run_id
+        or receipt.get("candidate_commit") != context.candidate_commit
+        or receipt.get("candidate_tree") != context.candidate_tree
+        or receipt.get("bundle_manifest_sha256") != context.manifest_sha
+        or receipt.get("authority_sha256") != context.authority_sha
+        or receipt.get("network_errors") != []
+        or receipt.get("console_errors") != []
+    ):
+        raise RuntimeError("strict UI PASS receipt binding is invalid")
+    mutations = json.loads((run_artifact / "ui-mutation-ledger.json").read_text(encoding="utf-8"))
+    rows = mutations.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("strict UI mutation ledger is empty")
+    action_ids = [row.get("action_id") for row in rows]
+    if any(not value for value in action_ids) or len(action_ids) != len(set(action_ids)):
+        raise RuntimeError("strict UI mutations do not have unique visible action correlation")
+    if any(row.get("status", 0) < 200 or row.get("status", 0) >= 400 for row in rows):
+        raise RuntimeError("strict UI mutation ledger contains a failed mutation")
+
+
+def _run_strict_ui(
+    args: argparse.Namespace,
+    bundle: Path,
+    manifest_sha: str,
+    authority_sha: str,
+    candidate: dict[str, Any],
+) -> None:
+    artifact = args.artifact
+    assert artifact is not None and artifact.is_absolute()
+    artifact = artifact.resolve()
+    if artifact.exists() or artifact.is_symlink():
+        raise RuntimeError(f"evidence path already exists: {artifact}")
+    run_artifact = artifact / "run1"
+    context = _new_run_context(
+        run_id=f"strict-ui-{secrets.token_hex(6)}",
+        bundle=bundle,
+        manifest_sha=manifest_sha,
+        authority_sha=authority_sha,
+        candidate=candidate,
+        profile="TECHNICAL_REHEARSAL",
+        ui_session=True,
+    )
+    artifact.mkdir(parents=True)
+    run_artifact.mkdir()
+    _write_json(artifact / "candidate.json", candidate)
+    _write_json(
+        run_artifact / "run.json",
+        build_run_record(
+            run_id=context.run_id,
+            database_path=context.database_path,
+            manifest_sha256=manifest_sha,
+            created_at=datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
+        ),
+    )
+    oa_reply_outputs = materialize_oa_reply_outputs(run_artifact / "oa-reply-outputs")
+    service_process = _start_services(context, run_artifact / "runner.log")
+    session_tuple = {
+        "contract_version": UI_SESSION_CONTRACT_VERSION,
+        "run_id": context.run_id,
+        "candidate_commit": context.candidate_commit,
+        "candidate_tree": context.candidate_tree,
+        "authority_sha256": context.authority_sha,
+        "actor": "CODEX",
+    }
+    observer_root = run_artifact / "observer"
+    try:
+        abc.wait_url("http://127.0.0.1:8000/healthz", service_process)
+        abc.wait_url("http://127.0.0.1:5173", service_process)
+        with _observer_binding(observer_root, session_tuple) as binding:
+            browser_env = context.env.copy()
+            browser_env.update(
+                FPMS_BASE_URL="http://127.0.0.1:5173",
+                FPMS_ADMIN_USERNAME="admin",
+                FPMS_ADMIN_PASSWORD=context.admin_password,
+                FPMS_DEMO_STRICT_ACTIVATION_URL=binding.activation_url,
+                FPMS_DEMO_EVIDENCE_DIR=str(run_artifact),
+                FPMS_DEMO_RUN_ROOT=str(context.run_root),
+                FPMS_DEMO_DATABASE_PATH=str(context.database_path),
+                FPMS_DEMO_STRICT_ACTOR="STRICT_UI_TECHNICAL",
+                FPMS_DEMO_EXPECTED_MANIFEST_SHA256=manifest_sha,
+                FPMS_DEMO_EXPECTED_AUTHORITY_SHA256=authority_sha,
+                FPMS_DEMO_CANDIDATE_COMMIT=context.candidate_commit,
+                FPMS_DEMO_CANDIDATE_TREE=context.candidate_tree,
+                FPMS_DEMO_INTEGRATED_OA_REPLY_OUTPUT_JSON=oa_reply_outputs_json(oa_reply_outputs),
+            )
+            command = [
+                "node",
+                "./node_modules/.bin/playwright",
+                "test",
+                str(STRICT_UI_SPEC.relative_to(PLAYWRIGHT)),
+                "--project=chromium",
+                "--workers=1",
+                "--reporter=list",
+            ]
+            if not args.headless:
+                command.append("--headed")
+            _write_json(run_artifact / "command.json", {"redacted": True, "command": command})
+            with (run_artifact / "playwright.log").open("wb") as output:
+                completed = subprocess.run(
+                    command,
+                    cwd=PLAYWRIGHT,
+                    env=browser_env,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    timeout=600,
+                    check=False,
+                )
+            if completed.returncode != 0:
+                raise RuntimeError(f"strict UI Playwright failed: rc={completed.returncode}")
+            _finalize_strict_ui_observer(
+                binding.activation_url,
+                session_tuple,
+                run_artifact,
+            )
+            if binding.failed.is_set() or not binding.finalized.is_set():
+                raise RuntimeError("strict UI observer did not finalize cleanly")
+        _validate_strict_ui_artifacts(run_artifact, context)
+    finally:
+        _stop_process(service_process, interrupt=True)
+        if context.run_root.exists():
+            _remove_run_root(context)
+        _write_json(
+            run_artifact / "cleanup.json",
+            {"run_id": context.run_id, "run_root_removed": not context.run_root.exists()},
+        )
 
 
 def _checkpoint_map(run_artifact: Path) -> dict[str, dict[str, Any]]:
@@ -1502,6 +1739,16 @@ def main(argv: list[str] | None = None) -> int:
         try:
             bundle, manifest_sha, authority_sha = build_integrated_bundle(bundle_parent)
             _run_ui_session(args, bundle, manifest_sha, authority_sha, candidate)
+        finally:
+            if bundle_parent.exists():
+                shutil.rmtree(bundle_parent)
+        return 0
+    if args.strict_ui:
+        candidate = abc.candidate_identity()
+        bundle_parent = Path(tempfile.mkdtemp(prefix="fpms-strict-ui-bundle-"))
+        try:
+            bundle, manifest_sha, authority_sha = build_integrated_bundle(bundle_parent)
+            _run_strict_ui(args, bundle, manifest_sha, authority_sha, candidate)
         finally:
             if bundle_parent.exists():
                 shutil.rmtree(bundle_parent)

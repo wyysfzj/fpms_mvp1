@@ -254,6 +254,7 @@ def _real_ui_context(
     schema_id = json.loads(UI_PARITY_CONTRACT.read_text(encoding="utf-8"))["schema_id"]
     assert context.env["FPMS_DEMO_CONTRACT_VERSION"] == schema_id
     assert context.env["FPMS_DEMO_UI_SESSION"] == "1"
+    assert context.env["FPMS_DEMO_UI_PARITY_CONTRACT_PATH"] == str(UI_PARITY_CONTRACT)
     for key, value in context.env.items():
         if key.startswith("FPMS_") or key in {"JWT_SECRET", "NO_PROXY", "no_proxy"}:
             monkeypatch.setenv(key, value)
@@ -923,6 +924,36 @@ def test_browser_finalization_requires_complete_evidence_and_cleans_exact_run(
     }
 
 
+def test_strict_ui_runner_finalizes_observer_from_generated_stage_evidence(
+    tmp_path: Path,
+):
+    module = _runner_module()
+    run_artifact = (tmp_path / "strict-ui").resolve()
+    observer_root = run_artifact / "observer"
+    run_artifact.mkdir()
+    for stage in range(1, 12):
+        (run_artifact / f"stage-{stage:02d}.png").write_bytes(PNG_1X1)
+    session_tuple = {
+        "contract_version": module.UI_SESSION_CONTRACT_VERSION,
+        "run_id": "strict-ui-test",
+        "candidate_commit": "c" * 40,
+        "candidate_tree": "d" * 40,
+        "authority_sha256": "a" * 64,
+        "actor": "CODEX",
+    }
+
+    with module._observer_binding(observer_root, session_tuple) as binding:
+        module._finalize_strict_ui_observer(
+            binding.activation_url,
+            session_tuple,
+            run_artifact,
+        )
+        assert binding.finalized.is_set()
+        assert not binding.failed.is_set()
+
+    assert {path.name for path in observer_root.iterdir()} == EXPECTED_OBSERVER_FILES
+
+
 @pytest.mark.parametrize("stop_reason", ["browser-exit", "timeout"])
 def test_browser_exit_or_timeout_stops_without_cleanup(
     tmp_path: Path,
@@ -1118,3 +1149,34 @@ def test_default_integrated_a_cli_contract_remains_compatible():
     assert args.artifact == module.DEFAULT_ARTIFACT
     assert args.runs == 2
     assert args.headless is False
+
+
+def test_strict_ui_cli_is_narrow_and_keeps_existing_lanes_distinct(tmp_path: Path):
+    module = _runner_module()
+    artifact = (tmp_path / "strict-ui").resolve()
+
+    args = module.parse_args(
+        [
+            "--profile",
+            "TECHNICAL_REHEARSAL",
+            "--strict-ui",
+            "--runs",
+            "1",
+            "--headless",
+            "--artifact",
+            str(artifact),
+        ]
+    )
+
+    assert args.strict_ui is True
+    assert args.ui_session is False
+    assert args.runs == 1
+    assert args.headless is True
+    assert args.artifact == artifact
+    for invalid in (
+        ["--strict-ui", "--ui-session", "--actor", "CODEX", "--artifact", str(artifact)],
+        ["--profile", "CUSTOMER_DEMO", "--strict-ui", "--artifact", str(artifact)],
+        ["--profile", "TECHNICAL_REHEARSAL", "--strict-ui", "--runs", "2", "--artifact", str(artifact)],
+    ):
+        with pytest.raises(SystemExit):
+            module.parse_args(invalid)
