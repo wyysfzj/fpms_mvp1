@@ -2124,9 +2124,10 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await expect(govCard).toContainText('官方证据状态：待处理')
     await expect(govCard).not.toContainText('未识别状态')
     await expectRawValueInAudit(govCard, `关联事实编号：${govDraftId}`)
-    await expect(govCard.getByText(`关联事实编号：${payListId}`, { exact: true })).toBeVisible()
+    const govAuditFactIds = new Set(await govCard.getByText(/^关联事实编号：/).allInnerTexts())
+    expect(govAuditFactIds.has(`关联事实编号：${payListId}`)).toBe(true)
     for (const paymentId of govPaymentIds) {
-      await expect(govCard.getByText(`关联事实编号：${paymentId}`, { exact: true })).toBeVisible()
+      expect(govAuditFactIds.has(`关联事实编号：${paymentId}`)).toBe(true)
     }
 
     const originalServiceCard = feeLane.getByTestId(`fee-obligation-${originalServiceObligationId}`)
