@@ -34,7 +34,7 @@ test('real obligation customer projection is latest-only and raw audit facts sta
     await expect(obligation.getByRole('heading', { name: '授权登记官费义务', exact: true })).toBeVisible()
     await expect(obligation.getByText('费用域：官费', { exact: true })).toBeVisible()
     await expect(obligation.getByText('来源状态：已核验', { exact: true })).toBeVisible()
-    await expect(obligation.getByText('币种：人民币（CNY）', { exact: true })).toBeVisible()
+    await expect(obligation.getByText('币种：币种待确认', { exact: true })).toBeVisible()
     await expect(obligation.getByText('估算状态：暂无', { exact: true })).toBeVisible()
     await expect(obligation.getByText('义务状态：已确认', { exact: true })).toBeVisible()
     await expect(obligation.getByText('客户指示状态：缴费', { exact: true })).toBeVisible()
@@ -47,6 +47,8 @@ test('real obligation customer projection is latest-only and raw audit facts sta
     await expect(obligation.getByText('应缴金额：50.00', { exact: true })).toBeVisible()
     await expect(obligation.getByText(new RegExp(overlayObligationId))).toBeHidden()
     await expect(obligation.getByText(/GRANT_REGISTRATION_OFFICIAL_FEES/)).toBeHidden()
+    await expect(obligation.getByText('原始币种：USD', { exact: true })).toBeHidden()
+    await expect(obligation.getByText('审计信息', { exact: true })).toHaveCount(1)
 
     const obligationAudit = obligation.locator('details').filter({ hasText: '义务编号' })
     await obligationAudit.getByText('审计信息', { exact: true }).click()
@@ -54,6 +56,7 @@ test('real obligation customer projection is latest-only and raw audit facts sta
     await expect(obligation.getByText(new RegExp(overlaySourceActivityId))).toBeVisible()
     await expect(obligation.getByText(new RegExp(overlaySourceDocumentId))).toBeVisible()
     await expect(obligation.getByText(/GRANT_REGISTRATION_OFFICIAL_FEES/)).toBeVisible()
+    await expect(obligation.getByText('原始币种：USD', { exact: true })).toBeVisible()
     await obligationAudit.getByText('审计信息', { exact: true }).click()
 
     await obligation.getByRole('button', { name: '记录支付指示', exact: true }).click()
@@ -62,13 +65,13 @@ test('real obligation customer projection is latest-only and raw audit facts sta
 
     const result = obligation.getByTestId('fee-instruction-result')
     await expect(result.getByText('支付指示已记录', { exact: true })).toBeVisible()
-    await expect(result.getByText('服务端客户指示：PAY', { exact: true })).toBeHidden()
-    await expect(result.getByText('服务端义务编号：server-obligation-1', { exact: true })).toBeHidden()
-    const resultAudit = result.locator('details')
-    await resultAudit.getByText('审计信息', { exact: true }).click()
-    await expect(result.getByText('服务端客户指示：PAY', { exact: true })).toBeVisible()
-    await expect(result.getByText('服务端义务编号：server-obligation-1', { exact: true })).toBeVisible()
-    await resultAudit.getByText('审计信息', { exact: true }).click()
+    await expect(obligation.getByText('审计信息', { exact: true })).toHaveCount(1)
+    await expect(obligation.getByText('服务端客户指示：PAY', { exact: true })).toBeHidden()
+    await expect(obligation.getByText('服务端义务编号：server-obligation-1', { exact: true })).toBeHidden()
+    await obligationAudit.getByText('审计信息', { exact: true }).click()
+    await expect(obligation.getByText('服务端客户指示：PAY', { exact: true })).toBeVisible()
+    await expect(obligation.getByText('服务端义务编号：server-obligation-1', { exact: true })).toBeVisible()
+    await obligationAudit.getByText('审计信息', { exact: true }).click()
     const draftLink = result.getByRole('link', { name: '创建关联费用草稿', exact: true })
     await expect(draftLink).toHaveAttribute(
         'href',
@@ -378,7 +381,7 @@ function overlay(): Record<string, unknown> {
                         fee_domain: 'GOV',
                         obligation_type: 'GRANT_REGISTRATION_OFFICIAL_FEES',
                         due_date: '2026-11-24',
-                        currency: 'CNY',
+                        currency: 'USD',
                         statuses: {
                             estimate_status: null,
                             obligation_status: 'RECOGNIZED',

@@ -45,7 +45,14 @@ test('费用节点线无损展示 GOV 和 SERVICE 义务的七个独立状态', 
     const service = lane.getByTestId(`fee-obligation-${serviceObligationId}`)
     await expect(service.getByRole('heading', { name: '服务费应收义务' })).toBeVisible()
     await expect(service.getByText('费用域：服务费', { exact: true })).toBeVisible()
+    await expect(service.getByText('来源状态：历史数据待核验', { exact: true })).toBeVisible()
+    await expect(service.getByText('币种：币种待确认', { exact: true })).toBeVisible()
+    await expect(service.getByText('原始来源状态：LEGACY_UNVERIFIED', { exact: true })).not.toBeVisible()
+    await expect(service.getByText('原始币种：USD', { exact: true })).not.toBeVisible()
     await expect(service.getByText('估算状态：暂无', { exact: true })).toBeVisible()
+    await service.locator('summary').click()
+    await expect(service.getByText('原始来源状态：LEGACY_UNVERIFIED', { exact: true })).toBeVisible()
+    await expect(service.getByText('原始币种：USD', { exact: true })).toBeVisible()
     await expect(lane.getByText('PATENT_IN_FORCE', { exact: false })).toHaveCount(0)
     await expect(lane.getByText('OFFICIAL_FINAL_PDF', { exact: false })).toHaveCount(0)
 })
@@ -108,11 +115,11 @@ function obligation(id: string, feeDomain: 'GOV' | 'SERVICE') {
         obligation_id: id,
         source_activity_id: '3e1f88a7-db5d-4355-a2b2-5e7ab1c9bcfe',
         source_document_id: isGov ? '443e902e-7dc2-498e-99c6-a992d3d54168' : null,
-        source_status: 'VERIFIED',
+        source_status: isGov ? 'VERIFIED' : 'LEGACY_UNVERIFIED',
         fee_domain: feeDomain,
         obligation_type: isGov ? 'GRANT_REGISTRATION_OFFICIAL_FEES' : 'SERVICE_FEE',
         due_date: isGov ? '2026-10-09' : null,
-        currency: 'CNY',
+        currency: isGov ? 'CNY' : 'USD',
         statuses: statuses(
             isGov
                 ? {

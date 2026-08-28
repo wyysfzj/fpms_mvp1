@@ -57,6 +57,9 @@
         <p>原始费用域：{{ obligation.feeDomain }}</p>
         <p>原始义务类型：{{ obligation.obligationType }}</p>
         <p>原始来源状态：{{ obligation.sourceStatus }}</p>
+        <p v-if="obligation.currency !== null && obligation.currency.toUpperCase() !== 'CNY'">
+          原始币种：{{ obligation.currency }}
+        </p>
         <p>原始估算状态：{{ displayValue(obligation.statuses.estimateStatus) }}</p>
         <p>原始义务状态：{{ obligation.statuses.obligationStatus }}</p>
         <p>原始客户指示：{{ obligation.statuses.clientInstructionStatus }}</p>

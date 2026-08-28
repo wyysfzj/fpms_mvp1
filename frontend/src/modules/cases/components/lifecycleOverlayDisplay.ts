@@ -71,6 +71,7 @@ const FEE_STATUS_TEXT: Readonly<Record<string, string>> = {
   OFFICIAL_FEE: '官费缴费义务',
   GRANT_REGISTRATION_OFFICIAL_FEES: '授权登记官费义务',
   SERVICE_FEE: '服务费应收义务',
+  LEGACY_UNVERIFIED: '历史数据待核验',
   RECOGNIZED: '已确认',
   SUPERSEDED: '已被替代',
   ESTIMATE: '估算',

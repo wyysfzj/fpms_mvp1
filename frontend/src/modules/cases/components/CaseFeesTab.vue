@@ -196,14 +196,6 @@
         >
           创建关联费用草稿
         </router-link>
-        <details class="audit-details">
-          <summary>审计信息</summary>
-          <span>服务端义务编号：{{ instructionResults[obligation.obligationId]?.obligation_id }}</span>
-          <span>服务端客户指示：{{ instructionResults[obligation.obligationId]?.client_instruction_status }}</span>
-          <span>服务端活动编号：{{ instructionResults[obligation.obligationId]?.activity_id }}</span>
-          <span>服务端幂等键：{{ instructionResults[obligation.obligationId]?.idempotency_key }}</span>
-          <span>服务端复用结果：{{ instructionResults[obligation.obligationId]?.reused ? '是' : '否' }}</span>
-        </details>
       </div>
       <details class="audit-details">
         <summary>审计信息</summary>
@@ -213,6 +205,9 @@
         <span>原始费用域：{{ obligation.feeDomain }}</span>
         <span>原始义务类型：{{ obligation.obligationType }}</span>
         <span>原始来源状态：{{ obligation.sourceStatus }}</span>
+        <span v-if="obligation.currency !== null && obligation.currency.toUpperCase() !== 'CNY'">
+          原始币种：{{ obligation.currency }}
+        </span>
         <span>原始估算状态：{{ displayValue(obligation.statuses.estimateStatus) }}</span>
         <span>原始义务状态：{{ obligation.statuses.obligationStatus }}</span>
         <span>原始客户指示：{{ obligation.statuses.clientInstructionStatus }}</span>
@@ -231,6 +226,13 @@
           <span>原始关联事实：{{ fact.kind }} / {{ fact.status }}</span>
         </template>
         <span>替代前义务：{{ displayValue(obligation.supersedesObligationId) }}</span>
+        <template v-if="instructionResults[obligation.obligationId]">
+          <span>服务端义务编号：{{ instructionResults[obligation.obligationId]?.obligation_id }}</span>
+          <span>服务端客户指示：{{ instructionResults[obligation.obligationId]?.client_instruction_status }}</span>
+          <span>服务端活动编号：{{ instructionResults[obligation.obligationId]?.activity_id }}</span>
+          <span>服务端幂等键：{{ instructionResults[obligation.obligationId]?.idempotency_key }}</span>
+          <span>服务端复用结果：{{ instructionResults[obligation.obligationId]?.reused ? '是' : '否' }}</span>
+        </template>
       </details>
     </div>
   </div>
