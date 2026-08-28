@@ -84,6 +84,13 @@ Implement only the three presentation slices frozen by the approved plan:
   `24f9b8acab8ec2e93c50f95991b5f0301dfe4f7438a7f98b84259fa3628a144c`.
 - After this recovery is committed, run the corrected strict rehearsal once. A product/runtime
   failure remains a stop condition; do not perform an uncommitted retry.
+- That corrected invocation reached the launcher but found the existing V6 worktree services on
+  ports 8000 and 5173. The isolated runner therefore could not start, and Playwright received 401
+  after reaching the old backend with the new run's temporary credential. This is an environment
+  collision, not a product assertion failure.
+- The user approved stopping those two verified V6 worktree listeners on 2026-08-29. The failed
+  evidence is preserved under `strict-v6-failed-port-conflict-1`; after confirming both ports are
+  free and committing this recovery record, one clean strict invocation is authorized.
 
 ## Canonical Evidence Commands
 
