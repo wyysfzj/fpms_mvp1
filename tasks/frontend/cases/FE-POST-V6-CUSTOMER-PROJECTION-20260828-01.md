@@ -102,6 +102,20 @@ Implement only the three presentation slices frozen by the approved plan:
   evidence is preserved under `strict-v6-failed-stale-assertion-1`. No business input, mutation,
   product source, API, database, seed, or runner change is authorized by this amendment.
 
+## Approved Independent Review Remediation
+
+- Generation 1 independent review rejected the candidate because the implementation had already
+  been committed before scope finalization, so the baseline-subtracted candidate patch was empty.
+- The user approved inline remediation on 2026-08-29. Canonical evidence must therefore bind a
+  deterministic committed range from base `27ad872de1f78ec0dddeabe8aab19e3e247a0ac8` through the
+  final candidate HEAD and tree, including the complete path list and the approved strict-test
+  verification exception.
+- `committed-range.patch` and `committed-range-manifest.json` are evidence only. They do not expand
+  product closure, alter the immutable task state, or absorb the protected colleague guide.
+- The same remediation closes only the review findings for historical-gate wording, unknown
+  currency provenance, `LEGACY_UNVERIFIED` fee-source text, and the duplicate fee audit disclosure.
+  It does not authorize API, request, retry, database, seed, or business-input changes.
+
 ## Canonical Evidence Commands
 
 ```bash
@@ -142,6 +156,8 @@ Implement only the three presentation slices frozen by the approved plan:
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts \
   frontend/tests/demo-v6-fee-ui-parity-contract.mjs \
   tasks/frontend/cases/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01.md \
+  artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/committed-range.patch \
+  artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/committed-range-manifest.json \
   artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/logs/typecheck.log \
   artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/logs/eslint.log \
   artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/logs/build.log \
