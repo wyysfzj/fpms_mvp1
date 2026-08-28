@@ -89,17 +89,28 @@ introduced.
 ### 6.1 Presentation modes
 
 `CaseDocumentsTab.vue` stores the existing case metadata returned by `getCase` instead of retaining
-only the case number. It derives one of three display modes:
+only the case number. It classifies the two stage axes using these closed sets:
+
+- initial business stages: `NEW_CASE`, `FILING_PREPARATION`;
+- post-submission business stages: `WAITING_EXTERNAL_RECEIPT`, `PROSECUTION_MANAGEMENT`,
+  `OA_REPLY_IN_PROGRESS`, `GRANT_REGISTRATION_IN_PROGRESS`, `POST_GRANT_MAINTENANCE`, `CLOSED`;
+- initial official stage: `NOT_SUBMITTED`;
+- post-submission official stages: `SUBMITTED_WAITING_RECEIPT`,
+  `SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE`, `ACCEPTED`, `PRELIMINARY_EXAMINATION`,
+  `RECTIFICATION_RESPONSE`, `PUBLISHED`, `SUBSTANTIVE_EXAMINATION`, `OFFICE_ACTION_RESPONSE`,
+  `REEXAMINATION`, `GRANT_REGISTRATION`, `GRANT_ANNOUNCED`, `PROCEDURE_CLOSED`.
+
+It then derives exactly one display mode:
 
 | Mode | Condition | Customer presentation |
 | --- | --- | --- |
-| `CURRENT_INITIAL_FILING` | available stage facts consistently indicate `NEW_CASE` or `FILING_PREPARATION` and no post-submission official stage | “当前首次申请递交门禁”; preserve the existing PASS/WARNING/BLOCKED severity and actions |
-| `HISTORICAL_INITIAL_FILING` | available stage facts consistently indicate a post-submission business or official stage | “历史首次申请递交材料核验”; show the returned result as a historical rule result and explicitly state that it is not the current-node authorization conclusion |
-| `APPLICABILITY_UNKNOWN` | stage facts are absent or contradict each other | “首次申请递交材料核验（适用阶段待确认）”; use neutral warning styling, do not call it the current node, and preserve the returned result as attributed source data |
+| `CURRENT_INITIAL_FILING` | both axes are present; business stage belongs to the initial set and official stage is `NOT_SUBMITTED` | “当前首次申请递交门禁”; preserve the existing PASS/WARNING/BLOCKED severity and actions |
+| `HISTORICAL_INITIAL_FILING` | both axes are present; business and official stages both belong to their post-submission sets | “历史首次申请递交材料核验”; show the returned result as a historical rule result and explicitly state that it is not the current-node conclusion |
+| `APPLICABILITY_UNKNOWN` | either axis is absent, unrecognized, or the two classifications disagree | “首次申请递交材料核验（适用阶段待确认）”; use neutral warning styling, do not call it the current node, and preserve the returned result as attributed source data |
 
-A business-stage value from `WAITING_EXTERNAL_RECEIPT` onward or an official-stage value from
-`SUBMITTED_WAITING_RECEIPT` onward is post-submission. If one axis says initial filing and the other
-says post-submission, applicability is unknown rather than inferred.
+No enum ordering, legacy `status`, or `workflow_status` fallback participates in this classification.
+Partial, conflicting, and future unrecognized values fail to `APPLICABILITY_UNKNOWN` rather than
+being inferred.
 
 ### 6.2 Historical mode behavior
 
@@ -110,10 +121,12 @@ For the demonstrated authorization-registration case:
   `历史后补审计`;
 - a `BLOCKED` source result becomes customer text
   `首次申请递交规则未满足（历史核验）`, not `门禁结论：阻止`;
-- the fixed statement
-  `该结果用于追溯首次申请递交材料，不作为当前授权登记的阻断结论。` is visible;
-- “当前建议动作” becomes “历史核验说明”; filing-gate actions and the primary “登记往来文件”
-  button are not presented as current authorization actions;
+- the stage-derived statement
+  `该结果用于追溯首次申请递交材料，不作为当前“授权登记”的阻断结论。` is visible; other
+  post-submission cases substitute their existing Chinese official-stage label rather than reusing
+  authorization-specific copy;
+- “当前建议动作” becomes “历史核验说明”; the gate-card filing action is not presented as a
+  current authorization action, while the page toolbar's generic “登记往来文件” remains available;
 - the document event table remains unchanged and continues to show the actual recorded files.
 
 The underlying `documentGate.conclusion`, checks, missing items, and suggested actions are not
@@ -140,7 +153,8 @@ The default card contains only customer information:
 
 - title: translated obligation type, for example `授权登记官费义务`;
 - badges: `官费` or `服务费`, source verification state, obligation state, and payment state;
-- labelled facts: 到期日、币种、客户指示、草单状态、缴费清单状态、付款状态、官方证据状态;
+- labelled facts: 到期日、币种、估算状态、客户指示、草单状态、缴费清单状态、付款状态、
+  官方证据状态;
 - a labelled fee-line table: 费项、官费全额、减缴比例、应缴金额、来源金额、来源日期、差额复核;
 - fee name from `feeName`; the fee code is not used as the visible title;
 - `CNY` is displayed as `人民币（CNY）`; unknown currency remains `币种待确认`.
@@ -162,6 +176,18 @@ Fee-instruction success remains actionable. Customer content says, for example,
 `支付指示已记录`; returned obligation/activity/idempotency identifiers move into the same audit
 disclosure. The existing mutation payload, idempotency behavior, retry behavior, and draft link are
 unchanged.
+
+The fee-card field hierarchy is fixed as follows:
+
+| Field class | Default customer card | Collapsed audit information |
+| --- | --- | --- |
+| fee name, amounts, ratio, source date, due date | labelled business value | not duplicated |
+| seven obligation statuses | translated Chinese value, including `估算状态：暂无` when null | raw known or unknown status code |
+| currency | `人民币（CNY）` or `币种待确认` | raw currency value when unknown |
+| `feeYearKey` | omitted when `0`; otherwise `费种年度：<value>` | always retained |
+| obligation, activity, document, related-fact, line IDs | hidden | exact value retained |
+| obligation type, fee code, related-fact kind/status | translated value where customer-relevant | exact raw value retained |
+| unparseable source value | `待确认` | exact raw value retained |
 
 ## 8. Customer-readable expanded history
 
@@ -211,8 +237,9 @@ already owns that source value.
 ### 8.4 Fee lane
 
 The full-history fee lane uses the same customer card and audit hierarchy defined in section 7.
-It preserves both GOV and SERVICE tracks and all seven independent statuses. It does not calculate
-or display account balance.
+It preserves both GOV and SERVICE tracks and all seven independent statuses: estimate, obligation,
+client instruction, draft, pay list, payment, and official evidence. It does not calculate or
+display account balance.
 
 ## 9. Unknown-code and error policy
 
@@ -232,19 +259,33 @@ Implementation must begin with failing focused tests and finish with these obser
 | authorization-registration case with initial-filing gate `BLOCKED` | historical heading and non-current explanation visible; no current red “门禁结论：阻止” or filing action |
 | initial-filing case with the same gate result | current gate severity and actions remain visible |
 | contradictory or missing stage metadata | neutral “适用阶段待确认”; no fabricated PASS/current applicability |
+| future unrecognized business or official stage value | neutral “适用阶段待确认”; raw future code is not presented as a known stage |
 | repeated obligation across milestones | exactly one card for that obligation ID with latest statuses |
 | real fee card | Chinese title/statuses and labelled lines visible; UUID and raw enums absent before audit disclosure |
 | audit disclosure opened | exact raw identifiers and codes remain available |
 | document history default | known codes translated, duplicate gate codes shown once, UUID/hash absent before audit disclosure |
 | unknown evidence/work-package/fee code | `待确认` visible; raw value only inside audit disclosure |
-| history expanded | historical-boundary statement visible; center timestamps use customer format |
+| history expanded | historical-boundary statement visible; center and document/evidence timestamps use customer format |
 | fee instruction PAY/HOLD/ABANDON and transport retry | existing request bodies, idempotency-key reuse, errors, and draft-link behavior unchanged |
 
 Focused Playwright coverage extends the existing document-lane, fee-lane, fee-instruction, and case
-document-gate specifications. Static V6 UI contracts may be updated only where they directly assert
-the replaced customer projection. Typecheck, scoped lint, focused Playwright, and one V6 case-detail
-demo regression form the implementation gate; broad repository tests and release gates remain out
-of scope.
+document-gate specifications:
+
+- create `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-document-gate-applicability.spec.ts`;
+- modify `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-document-lane.spec.ts`;
+- modify `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-center-lane.spec.ts`;
+- modify `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts`;
+- modify `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts`;
+- update `frontend/tests/demo-v6-fee-ui-parity-contract.mjs` only where its static customer
+  projection assertions conflict with this design;
+- run the focused case-detail regression in
+  `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts`
+  without changing its V6 business inputs or mutations.
+
+`casedock-real-api.spec.ts` remains unchanged unless the new focused applicability test proves an
+existing assertion directly contradicts the approved labels. Typecheck, scoped lint, focused
+Playwright, and the named V6 live case-detail regression form the implementation gate; broad
+repository tests and release gates remain out of scope.
 
 ## 11. Anticipated file boundary
 
@@ -288,4 +329,3 @@ Implementation planning stops and returns for a new decision if any of the follo
    fact;
 4. preserving audit traceability requires changing API or persistence contracts;
 5. the focused change requires modifying the V6 seed, runtime bundle, or runbook business values.
-
