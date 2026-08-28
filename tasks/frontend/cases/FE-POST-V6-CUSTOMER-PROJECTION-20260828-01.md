@@ -44,12 +44,12 @@ Implement only the three presentation slices frozen by the approved plan:
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts`
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts`
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/casedock-real-api.spec.ts`
+- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts`
 - `frontend/tests/demo-v6-fee-ui-parity-contract.mjs`
 - `artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/**`
 
 ## Verification-Only Files
 
-- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts`
 - `scripts/run_demo_integrated_a_rehearsal.py`
 
 ## Explicit Non-Closure
@@ -91,6 +91,12 @@ Implement only the three presentation slices frozen by the approved plan:
 - The user approved stopping those two verified V6 worktree listeners on 2026-08-29. The failed
   evidence is preserved under `strict-v6-failed-port-conflict-1`; after confirming both ports are
   free and committing this recovery record, one clean strict invocation is authorized.
+- The clean isolated run then proved the strict test still required audit hashes and fee
+  identifiers to be visible by default, contrary to the approved collapsed-audit projection. The
+  user approved a test-only contract synchronization on 2026-08-29: assert raw values hidden in
+  the customer view, expand the matching `审计信息`, and then assert exact raw values. The failed
+  evidence is preserved under `strict-v6-failed-stale-assertion-1`. No business input, mutation,
+  product source, API, database, seed, or runner change is authorized by this amendment.
 
 ## Canonical Evidence Commands
 
@@ -110,6 +116,7 @@ Implement only the three presentation slices frozen by the approved plan:
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts \
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts \
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/casedock-real-api.spec.ts \
+  FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts \
   frontend/tests/demo-v6-fee-ui-parity-contract.mjs \
   tasks/frontend/cases/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01.md
 
@@ -128,6 +135,7 @@ Implement only the three presentation slices frozen by the approved plan:
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts \
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts \
   FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/casedock-real-api.spec.ts \
+  FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts \
   frontend/tests/demo-v6-fee-ui-parity-contract.mjs \
   tasks/frontend/cases/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01.md \
   artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/logs/typecheck.log \
