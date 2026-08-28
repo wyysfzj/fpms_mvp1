@@ -102,6 +102,16 @@ async function expandLifecycleHistory(page: Page): Promise<void> {
   await expect(details).toBeVisible()
 }
 
+async function expectRawValueInAudit(container: Locator, rawText: string): Promise<void> {
+  const rawValue = container.getByText(rawText, { exact: true })
+  await expect(rawValue).toHaveCount(1)
+  await expect(rawValue).toBeHidden()
+  const audit = container.locator('details').filter({ hasText: rawText })
+  await expect(audit).toHaveCount(1)
+  await audit.locator('summary').click()
+  await expect(rawValue).toBeVisible()
+}
+
 test('strict V6 normal-UI journey', async ({ page, browser }) => {
   test.setTimeout(9 * 60 * 1000)
   page.setDefaultTimeout(10_000)
@@ -641,7 +651,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
       await expect(milestone).toBeVisible()
       await expect(milestone.getByText(`活动类型：${label}`, { exact: true })).toBeVisible()
       if (evidence) {
-        await expect(milestone.getByText(`内容哈希：sha256:${evidence.sha256}`, { exact: true })).toBeVisible()
+        await expectRawValueInAudit(milestone, `内容哈希：sha256:${evidence.sha256}`)
       }
     }
     await expect(page.getByLabel('当前案件生命周期状态')).toContainText('官方程序阶段：实质审查')
@@ -916,7 +926,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await expandLifecycleHistory(page)
     const evidenceLane = page.getByTestId('document-evidence-lane')
     const noticeMilestone = evidenceLane.locator('article').filter({ hasText: '活动类型：审查意见通知已登记' })
-    await expect(noticeMilestone.getByText(`内容哈希：sha256:${noticeEvidence.sha256}`, { exact: true })).toBeVisible()
+    await expectRawValueInAudit(noticeMilestone, `内容哈希：sha256:${noticeEvidence.sha256}`)
     await expect(noticeMilestone.getByRole('heading', { name: '关联任务' })).toHaveCount(1)
     const receiptMilestone = evidenceLane.locator('article').filter({ hasText: '活动类型：审查意见答复回执已归档' })
     await expect(receiptMilestone).toBeVisible()
@@ -1675,9 +1685,13 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     const supersedingServiceCard = feeLane.getByTestId(`fee-obligation-${supersedingServiceObligationId}`)
     await expect(originalServiceCard).toContainText('义务状态：已被替代')
     await expect(originalServiceCard).not.toContainText(`关联事实：草稿 / ${serviceDraftId}`)
-    await expect(supersedingServiceCard).toContainText(`关联事实：草稿 / ${serviceDraftId}`)
-    await expect(supersedingServiceCard).toContainText(`替代前义务：${originalServiceObligationId}`)
+    await expect(supersedingServiceCard).toContainText('关联事实：草单 / 已锁定')
     await expect(supersedingServiceCard).toContainText('替代理由：客户确认增加一份附加文件处理')
+    await expectRawValueInAudit(supersedingServiceCard, `关联事实编号：${serviceDraftId}`)
+    await expect(supersedingServiceCard.getByText(
+      `替代前义务：${originalServiceObligationId}`,
+      { exact: true },
+    )).toBeVisible()
     await expect(feeLane).toContainText('官费轨：1 项')
     await expect(feeLane).toContainText('服务费轨：2 项')
     const feeLaneText = await feeLane.innerText()
@@ -2106,20 +2120,27 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await expect(feeLane).toContainText('服务费轨：2 项')
 
     const govCard = feeLane.getByTestId(`fee-obligation-${govObligationId}`)
-    await expect(govCard).toContainText(`关联事实：草稿 / ${govDraftId} / 已锁定`)
-    await expect(govCard).toContainText(String(payListId))
-    for (const paymentId of govPaymentIds) await expect(govCard).toContainText(String(paymentId))
+    await expect(govCard).toContainText('关联事实：草单 / 已锁定')
     await expect(govCard).toContainText('官方证据状态：待处理')
     await expect(govCard).not.toContainText('未识别状态')
+    await expectRawValueInAudit(govCard, `关联事实编号：${govDraftId}`)
+    await expect(govCard.getByText(`关联事实编号：${payListId}`, { exact: true })).toBeVisible()
+    for (const paymentId of govPaymentIds) {
+      await expect(govCard.getByText(`关联事实编号：${paymentId}`, { exact: true })).toBeVisible()
+    }
 
     const originalServiceCard = feeLane.getByTestId(`fee-obligation-${originalServiceObligationId}`)
     const currentServiceCard = feeLane.getByTestId(`fee-obligation-${supersedingServiceObligationId}`)
     await expect(originalServiceCard).not.toContainText(serviceDraftId)
-    await expect(currentServiceCard).toContainText(`关联事实：草稿 / ${serviceDraftId} / 已锁定`)
-    await expect(currentServiceCard).toContainText(`替代前义务：${originalServiceObligationId}`)
+    await expect(currentServiceCard).toContainText('关联事实：草单 / 已锁定')
     await expect(currentServiceCard).toContainText('替代理由：客户确认增加一份附加文件处理')
     await expect(originalServiceCard).not.toContainText('未识别状态')
     await expect(currentServiceCard).not.toContainText('未识别状态')
+    await expectRawValueInAudit(currentServiceCard, `关联事实编号：${serviceDraftId}`)
+    await expect(currentServiceCard.getByText(
+      `替代前义务：${originalServiceObligationId}`,
+      { exact: true },
+    )).toBeVisible()
     const finalGovText = await govCard.innerText()
     const finalOriginalServiceText = await originalServiceCard.innerText()
     const finalCurrentServiceText = await currentServiceCard.innerText()
