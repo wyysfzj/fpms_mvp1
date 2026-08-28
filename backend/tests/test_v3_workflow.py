@@ -304,6 +304,37 @@ class TestCaseListFields:
         assert len(found) == 1
         assert "status" in found[0]
 
+    def test_list_projects_workflow_status_lifecycle_axes_and_updated_at(
+        self, client, auth_headers, session_factory
+    ) -> None:
+        from app.modules.cases.models import Case
+
+        case_no = f"V3-LIFECYCLE-{uuid4().hex[:8]}"
+        case_id = _create_case_via_orm(
+            session_factory,
+            case_no=case_no,
+            status="GRANT_PENDING",
+        )
+        with session_factory() as db:
+            case = db.get(Case, case_id)
+            assert case is not None
+            case.business_stage = "GRANT_REGISTRATION_IN_PROGRESS"
+            case.official_procedure_stage = "GRANT_REGISTRATION"
+            case.legal_status = "APPLICATION_PENDING"
+            db.commit()
+
+        response = client.get(f"/api/v1/cases?case_no={case_no}", headers=auth_headers)
+
+        assert response.status_code == 200, response.text
+        item = response.json()["items"][0]
+        assert item["status"] == "GRANT_PENDING"
+        assert item["workflow_status"] == item["status"]
+        assert item["business_stage"] == "GRANT_REGISTRATION_IN_PROGRESS"
+        assert item["official_procedure_stage"] == "GRANT_REGISTRATION"
+        assert item["legal_status"] == "APPLICATION_PENDING"
+        assert item["updated_at"]
+        assert item["filing_date"] is None
+
     def test_list_filter_by_status(self, client, auth_headers) -> None:
         """BE-17: 列表支持 status 参数筛选。"""
         resp = client.get("/api/v1/cases?status=WAITING_RECEIPT", headers=auth_headers)

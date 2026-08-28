@@ -99,12 +99,30 @@ watch(
   }
 )
 
+function getWorkflowStatus(c: Case) {
+  return c.workflow_status || c.status
+}
+
 function getFlow(c: Case) {
-  return getCaseWorkflow(c.status)
+  const status = getWorkflowStatus(c)
+  if (!status) {
+    return {
+      rule: { legalText: ZH.workflow.unknownStatus },
+      stepIndex: -1,
+      stepLabel: ZH.workflow.unknownStatus,
+      stepNoText: ZH.workflow.stagePending,
+    }
+  }
+  const flow = getCaseWorkflow(status)
+  return {
+    ...flow,
+    stepLabel: flow.rule.stepText,
+    stepNoText: `第${flow.stepIndex + 1}阶段/5`,
+  }
 }
 
 function getTagClass(c: Case) {
-  return getStatusTagClass(c.status || '')
+  return getStatusTagClass(getWorkflowStatus(c) || '')
 }
 
 function goDetail(id: string) {

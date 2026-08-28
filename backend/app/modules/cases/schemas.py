@@ -339,6 +339,11 @@ class CaseListItem(BaseModel):
     title_en: str | None
     app_no: str | None = None
     status: str
+    workflow_status: str
+    business_stage: str | None = None
+    official_procedure_stage: str | None = None
+    legal_status: str | None = None
+    updated_at: str | None = None
     filing_date: str | None = None
     recv_date: str | None = None
     # A3 — key list fields

@@ -40,7 +40,7 @@ export const STATUS_STEP_MAP: Record<string, StatusRule> = {
   OA1: { stepKey: 'SUB_EXAM', legalStatusCode: 'OA1', legalText: getCaseStatusText('OA1'), stepText: '实审', nextAction: '提交 OA 答复后回到实审。' },
   OA2: { stepKey: 'SUB_EXAM', legalStatusCode: 'OA2', legalText: getCaseStatusText('OA2'), stepText: '实审', nextAction: '继续答复审查意见，满足条件后可授权。' },
   REEXAM: { stepKey: 'SUB_EXAM', legalStatusCode: 'REEXAM', legalText: getCaseStatusText('REEXAM'), stepText: '实审', nextAction: '复审结果决定是否转入授权或驳回。' },
-  GRANT_PENDING: { stepKey: 'GRANTED', legalStatusCode: 'GRANT_PENDING', legalText: getCaseStatusText('GRANT_PENDING'), stepText: '授权', nextAction: '已收到授权节点信号，请完成授权登记与后续费用处理。' },
+  GRANT_PENDING: { stepKey: 'GRANTED', legalStatusCode: 'GRANT_PENDING', legalText: getCaseStatusText('GRANT_PENDING'), stepText: '授权登记', nextAction: '已收到授权节点信号，请完成授权登记与后续费用处理。' },
   GRANTED: { stepKey: 'GRANTED', legalStatusCode: 'GRANTED', legalText: getCaseStatusText('GRANTED'), stepText: '授权', nextAction: '进入授权后费用和年费管理。' },
   REJECTED: { stepKey: 'SUB_EXAM', legalStatusCode: 'REJECTED', legalText: getCaseStatusText('REJECTED'), stepText: '实审', nextAction: '可按策略进入复审或结案。', branchNote: '该案已进入分支状态：驳回。主干流程停留在第4步（实审），未进入“授权”。' },
   WITHDRAWN: { stepKey: 'SUB_EXAM', legalStatusCode: 'WITHDRAWN', legalText: getCaseStatusText('WITHDRAWN'), stepText: '实审', nextAction: '该案已撤回，请核对撤回事由与结案动作。', branchNote: '该案已进入分支状态：已撤回。主干流程停留在审查阶段，未继续推进授权。' },

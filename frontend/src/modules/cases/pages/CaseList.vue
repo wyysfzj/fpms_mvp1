@@ -86,7 +86,7 @@
       </el-row>
       <el-row :gutter="16">
         <el-col :span="6">
-          <el-form-item label="状态" class="filter-item">
+          <el-form-item :label="ZH.workflow.filterStatus" class="filter-item">
             <el-select v-model="filters.status" placeholder="全部" clearable style="width: 100%">
               <el-option
                 v-for="(label, key) in statusOptions"
@@ -218,7 +218,7 @@
         </el-table-column>
         <el-table-column :label="ZH.workflow.colFilingDate" width="120">
           <template #default="{ row }">
-            {{ row.filing_date || '-' }}
+            {{ row.filing_date || '待录入' }}
           </template>
         </el-table-column>
         <el-table-column :label="ZH.caseList.updated" width="160">
@@ -305,7 +305,7 @@ const stepLabel = computed(() => {
 const stepNoText = computed(() => {
   if (!stepFilter.value) return ''
   const idx = getStepIndex(stepFilter.value)
-  return `第${idx + 1}步/5`
+  return `第${idx + 1}阶段/5`
 })
 
 const pageTitle = computed(() => {
@@ -319,7 +319,9 @@ const pageTitle = computed(() => {
 const displayCases = computed(() => {
   if (!stepFilter.value) return cases.value
   return cases.value.filter(c => {
-    const rule = getStatusRule(c.status)
+    const status = getWorkflowStatus(c)
+    if (!status) return false
+    const rule = getStatusRule(status)
     return rule.stepKey === stepFilter.value
   })
 })
@@ -363,12 +365,30 @@ function clearFilter() {
   router.push({ path: '/cases' })
 }
 
+function getWorkflowStatus(c: Case) {
+  return c.workflow_status || c.status
+}
+
 function getFlow(c: Case) {
-  return getCaseWorkflow(c.status)
+  const status = getWorkflowStatus(c)
+  if (!status) {
+    return {
+      rule: { legalText: ZH.workflow.unknownStatus },
+      stepIndex: -1,
+      stepLabel: ZH.workflow.unknownStatus,
+      stepNoText: ZH.workflow.stagePending,
+    }
+  }
+  const flow = getCaseWorkflow(status)
+  return {
+    ...flow,
+    stepLabel: flow.rule.stepText,
+    stepNoText: `第${flow.stepIndex + 1}阶段/5`,
+  }
 }
 
 function getTagClass(c: Case) {
-  return getStatusTagClass(c.status || '')
+  return getStatusTagClass(getWorkflowStatus(c) || '')
 }
 
 /** FB5: Load client options for filter dropdown */

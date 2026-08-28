@@ -33,6 +33,10 @@ interface BackendCase {
     title_cn?: string | null
     title_en?: string | null
     status?: string | null
+    workflow_status?: string | null
+    business_stage?: string | null
+    official_procedure_stage?: string | null
+    legal_status?: string | null
     filing_date?: string | null
     recv_date?: string | null
     issue_date?: string | null
@@ -107,7 +111,7 @@ interface BackendCase {
     fee_reduction?: string | null
     applicant_kind?: string | null
     created_at?: string
-    updated_at?: string
+    updated_at?: string | null
 }
 
 interface BackendCaseListResponse {
@@ -187,6 +191,10 @@ function mapCase(input: BackendCase): Case {
         doc_address_id: input.doc_address_id || undefined,
         bill_address_id: input.bill_address_id || undefined,
         status: input.status || undefined,
+        workflow_status: input.workflow_status || input.status || undefined,
+        business_stage: input.business_stage || undefined,
+        official_procedure_stage: input.official_procedure_stage || undefined,
+        legal_status: input.legal_status || undefined,
         filing_date: input.filing_date || undefined,
         recv_date: input.recv_date || undefined,
         issue_date: input.issue_date || undefined,

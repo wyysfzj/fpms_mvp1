@@ -9,6 +9,7 @@ import type { Pagination } from '../../api/types'
 import type { EnrichedTask } from './components/ActionCenter.vue'
 import type { FinanceItem } from './components/FinanceRow.vue'
 import { WORKFLOW_STEPS, getStatusRule, getStepIndex } from '../../constants/workflow'
+import { ZH } from '../../constants/labels.zh'
 
 // ---- Legacy KPI (kept for backward compat) ----
 
@@ -230,7 +231,9 @@ export async function fetchWorkflowStats(): Promise<WorkflowStats> {
     }
 
     for (const c of allCases) {
-        const rule = getStatusRule(c.status)
+        const status = c.workflow_status || c.status
+        if (!status) continue
+        const rule = getStatusRule(status)
         const current = stepCounts.get(rule.stepKey) || 0
         stepCounts.set(rule.stepKey, current + 1)
     }
@@ -238,7 +241,7 @@ export async function fetchWorkflowStats(): Promise<WorkflowStats> {
     const total = allCases.length
     const steps: WorkflowStepStat[] = WORKFLOW_STEPS.map(step => ({
         key: step.key,
-        label: step.label,
+        label: step.key === 'GRANTED' ? ZH.workflow.grantStage : step.label,
         color: step.color,
         count: stepCounts.get(step.key) || 0,
         percent: total ? Math.round(((stepCounts.get(step.key) || 0) / total) * 100) : 0,
@@ -250,7 +253,9 @@ export async function fetchWorkflowStats(): Promise<WorkflowStats> {
 export function filterCasesByStep(cases: Case[], stepKey: string | null): Case[] {
     if (!stepKey) return cases
     return cases.filter(c => {
-        const rule = getStatusRule(c.status)
+        const status = c.workflow_status || c.status
+        if (!status) return false
+        const rule = getStatusRule(status)
         return rule.stepKey === stepKey
     })
 }

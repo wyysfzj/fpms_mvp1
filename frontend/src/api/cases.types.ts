@@ -59,6 +59,10 @@ export interface Case {
     foreign_agent_name?: string
     foreign_ref?: string
     status?: string
+    workflow_status?: string
+    business_stage?: string
+    official_procedure_stage?: string
+    legal_status?: string
     filing_date?: string
     recv_date?: string
     issue_date?: string
