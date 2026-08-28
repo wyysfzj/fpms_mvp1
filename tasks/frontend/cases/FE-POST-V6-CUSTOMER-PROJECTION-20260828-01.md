@@ -72,6 +72,19 @@ Implement only the three presentation slices frozen by the approved plan:
 5. One strict V6 rehearsal from committed code, followed by independent HIGH review and atomic
    evidence close.
 
+## Approved Strict V6 Recovery
+
+- The first strict invocation exited with code 2 before product startup because the rehearsal
+  CLI requires an absolute `--artifact` path while the approved plan showed a relative path.
+- The user approved recovery on 2026-08-29. The committed recovery changes no product behavior,
+  inputs, guide content, or evidence meaning; it only resolves the artifact path with
+  `"$(pwd)/artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/strict-v6-attempt-1"`.
+- The rejected invocation created no attempt/pass directory. The protected colleague guide was
+  restored at SHA-256
+  `24f9b8acab8ec2e93c50f95991b5f0301dfe4f7438a7f98b84259fa3628a144c`.
+- After this recovery is committed, run the corrected strict rehearsal once. A product/runtime
+  failure remains a stop condition; do not perform an uncommitted retry.
+
 ## Canonical Evidence Commands
 
 ```bash
