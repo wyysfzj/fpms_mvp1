@@ -12,6 +12,7 @@ const govPaymentsApi = read('src/api/govPayments.ts')
 const demoAbc = read('src/modules/demo/pages/DemoAbc.vue')
 const caseFees = read('src/modules/cases/components/CaseFeesTab.vue')
 const feeLane = read('src/modules/cases/components/FeeObligationLane.vue')
+const lifecycleDisplay = read('src/modules/cases/components/lifecycleOverlayDisplay.ts')
 const feeItems = read('src/modules/fees/components/FeeDraftItemsTable.vue')
 const feeDetail = read('src/modules/fees/pages/FeeDraftDetail.vue')
 const payList = read('src/modules/annuity/pages/PayListDetail.vue')
@@ -70,7 +71,7 @@ const payListRoutes = await importFunctions(script(payList), ['buildPaymentRegis
 const paymentRoutes = await importFunctions(script(payment), ['buildPaymentResultNavigation'])
 const govPaymentMoney = await importFunctions(govPaymentsApi, ['toDemoMoney'])
 const adjustmentQuantity = await importFunctions(script(feeItems), ['resolveAdjustmentQuantity'])
-const feeLaneProjection = await importFunctions(script(feeLane), ['mergeRelatedFacts', 'latestObligationsById'])
+const feeLaneProjection = await importFunctions(lifecycleDisplay, ['mergeRelatedFacts', 'latestObligationsById'])
 const billItems = await importFunctions(demoContract, ['serviceItemAmountsEqualBill', 'serviceReceiptFeeCodeMatchesBill'])
 
 for (const [code, label] of [
@@ -84,7 +85,7 @@ for (const [code, label] of [
   ['NOT_APPLICABLE', '不适用'],
   ['PAY_LIST', '缴费清单'],
 ]) {
-  assert.match(feeLane, new RegExp(`${code}: '${label}'`))
+  assert.match(lifecycleDisplay, new RegExp(`${code}: '${label}'`))
 }
 
 assert.equal(govPaymentMoney.toDemoMoney(50), '50.00')

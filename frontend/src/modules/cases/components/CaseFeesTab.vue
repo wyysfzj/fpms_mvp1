@@ -124,37 +124,35 @@
       :closable="false"
     />
     <div v-else-if="realObligations.length === 0" class="placeholder-content">暂无真实费用义务</div>
-    <div v-for="(obligation, obligationIndex) in realObligations" :key="obligationIndex" class="obligation-card">
-      <strong>{{ obligation.obligationId }}</strong>
-      <span>来源活动：{{ obligation.sourceActivityId }}</span>
-      <span>来源文档：{{ obligation.sourceDocumentId ?? '' }}</span>
-      <span>来源状态：{{ obligation.sourceStatus }}</span>
-      <span>费用域：{{ obligation.feeDomain }}</span>
-      <span>义务类型：{{ obligation.obligationType }}</span>
-      <span>到期日：{{ obligation.dueDate ?? '' }}</span>
-      <span>估算状态：{{ obligation.statuses.estimateStatus ?? '' }}</span>
-      <span>义务状态：{{ obligation.statuses.obligationStatus }}</span>
-      <span>客户指示：{{ obligation.statuses.clientInstructionStatus }}</span>
-      <span>草稿状态：{{ obligation.statuses.draftStatus }}</span>
-      <span>清单状态：{{ obligation.statuses.payListStatus }}</span>
-      <span>支付状态：{{ obligation.statuses.paymentStatus }}</span>
-      <span>官方证据状态：{{ obligation.statuses.officialEvidenceStatus }}</span>
-      <span>替代义务：{{ obligation.supersedesObligationId ?? '' }}</span>
-      <span>替代原因：{{ obligation.supersedeReason ?? '' }}</span>
-      <div v-for="(line, lineIndex) in obligation.lines" :key="lineIndex" class="nested-fact">
-        <span>{{ line.feeCode }}</span>
-        <span>{{ line.officialFullAmount ?? '' }}</span>
-        <span>{{ line.reductionRatio }}</span>
-        <span>{{ line.payableAmount }}</span>
-        <span>{{ line.sourceAmount ?? '' }}</span>
-        <span>{{ line.sourceDate ?? '' }}</span>
-        <span>{{ line.differenceReviewState }}</span>
+    <div v-for="obligation in realObligations" :key="obligation.obligationId" class="obligation-card">
+      <h4>{{ feeDisplayText(obligation.obligationType, '费用类型待确认') }}</h4>
+      <span>费用域：{{ feeDisplayText(obligation.feeDomain) }}</span>
+      <span>来源状态：{{ feeDisplayText(obligation.sourceStatus) }}</span>
+      <span>到期日：{{ overlayDateText(obligation.dueDate) }}</span>
+      <span>币种：{{ currencyText(obligation.currency) }}</span>
+      <div class="status-grid" aria-label="费用义务七状态">
+        <span>估算状态：{{ feeDisplayText(obligation.statuses.estimateStatus) }}</span>
+        <span>义务状态：{{ feeDisplayText(obligation.statuses.obligationStatus) }}</span>
+        <span>客户指示状态：{{ feeDisplayText(obligation.statuses.clientInstructionStatus) }}</span>
+        <span>草单状态：{{ feeDisplayText(obligation.statuses.draftStatus) }}</span>
+        <span>缴费清单状态：{{ feeDisplayText(obligation.statuses.payListStatus) }}</span>
+        <span>付款状态：{{ feeDisplayText(obligation.statuses.paymentStatus) }}</span>
+        <span>官方证据状态：{{ feeDisplayText(obligation.statuses.officialEvidenceStatus) }}</span>
       </div>
-      <div v-for="(fact, factIndex) in obligation.relatedFacts" :key="factIndex" class="nested-fact">
-        <span>{{ fact.kind }}</span>
-        <span>{{ fact.objectId }}</span>
-        <span>{{ fact.status }}</span>
+      <div v-for="line in obligation.lines" :key="line.lineId" class="nested-fact fee-line">
+        <h5>{{ line.feeName }}</h5>
+        <span v-if="line.feeYearKey !== 0">费种年度：{{ line.feeYearKey }}</span>
+        <span>官费全额：{{ displayValue(line.officialFullAmount) }}</span>
+        <span>减缴比例：{{ line.reductionRatio }}</span>
+        <span>应缴金额：{{ line.payableAmount }}</span>
+        <span>来源金额：{{ displayValue(line.sourceAmount) }}</span>
+        <span>来源日期：{{ overlayDateText(line.sourceDate) }}</span>
+        <span>差额复核状态：{{ feeDisplayText(line.differenceReviewState) }}</span>
       </div>
+      <span v-for="fact in obligation.relatedFacts" :key="`${fact.kind}-${fact.objectId}`">
+        关联事实：{{ feeDisplayText(fact.kind) }} / {{ feeDisplayText(fact.status) }}
+      </span>
+      <span v-if="obligation.supersedeReason">替代理由：{{ obligation.supersedeReason }}</span>
       <div class="instruction-actions">
         <el-button
           size="small"
@@ -191,19 +189,49 @@
         class="instruction-result"
         data-testid="fee-instruction-result"
       >
-        <strong>服务端指示事实</strong>
-        <span>服务端义务编号：{{ instructionResults[obligation.obligationId]?.obligation_id }}</span>
-        <span>服务端客户指示：{{ instructionResults[obligation.obligationId]?.client_instruction_status }}</span>
-        <span>服务端活动编号：{{ instructionResults[obligation.obligationId]?.activity_id }}</span>
-        <span>服务端幂等键：{{ instructionResults[obligation.obligationId]?.idempotency_key }}</span>
-        <span>服务端复用结果：{{ instructionResults[obligation.obligationId]?.reused ? '是' : '否' }}</span>
+        <strong>{{ instructionResultText(instructionResults[obligation.obligationId]?.client_instruction_status) }}</strong>
         <router-link
           v-if="instructionResults[obligation.obligationId]?.client_instruction_status === 'PAY'"
           :to="`/fees/drafts/new?obligation_id=${encodeURIComponent(instructionResults[obligation.obligationId]!.obligation_id)}`"
         >
           创建关联费用草稿
         </router-link>
+        <details class="audit-details">
+          <summary>审计信息</summary>
+          <span>服务端义务编号：{{ instructionResults[obligation.obligationId]?.obligation_id }}</span>
+          <span>服务端客户指示：{{ instructionResults[obligation.obligationId]?.client_instruction_status }}</span>
+          <span>服务端活动编号：{{ instructionResults[obligation.obligationId]?.activity_id }}</span>
+          <span>服务端幂等键：{{ instructionResults[obligation.obligationId]?.idempotency_key }}</span>
+          <span>服务端复用结果：{{ instructionResults[obligation.obligationId]?.reused ? '是' : '否' }}</span>
+        </details>
       </div>
+      <details class="audit-details">
+        <summary>审计信息</summary>
+        <span>义务编号：{{ obligation.obligationId }}</span>
+        <span>来源活动：{{ obligation.sourceActivityId }}</span>
+        <span>来源文书：{{ displayValue(obligation.sourceDocumentId) }}</span>
+        <span>原始费用域：{{ obligation.feeDomain }}</span>
+        <span>原始义务类型：{{ obligation.obligationType }}</span>
+        <span>原始来源状态：{{ obligation.sourceStatus }}</span>
+        <span>原始估算状态：{{ displayValue(obligation.statuses.estimateStatus) }}</span>
+        <span>原始义务状态：{{ obligation.statuses.obligationStatus }}</span>
+        <span>原始客户指示：{{ obligation.statuses.clientInstructionStatus }}</span>
+        <span>原始草单状态：{{ obligation.statuses.draftStatus }}</span>
+        <span>原始缴费清单状态：{{ obligation.statuses.payListStatus }}</span>
+        <span>原始付款状态：{{ obligation.statuses.paymentStatus }}</span>
+        <span>原始官方证据状态：{{ obligation.statuses.officialEvidenceStatus }}</span>
+        <template v-for="line in obligation.lines" :key="`audit-${line.lineId}`">
+          <span>费用行编号：{{ line.lineId }}</span>
+          <span>费用代码：{{ line.feeCode }}</span>
+          <span>费种年度：{{ line.feeYearKey }}</span>
+          <span>原始差额复核状态：{{ line.differenceReviewState }}</span>
+        </template>
+        <template v-for="fact in obligation.relatedFacts" :key="`audit-${fact.kind}-${fact.objectId}`">
+          <span>关联事实编号：{{ fact.objectId }}</span>
+          <span>原始关联事实：{{ fact.kind }} / {{ fact.status }}</span>
+        </template>
+        <span>替代前义务：{{ displayValue(obligation.supersedesObligationId) }}</span>
+      </details>
     </div>
   </div>
 
@@ -255,6 +283,12 @@ import {
   isDemoUiSessionActive,
 } from '../../demo/demoUiSession'
 import type { DemoHostTuple } from '../../demo/demoUiSession'
+import {
+  currencyText,
+  feeStatusText,
+  latestObligationsById,
+  overlayDateText,
+} from './lifecycleOverlayDisplay'
 
 const props = defineProps<{
   caseId: string
@@ -334,7 +368,7 @@ const reviewedSourceDocumentIds = computed(() => {
 })
 
 const realObligations = computed(() =>
-  (activeOverlay.value?.milestones ?? []).flatMap((milestone) => milestone.feeObligations),
+  latestObligationsById(activeOverlay.value?.milestones ?? []),
 )
 
 onMounted(async () => {
@@ -531,6 +565,21 @@ function handleCreate() {
 function formatDraftType(type?: string | null): string {
   return type ? getFeeDraftTypeText(type) : '费用草稿'
 }
+
+function feeDisplayText(value: string | null, fallback = '待确认'): string {
+  return feeStatusText(value, fallback)
+}
+
+function displayValue(value: string | null): string {
+  return value || '暂无'
+}
+
+function instructionResultText(value: string | null | undefined): string {
+  if (value === 'PAY') return '支付指示已记录'
+  if (value === 'HOLD') return '暂缓指示已记录'
+  if (value === 'ABANDON') return '放弃指示已记录'
+  return '费用指示已记录'
+}
 </script>
 
 <style scoped>
@@ -581,5 +630,24 @@ function formatDraftType(type?: string | null): string {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+.obligation-card h4,
+.nested-fact h5 {
+  margin: 0;
+}
+
+.status-grid,
+.audit-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-page, #f8fafc);
+}
+
+.audit-details {
+  margin-top: 8px;
+  border-top: 1px dashed var(--color-border, #e2e8f0);
 }
 </style>

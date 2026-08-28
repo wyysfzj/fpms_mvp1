@@ -83,8 +83,6 @@ const FEE_STATUS_TEXT: Readonly<Record<string, string>> = {
   NOT_APPLICABLE: '不适用',
   OPEN: '处理中',
   LOCKED: '已锁定',
-  DRAFT: '草稿',
-  PAY_LIST: '缴费清单',
   PLANNED: '已计划',
   RECORDED: '已登记，待官方凭证核验',
   PAID: '已缴费',
