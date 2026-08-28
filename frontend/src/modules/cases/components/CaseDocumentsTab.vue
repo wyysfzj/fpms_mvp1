@@ -27,7 +27,10 @@
 
     <div class="document-gate-grid">
       <section class="document-gate-card">
-        <h4 class="document-gate-title">当前节点文件材料</h4>
+        <h4 class="document-gate-title">{{ gateSectionTitle }}</h4>
+        <p v-if="gatePresentationMode === 'HISTORICAL_INITIAL_FILING'" class="document-gate-context">
+          当前阶段：{{ currentOfficialStageText }}
+        </p>
         <el-skeleton v-if="gateLoading" :rows="4" animated />
         <el-alert
           v-else-if="gateError"
@@ -53,11 +56,20 @@
           </el-table-column>
         </el-table>
         <el-alert
+          v-if="caseMetadataError"
+          class="document-gate-alert"
+          type="warning"
+          :closable="false"
+          title="案件阶段信息加载失败"
+          description="当前无法确认首次申请递交门禁是否适用于本案当前阶段。"
+          show-icon
+        />
+        <el-alert
           v-if="documentGate"
           class="document-gate-alert"
           :type="gateAlertType"
           :closable="false"
-          title="门禁结论"
+          :title="gateAlertTitle"
           :description="gateConclusionDescription"
           show-icon
         />
@@ -72,6 +84,22 @@
           :closable="false"
           title="建议动作加载失败"
           :description="gateError.message"
+          show-icon
+        />
+        <el-alert
+          v-else-if="gatePresentationMode === 'HISTORICAL_INITIAL_FILING'"
+          type="info"
+          :closable="false"
+          title="无需处理历史首次申请门禁"
+          :description="historicalActionDescription"
+          show-icon
+        />
+        <el-alert
+          v-else-if="gatePresentationMode === 'APPLICABILITY_UNKNOWN'"
+          type="warning"
+          :closable="false"
+          title="等待阶段信息确认"
+          description="确认案件当前业务阶段和官方程序阶段后，再判断该首次申请递交规则的适用性。"
           show-icon
         />
         <el-empty
@@ -164,6 +192,7 @@ import { useRouter } from 'vue-router'
 import { getDocuments } from '../../../api/documents'
 import { getCase, getCaseDocumentGate } from '../../../api/cases'
 import type {
+  Case,
   CaseDocumentGateCheck,
   CaseDocumentGateConclusion,
   CaseDocumentGateFileEvent,
@@ -171,6 +200,7 @@ import type {
 } from '../../../api/cases.types'
 import type { Attachment, Document } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
+import { centerStateText } from './lifecycleOverlayDisplay'
 
 const props = defineProps<{
   caseId: string
@@ -180,16 +210,89 @@ const router = useRouter()
 const items = ref<Document[]>([])
 const loading = ref(true)
 const caseNo = ref('')
+const caseData = ref<Case | null>(null)
+const caseMetadataError = ref(false)
 const documentGate = ref<CaseDocumentGatePreview | null>(null)
 const gateLoading = ref(true)
 const gateError = ref<ApiError | null>(null)
 
-const gateStatusItems = computed(() => [
-  { label: '已匹配材料', value: documentGate.value ? `${documentGate.value.material_count}` : '-' },
-  { label: '缺失材料', value: documentGate.value ? `${documentGate.value.missing_items.length}` : '-' },
-  { label: '硬性阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
-  { label: '后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
+type GatePresentationMode =
+  | 'CURRENT_INITIAL_FILING'
+  | 'HISTORICAL_INITIAL_FILING'
+  | 'APPLICABILITY_UNKNOWN'
+
+const INITIAL_BUSINESS_STAGES = new Set(['NEW_CASE', 'FILING_PREPARATION'])
+const POST_BUSINESS_STAGES = new Set([
+  'WAITING_EXTERNAL_RECEIPT',
+  'PROSECUTION_MANAGEMENT',
+  'OA_REPLY_IN_PROGRESS',
+  'GRANT_REGISTRATION_IN_PROGRESS',
+  'POST_GRANT_MAINTENANCE',
+  'CLOSED',
 ])
+const POST_OFFICIAL_STAGES = new Set([
+  'SUBMITTED_WAITING_RECEIPT',
+  'SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE',
+  'ACCEPTED',
+  'PRELIMINARY_EXAMINATION',
+  'RECTIFICATION_RESPONSE',
+  'PUBLISHED',
+  'SUBSTANTIVE_EXAMINATION',
+  'OFFICE_ACTION_RESPONSE',
+  'REEXAMINATION',
+  'GRANT_REGISTRATION',
+  'GRANT_ANNOUNCED',
+  'PROCEDURE_CLOSED',
+])
+
+const gatePresentationMode = computed<GatePresentationMode>(() => {
+  const businessStage = caseData.value?.business_stage
+  const officialStage = caseData.value?.official_procedure_stage
+  if (!businessStage || !officialStage) return 'APPLICABILITY_UNKNOWN'
+  if (INITIAL_BUSINESS_STAGES.has(businessStage) && officialStage === 'NOT_SUBMITTED') {
+    return 'CURRENT_INITIAL_FILING'
+  }
+  if (POST_BUSINESS_STAGES.has(businessStage) && POST_OFFICIAL_STAGES.has(officialStage)) {
+    return 'HISTORICAL_INITIAL_FILING'
+  }
+  return 'APPLICABILITY_UNKNOWN'
+})
+
+const gateSectionTitle = computed(() => {
+  if (gatePresentationMode.value === 'CURRENT_INITIAL_FILING') return '当前首次申请递交门禁'
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') return '历史首次申请递交材料核验'
+  return '适用阶段待确认'
+})
+
+const currentOfficialStageText = computed(() =>
+  centerStateText(caseData.value?.official_procedure_stage || null, '待确认'),
+)
+
+const gateStatusItems = computed(() => {
+  const common = [
+    { label: '已匹配材料', value: documentGate.value ? `${documentGate.value.material_count}` : '-' },
+    { label: '缺失材料', value: documentGate.value ? `${documentGate.value.missing_items.length}` : '-' },
+  ]
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
+    return [
+      ...common,
+      { label: '历史规则阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
+      { label: '历史后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
+    ]
+  }
+  if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') {
+    return [
+      ...common,
+      { label: '规则适用性', value: '待确认' },
+      { label: '规则记录阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
+    ]
+  }
+  return [
+    ...common,
+    { label: '硬性阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
+    { label: '后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
+  ]
+})
 
 const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   TECHNICAL_DISCLOSURE: '技术交底书',
@@ -224,13 +327,33 @@ const newCaseGateRows = [
 ]
 
 const materialRequirements = computed(() =>
-  (documentGate.value?.checks || []).map((check) => ({
-    requirement: check.requirement_name,
-    matchedFile: matchedDocumentText(check),
-    role: check.role,
-    result: checkStatusText(check),
-    tagType: checkStatusTagType(check),
-  }))
+  (documentGate.value?.checks || []).map((check) => {
+    if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
+      return {
+        requirement: check.requirement_name,
+        matchedFile: matchedDocumentText(check),
+        role: check.role,
+        result: check.status === 'MATCHED' ? '历史已匹配' : '历史未匹配',
+        tagType: 'info' as const,
+      }
+    }
+    if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') {
+      return {
+        requirement: check.requirement_name,
+        matchedFile: matchedDocumentText(check),
+        role: check.role,
+        result: '适用性待确认',
+        tagType: 'info' as const,
+      }
+    }
+    return {
+      requirement: check.requirement_name,
+      matchedFile: matchedDocumentText(check),
+      role: check.role,
+      result: checkStatusText(check),
+      tagType: checkStatusTagType(check),
+    }
+  })
 )
 
 const suggestedActions = computed(() =>
@@ -243,16 +366,32 @@ const suggestedActions = computed(() =>
   }))
 )
 
-const gateAlertType = computed(() =>
-  documentGate.value ? gateConclusionAlertType(documentGate.value.conclusion) : 'info'
-)
+const gateAlertType = computed(() => {
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') return 'info'
+  if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') return 'warning'
+  return documentGate.value ? gateConclusionAlertType(documentGate.value.conclusion) : 'info'
+})
+const gateAlertTitle = computed(() => {
+  if (gatePresentationMode.value === 'CURRENT_INITIAL_FILING') return '门禁结论'
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') return '历史规则结论'
+  return '适用性说明'
+})
 const gateConclusionDescription = computed(() => {
   if (!documentGate.value) return '暂无门禁结论。'
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
+    return `首次申请递交规则当时的结论为${gateConclusionText(documentGate.value.conclusion)}；该结论来自首次申请递交阶段，不代表当前${currentOfficialStageText.value}节点阻断。`
+  }
+  if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') {
+    return '案件阶段信息不完整、冲突或未识别，不能将该规则标记为当前门禁或历史门禁。'
+  }
   const actions = documentGate.value.suggested_actions.length
     ? `；${documentGate.value.suggested_actions.join('；')}`
     : ''
   return `${gateConclusionText(documentGate.value.conclusion)}${actions}`
 })
+const historicalActionDescription = computed(() =>
+  `当前处于${currentOfficialStageText.value}，历史首次申请材料记录仅用于追溯。`,
+)
 
 const fileEventByDocumentId = computed(() => {
   const events = new Map<string, CaseDocumentGateFileEvent>()
@@ -379,10 +518,13 @@ async function resolveCaseNo() {
   if (caseNo.value) return caseNo.value
 
   try {
-    const caseData = await getCase(props.caseId)
-    caseNo.value = caseData.case_no
+    const loadedCase = await getCase(props.caseId)
+    caseData.value = loadedCase
+    caseNo.value = loadedCase.case_no
+    caseMetadataError.value = false
   } catch {
-    // Keep existing flow if case metadata fetch fails.
+    caseData.value = null
+    caseMetadataError.value = true
   }
 
   return caseNo.value
@@ -481,6 +623,12 @@ async function handleCreate() {
   color: var(--text-main);
   font-size: 15px;
   font-weight: 600;
+}
+
+.document-gate-context {
+  margin: -4px 0 12px;
+  color: var(--text-sub);
+  font-size: 13px;
 }
 
 .document-gate-table {

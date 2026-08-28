@@ -95,7 +95,7 @@ test("@P0 Case Document Gate minimal UI uses real API pages", async ({ page, req
   await page.goto(`/cases/${caseData.id}`, { waitUntil: "domcontentloaded" });
   await page.getByRole("tab", { name: "往来文件" }).click();
   expect((await caseGateResponse).ok()).toBeTruthy();
-  await expect(page.getByText("当前节点文件材料")).toBeVisible();
+  await expect(page.getByText("当前首次申请递交门禁")).toBeVisible();
   await expect(page.getByText("当前建议动作")).toBeVisible();
 
   await page.goto(`/documents/new?case_id=${caseData.id}&case_no=${caseData.case_no}`, {
