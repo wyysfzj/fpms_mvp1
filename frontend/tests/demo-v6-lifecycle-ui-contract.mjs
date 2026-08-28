@@ -33,6 +33,15 @@ const documentsApi = read('src/api/documents.ts')
 const officialApi = read('src/api/officialWorkflows.ts')
 const documentCreateScript = documentCreatePage.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1] || ''
 
+assert.match(documentsApi, /description:\s*input\.description\s*\?\?\s*undefined/)
+assert.doesNotMatch(documentsApi, /description:\s*input\.description\s*\?\?\s*input\.extra_data/)
+for (const label of ['官方期限信息', '官方答复期限', '期限来源', '确认状态']) {
+  assert.match(documentPage, new RegExp(label))
+}
+for (const displayText of ['人工核对官方通知', '从官方通知导入', '已确认', '待确认', '历史数据待核验']) {
+  assert.match(documentPage, new RegExp(displayText))
+}
+
 assert.doesNotMatch(indexPage, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/)
 assert.match(filingPage, /记录人工递交完成/)
 assert.match(filingPage, /submissionForm\.occurredAt/)

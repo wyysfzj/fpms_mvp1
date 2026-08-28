@@ -147,7 +147,7 @@ function mapDocument(input: BackendDocument): Document {
         doc_date: input.doc_date || undefined,
         title: input.title || 'Untitled Document',
         doc_type: input.doc_type || undefined,
-        description: input.description ?? input.extra_data ?? undefined,
+        description: input.description ?? undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
         reply_to_id: input.reply_to_id || undefined,

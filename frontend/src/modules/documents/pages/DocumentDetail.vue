@@ -68,6 +68,22 @@
               <p>{{ ZH.docDetail.noContent }}</p>
             </div>
           </div>
+          <div v-if="hasOfficialDeadlineInfo" class="case-panel">
+            <h3 class="panel-heading">官方期限信息</h3>
+            <el-descriptions :column="3" border>
+              <el-descriptions-item label="官方答复期限">
+                {{ doc.official_due_date || '未记录' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="期限来源">
+                {{ officialDeadlineSourceText }}
+              </el-descriptions-item>
+              <el-descriptions-item label="确认状态">
+                <el-tag :type="officialDeadlineStatusType" size="small">
+                  {{ officialDeadlineStatusText }}
+                </el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+          </div>
           <GrantEvidenceReviewPanel :document-id="doc.id" />
           <DocumentLifecycleEvidenceActions
             :document="doc"
@@ -221,6 +237,27 @@ const error = ref<ApiError | null>(null)
 
 const directionClass = computed(() => {
   return doc.value?.direction === 'IN' ? 'direction-in' : 'direction-out'
+})
+const hasOfficialDeadlineInfo = computed(() => Boolean(
+  doc.value?.official_due_date
+  || doc.value?.official_due_date_source
+  || doc.value?.official_due_date_status
+))
+const officialDeadlineSourceText = computed(() => {
+  if (doc.value?.official_due_date_source === 'MANUAL_OFFICIAL_NOTICE') return '人工核对官方通知'
+  if (doc.value?.official_due_date_source === 'IMPORTED_OFFICIAL_NOTICE') return '从官方通知导入'
+  return '未记录'
+})
+const officialDeadlineStatusText = computed(() => {
+  if (doc.value?.official_due_date_status === 'CONFIRMED') return '已确认'
+  if (doc.value?.official_due_date_status === 'NEEDS_CONFIRMATION') return '待确认'
+  if (doc.value?.official_due_date_status === 'LEGACY_UNVERIFIED') return '历史数据待核验'
+  return '未记录'
+})
+const officialDeadlineStatusType = computed(() => {
+  if (doc.value?.official_due_date_status === 'CONFIRMED') return 'success'
+  if (doc.value?.official_due_date_status === 'NEEDS_CONFIRMATION') return 'warning'
+  return 'info'
 })
 const templateHints = computed(() => {
   if (!docTemplate.value) return []
