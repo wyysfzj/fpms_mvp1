@@ -44,13 +44,17 @@ Implement only the three presentation slices frozen by the approved plan:
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts`
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts`
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/casedock-real-api.spec.ts`
-- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts`
 - `frontend/tests/demo-v6-fee-ui-parity-contract.mjs`
 - `artifacts/FE-POST-V6-CUSTOMER-PROJECTION-20260828-01/**`
 
-## Verification-Only Files
+## Verification Support Files
 
+- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-v6-ui-parity.live-backend.spec.ts`
+  - It remains outside the product implementation allowlist. The explicit 2026-08-29 recovery
+    approval permits only the customer-default/audit assertion synchronization recorded below;
+    its final bytes are bound by canonical test evidence and independent HIGH review.
 - `scripts/run_demo_integrated_a_rehearsal.py`
+  - Verification only; do not modify.
 
 ## Explicit Non-Closure
 
