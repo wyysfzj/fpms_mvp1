@@ -76,7 +76,7 @@
       </section>
 
       <section class="document-gate-card">
-        <h4 class="document-gate-title">当前建议动作</h4>
+        <h4 class="document-gate-title">{{ gateActionSectionTitle }}</h4>
         <el-skeleton v-if="gateLoading" :rows="3" animated />
         <el-alert
           v-else-if="gateError"
@@ -268,18 +268,23 @@ const currentOfficialStageText = computed(() =>
   centerStateText(caseData.value?.official_procedure_stage || null, '待确认'),
 )
 
+const gateActionSectionTitle = computed(() =>
+  gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING' ? '历史核验说明' : '当前建议动作',
+)
+
 const gateStatusItems = computed(() => {
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
+    return [
+      { label: '历史已匹配材料', value: documentGate.value ? `${documentGate.value.material_count}` : '-' },
+      { label: '历史未匹配材料', value: documentGate.value ? `${documentGate.value.missing_items.length}` : '-' },
+      { label: '首次申请规则硬性缺失', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
+      { label: '历史后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
+    ]
+  }
   const common = [
     { label: '已匹配材料', value: documentGate.value ? `${documentGate.value.material_count}` : '-' },
     { label: '缺失材料', value: documentGate.value ? `${documentGate.value.missing_items.length}` : '-' },
   ]
-  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
-    return [
-      ...common,
-      { label: '历史规则阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
-      { label: '历史后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
-    ]
-  }
   if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') {
     return [
       ...common,
@@ -373,13 +378,17 @@ const gateAlertType = computed(() => {
 })
 const gateAlertTitle = computed(() => {
   if (gatePresentationMode.value === 'CURRENT_INITIAL_FILING') return '门禁结论'
-  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') return '历史规则结论'
+  if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
+    return documentGate.value?.conclusion === 'BLOCKED'
+      ? '首次申请递交规则未满足（历史核验）'
+      : '历史规则结论'
+  }
   return '适用性说明'
 })
 const gateConclusionDescription = computed(() => {
   if (!documentGate.value) return '暂无门禁结论。'
   if (gatePresentationMode.value === 'HISTORICAL_INITIAL_FILING') {
-    return `首次申请递交规则当时的结论为${gateConclusionText(documentGate.value.conclusion)}；该结论来自首次申请递交阶段，不代表当前${currentOfficialStageText.value}节点阻断。`
+    return `该结果用于追溯首次申请递交材料，不作为当前“${currentOfficialStageText.value}”的阻断结论。`
   }
   if (gatePresentationMode.value === 'APPLICABILITY_UNKNOWN') {
     return '案件阶段信息不完整、冲突或未识别，不能将该规则标记为当前门禁或历史门禁。'

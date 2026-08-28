@@ -59,8 +59,18 @@ test.describe.serial('案件文件门禁阶段适用性', () => {
             } else if (scenario.mode === 'historical') {
                 await expect(panel.getByText('当前阶段：授权登记', { exact: true })).toBeVisible()
                 await expect(panel.getByRole('heading', { name: '历史首次申请递交材料核验' })).toBeVisible()
-                await expect(panel.getByText('历史规则结论', { exact: true })).toBeVisible()
-                await expect(panel.getByText(/不代表当前授权登记节点阻断/)).toBeVisible()
+                await expect(panel.getByText('历史已匹配材料 0', { exact: true })).toBeVisible()
+                await expect(panel.getByText('历史未匹配材料 2', { exact: true })).toBeVisible()
+                await expect(panel.getByText('首次申请规则硬性缺失 是', { exact: true })).toBeVisible()
+                await expect(panel.getByText('历史后补审计 不需要', { exact: true })).toBeVisible()
+                await expect(panel.getByText('首次申请递交规则未满足（历史核验）', { exact: true })).toBeVisible()
+                await expect(panel.getByText('历史核验说明', { exact: true })).toBeVisible()
+                await expect(
+                    panel.getByText('该结果用于追溯首次申请递交材料，不作为当前“授权登记”的阻断结论。', {
+                        exact: true,
+                    }),
+                ).toBeVisible()
+                await expect(panel.getByText('当前建议动作', { exact: true })).toHaveCount(0)
                 await expect(panel.getByRole('button', { name: '登记往来文件' })).toHaveCount(1)
             } else {
                 await expect(panel.getByRole('heading', { name: '适用阶段待确认' })).toBeVisible()
