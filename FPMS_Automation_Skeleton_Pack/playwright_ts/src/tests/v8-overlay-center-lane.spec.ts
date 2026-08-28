@@ -13,6 +13,10 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
 
     await page.getByTestId('lifecycle-history-toggle').click()
     await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
+    await expect(page.getByText(
+        '以下为历史事实与审计追溯，不代表当前节点阻断；当前状态以上方摘要为准。',
+        { exact: true },
+    )).toBeVisible()
     const lane = page.getByTestId('lifecycle-center-lane')
     await expect(lane.getByRole('heading', { name: '案件生命周期' })).toBeVisible()
     await expect(lane.getByText('业务阶段：流程管理', { exact: true })).toBeVisible()
@@ -21,8 +25,10 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
     await expect(
         lane.getByLabel('当前案件生命周期状态').getByText('核验状态：已确认', { exact: true }),
     ).toBeVisible()
+    await expect(lane.getByText('生效时间：2026-08-09 09:00', { exact: true }).first()).toBeVisible()
 
     const confirmed = lane.getByTestId('center-change-activity-confirmed')
+    await expect(confirmed.getByText('生效时间：2026-08-09 09:00', { exact: true })).toBeVisible()
     await expect(confirmed.getByText('官方程序阶段：初步审查 → 实质审查', { exact: true })).toBeVisible()
     await expect(confirmed.getByText('业务阶段：未识别状态 → 流程管理', { exact: true })).toBeVisible()
     await expect(lane.getByTestId('center-change-activity-review')).toHaveCount(0)
@@ -36,6 +42,7 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
         'FUTURE_STAGE',
         'activity-confirmed',
         'PATENT_IN_FORCE',
+        '2026-08-09T09:00:00Z',
     ]) {
         await expect(lane.getByText(internalValue, { exact: false })).toHaveCount(0)
     }

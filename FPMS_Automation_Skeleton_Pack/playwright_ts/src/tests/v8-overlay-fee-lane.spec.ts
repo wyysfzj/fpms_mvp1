@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
 
 const caseId = 'case-v8-overlay-fee'
+const govObligationId = '6d4a2c24-be22-464d-a91b-9e818732b5f4'
+const serviceObligationId = '9b8568be-4177-4f0b-9c8e-d1f915de26af'
 
 test('费用节点线无损展示 GOV 和 SERVICE 义务的七个独立状态', async ({ page }) => {
     await mockCaseOverlay(page)
@@ -14,9 +16,12 @@ test('费用节点线无损展示 GOV 和 SERVICE 义务的七个独立状态', 
     await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('fee-obligation-lane')
     await expect(lane.getByRole('heading', { name: '同案双轨费用概览' })).toBeVisible()
-    const gov = lane.getByTestId('fee-obligation-obligation-gov')
+    await expect(lane.getByTestId(`fee-obligation-${govObligationId}`)).toHaveCount(1)
+    const gov = lane.getByTestId(`fee-obligation-${govObligationId}`)
+    await expect(gov.getByRole('heading', { name: '授权登记官费义务' })).toBeVisible()
     await expect(gov.getByText('费用域：官费', { exact: true })).toBeVisible()
-    await expect(gov.getByText('估算状态：未识别状态', { exact: true })).toBeVisible()
+    await expect(gov.getByText('币种：人民币（CNY）', { exact: true })).toBeVisible()
+    await expect(gov.getByText('估算状态：估算', { exact: true })).toBeVisible()
     await expect(gov.getByText('义务状态：已确认', { exact: true })).toBeVisible()
     await expect(gov.getByText('客户指示状态：缴费', { exact: true })).toBeVisible()
     await expect(gov.getByText('草单状态：已创建', { exact: true })).toBeVisible()
@@ -25,8 +30,22 @@ test('费用节点线无损展示 GOV 和 SERVICE 义务的七个独立状态', 
     await expect(gov.getByText('官方证据状态：已核验', { exact: true })).toBeVisible()
     await expect(gov.getByText('应缴金额：1234.50', { exact: true })).toBeVisible()
     await expect(gov.getByText('减缴比例：0.8500', { exact: true })).toBeVisible()
-    await expect(gov.getByText('关联事实：客户回款 / payment-1 / 已缴费', { exact: true })).toBeVisible()
-    await expect(lane.getByTestId('fee-obligation-obligation-service')).toContainText('费用域：服务费')
+    await expect(gov.getByText('关联事实：草单 / 已创建', { exact: true })).toBeVisible()
+    await expect(gov.getByText('关联事实：付款记录 / 已缴费', { exact: true })).toBeVisible()
+    await expect(gov.getByText('费种年度：0', { exact: true })).not.toBeVisible()
+    await expect(gov.getByText(`义务编号：${govObligationId}`, { exact: true })).not.toBeVisible()
+    await expect(gov.getByText('费用代码：GRANT_REGISTRATION_FEE', { exact: true })).not.toBeVisible()
+    await expect(gov.getByText('原始义务状态：RECOGNIZED', { exact: true })).not.toBeVisible()
+    await gov.locator('summary').click()
+    await expect(gov.getByText(`义务编号：${govObligationId}`, { exact: true })).toBeVisible()
+    await expect(gov.getByText('费用代码：GRANT_REGISTRATION_FEE', { exact: true })).toBeVisible()
+    await expect(gov.getByText('原始义务状态：RECOGNIZED', { exact: true })).toBeVisible()
+    await expect(gov.getByText('费种年度：0', { exact: true })).toBeVisible()
+
+    const service = lane.getByTestId(`fee-obligation-${serviceObligationId}`)
+    await expect(service.getByRole('heading', { name: '服务费应收义务' })).toBeVisible()
+    await expect(service.getByText('费用域：服务费', { exact: true })).toBeVisible()
+    await expect(service.getByText('估算状态：暂无', { exact: true })).toBeVisible()
     await expect(lane.getByText('PATENT_IN_FORCE', { exact: false })).toHaveCount(0)
     await expect(lane.getByText('OFFICIAL_FINAL_PDF', { exact: false })).toHaveCount(0)
 })
@@ -87,11 +106,11 @@ function obligation(id: string, feeDomain: 'GOV' | 'SERVICE') {
     const isGov = feeDomain === 'GOV'
     return {
         obligation_id: id,
-        source_activity_id: 'activity-fee',
-        source_document_id: isGov ? 'document-grant-notice' : null,
+        source_activity_id: '3e1f88a7-db5d-4355-a2b2-5e7ab1c9bcfe',
+        source_document_id: isGov ? '443e902e-7dc2-498e-99c6-a992d3d54168' : null,
         source_status: 'VERIFIED',
         fee_domain: feeDomain,
-        obligation_type: isGov ? 'GRANT_REGISTRATION' : 'AGENCY_SERVICE',
+        obligation_type: isGov ? 'GRANT_REGISTRATION_OFFICIAL_FEES' : 'SERVICE_FEE',
         due_date: isGov ? '2026-10-09' : null,
         currency: 'CNY',
         statuses: statuses(
@@ -143,6 +162,28 @@ function overlayResponse() {
         },
         milestones: [
             {
+                sequence: 4,
+                activity_id: 'activity-fee-earlier',
+                lane: 'FEE',
+                activity_type: 'FEE_OBLIGATION_RECOGNIZED',
+                source_activity_id: 'activity-lifecycle',
+                effective_at: '2026-08-09T10:15:00Z',
+                confirmation_status: 'CONFIRMED',
+                center_changes: {},
+                document_evidence: [],
+                work_packages: [],
+                tasks: [],
+                fee_obligations: [
+                    {
+                        ...obligation(govObligationId, 'GOV'),
+                        statuses: statuses(),
+                        related_facts: [{ kind: 'DRAFT', object_id: 'draft-1', status: 'CREATED' }],
+                    },
+                ],
+                evidence_summary: [],
+                warnings: [],
+            },
+            {
                 sequence: 5,
                 activity_id: 'activity-fee',
                 lane: 'FEE',
@@ -155,8 +196,8 @@ function overlayResponse() {
                 work_packages: [],
                 tasks: [],
                 fee_obligations: [
-                    obligation('obligation-gov', 'GOV'),
-                    obligation('obligation-service', 'SERVICE'),
+                    obligation(govObligationId, 'GOV'),
+                    obligation(serviceObligationId, 'SERVICE'),
                 ],
                 evidence_summary: [],
                 warnings: [],

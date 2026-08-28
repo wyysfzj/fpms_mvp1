@@ -10,7 +10,7 @@
       <p>官方程序阶段：{{ displayState(snapshot.officialProcedureStage) }}</p>
       <p>法律状态：{{ displayState(snapshot.legalStatus) }}</p>
       <p>核验状态：{{ displayState(snapshot.verificationStatus) }}</p>
-      <p>生效时间：{{ displayPlainValue(snapshot.effectiveAt) }}</p>
+      <p>生效时间：{{ overlayDateText(snapshot.effectiveAt) }}</p>
     </div>
 
     <div class="confirmed-changes">
@@ -22,7 +22,7 @@
         class="change-card"
         :data-testid="`center-change-${milestone.activityId}`"
       >
-        <p>生效时间：{{ milestone.effectiveAt }}</p>
+        <p>生效时间：{{ overlayDateText(milestone.effectiveAt) }}</p>
         <p>核验状态：{{ displayState(milestone.confirmationStatus) }}</p>
         <p v-for="axis in changedAxes(milestone)" :key="axis.key">
           {{ axis.label }}：{{ displayState(axis.previousValue) }} →
@@ -40,7 +40,7 @@ import type {
   OverlayCenterAxis,
   OverlayMilestone,
 } from '../../../api/lifecycleOverlay.types'
-import { centerStateText } from './lifecycleOverlayDisplay'
+import { centerStateText, overlayDateText } from './lifecycleOverlayDisplay'
 
 const props = defineProps<{
   snapshot: LifecycleOverlay['centerSnapshot']
@@ -71,9 +71,6 @@ function displayState(value: string | null): string {
   return centerStateText(value)
 }
 
-function displayPlainValue(value: string | null): string {
-  return value ?? '-'
-}
 </script>
 
 <style scoped>

@@ -3,6 +3,9 @@ import type {
   ConfirmationStatus,
   LegalStatus,
   OfficialProcedureStage,
+  OverlayFeeObligation,
+  OverlayFeeRelatedFact,
+  OverlayMilestone,
 } from '../../../api/lifecycleOverlay.types'
 
 type CenterState = BusinessStage | OfficialProcedureStage | LegalStatus | ConfirmationStatus
@@ -70,7 +73,10 @@ const FEE_STATUS_TEXT: Readonly<Record<string, string>> = {
   SERVICE_FEE: '服务费应收义务',
   RECOGNIZED: '已确认',
   SUPERSEDED: '已被替代',
+  ESTIMATE: '估算',
   PAY: '缴费',
+  HOLD: '暂缓',
+  ABANDON: '放弃',
   CREATED: '已创建',
   NOT_CREATED: '未创建',
   UNPAID: '未缴费',
@@ -91,12 +97,94 @@ const FEE_STATUS_TEXT: Readonly<Record<string, string>> = {
   NOT_REQUIRED: '不需要',
   UNVERIFIED: '待核验',
   VERIFIED: '已核验',
+  REVIEW_REQUIRED: '需复核',
+  SOURCE_PENDING: '来源待确认',
   MATCHED: '一致',
   DIFFERENT: '存在差额',
   BILL: '客户账单',
-  PAYMENT: '客户回款',
+  PAYMENT: '付款记录',
   OFFSET: '账单核销',
   GOV_PAYMENT: '官费登记',
+  DRAFT: '草单',
+  PAY_LIST: '缴费清单',
+  OFFICIAL_EVIDENCE: '官方证据',
+}
+
+const EVIDENCE_ROLE_LABELS: Readonly<Record<string, string>> = {
+  FILING_FULL_WORD: '申请文件完整 Word',
+  TRACKED_REVISED_WORD: '修订留痕 Word',
+  FILING_COMPONENT: '申请文件组成部分',
+  EXTERNAL_XML_PACKAGE: '外部递交 XML 包',
+  OFFICIAL_SUBMISSION_LIST: '官方递交清单',
+  OFFICIAL_FINAL_PDF: '最终递交 PDF',
+  SUBMITTED_XML: '已递交 XML',
+  OFFICIAL_RECEIPT: '官方回执',
+  CLIENT_LETTER_WORD: '客户函 Word',
+  RAW_ATTACHMENT: '原始附件',
+  GENERATED_ATTACHMENT: '生成附件',
+  OA_STRUCTURED_ATTACHMENT: '审查意见结构化附件',
+}
+
+const EVIDENCE_STATE_LABELS: Readonly<Record<string, string>> = {
+  DRAFT: '草稿',
+  FINAL: '已定稿',
+}
+
+const EVIDENCE_REVIEW_LABELS: Readonly<Record<string, string>> = {
+  PENDING: '待复核',
+  APPROVED: '已复核',
+  REJECTED: '复核未通过',
+}
+
+const DERIVATION_TYPE_LABELS: Readonly<Record<string, string>> = {
+  REVISION: '版本修订',
+  COMPONENT_EXTRACTION: '组成部分提取',
+  FORMAT_CONVERSION: '格式转换',
+  OFFICIAL_RECOGNITION: '官方文件识别',
+  EXTERNAL_SUBMISSION: '外部递交',
+  RECEIPT_LINK: '回执关联',
+  CUSTOMER_LETTER_RENDER: '客户函生成',
+  OA_REPLY_PREPARATION: '审查意见答复准备',
+}
+
+const WORK_PACKAGE_KIND_LABELS: Readonly<Record<string, string>> = {
+  FILING_PREP: '新申请递交',
+  OA_REPLY: '审查意见答复',
+}
+
+const WORK_PACKAGE_STATUS_LABELS: Readonly<Record<string, string>> = {
+  PREPARING: '准备中',
+  NEEDS_MAINTENANCE: '需维护',
+  NEEDS_CONFIRMATION: '待确认',
+  READY_FOR_EXTERNAL_SUBMIT: '可人工提交',
+  SUBMITTED: '已提交',
+  WAITING_RECEIPT: '待回执',
+  ARCHIVED: '已归档',
+  EXCEPTION: '异常',
+  OVERRIDE: '已例外处理',
+}
+
+const RECEIPT_KIND_LABELS: Readonly<Record<string, string>> = {
+  RECEIPT_PDF: '回执 PDF',
+  MERGED_PDF: '合并 PDF',
+  ELECTRONIC_APPLICATION_RECEIPT: '电子申请回执',
+}
+
+const RECEIPT_ARCHIVE_LABELS: Readonly<Record<string, string>> = {
+  ARCHIVED: '已归档',
+  PENDING: '待归档',
+}
+
+const TASK_STATUS_LABELS: Readonly<Record<string, string>> = {
+  OPEN: '待处理',
+  DONE: '已完成',
+  CANCELLED: '已取消',
+}
+
+const MISSING_GATE_LABELS: Readonly<Record<string, string>> = {
+  CHECKLIST_INCOMPLETE: '递交检查清单未完成',
+  MANIFEST_MISSING: '递交文件清单缺失',
+  RECEIPT_MISSING: '回执缺失',
 }
 
 export function centerStateText(value: string | null, emptyText = '-'): string {
@@ -111,7 +199,100 @@ export function activityTypeText(
   return ACTIVITY_TYPE_LABELS[activityType] ?? fallback
 }
 
-export function feeStatusText(value: string | null, fallback = '未识别状态'): string {
+export function feeStatusText(value: string | null, fallback = '待确认'): string {
   if (!value) return '暂无'
   return FEE_STATUS_TEXT[value.toUpperCase()] ?? fallback
+}
+
+function closedMapText(
+  value: string | null,
+  labels: Readonly<Record<string, string>>,
+): string {
+  if (!value) return '暂无'
+  return labels[value.toUpperCase()] ?? '待确认'
+}
+
+export function overlayDateText(value: string | null): string {
+  if (!value) return '暂无'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/.exec(value)
+  return match ? `${match[1]} ${match[2]}` : '待确认'
+}
+
+export function currencyText(value: string | null): string {
+  if (!value) return '币种待确认'
+  return value.toUpperCase() === 'CNY' ? '人民币（CNY）' : '币种待确认'
+}
+
+export function evidenceRoleText(value: string | null): string {
+  return closedMapText(value, EVIDENCE_ROLE_LABELS)
+}
+
+export function evidenceStateText(value: string | null): string {
+  return closedMapText(value, EVIDENCE_STATE_LABELS)
+}
+
+export function evidenceReviewText(value: string | null): string {
+  return closedMapText(value, EVIDENCE_REVIEW_LABELS)
+}
+
+export function derivationTypeText(value: string | null): string {
+  return closedMapText(value, DERIVATION_TYPE_LABELS)
+}
+
+export function workPackageKindText(value: string | null): string {
+  return closedMapText(value, WORK_PACKAGE_KIND_LABELS)
+}
+
+export function workPackageStatusText(value: string | null): string {
+  return closedMapText(value, WORK_PACKAGE_STATUS_LABELS)
+}
+
+export function receiptKindText(value: string | null): string {
+  return closedMapText(value, RECEIPT_KIND_LABELS)
+}
+
+export function receiptArchiveStatusText(value: string | null): string {
+  return closedMapText(value, RECEIPT_ARCHIVE_LABELS)
+}
+
+export function taskStatusText(value: string | null): string {
+  return closedMapText(value, TASK_STATUS_LABELS)
+}
+
+export function missingGateText(value: string | null): string {
+  return closedMapText(value, MISSING_GATE_LABELS)
+}
+
+export function uniqueCodes(values: readonly string[]): readonly string[] {
+  return [...new Set(values)]
+}
+
+function mergeRelatedFacts(
+  previous: readonly OverlayFeeRelatedFact[],
+  current: readonly OverlayFeeRelatedFact[],
+): readonly OverlayFeeRelatedFact[] {
+  const merged = new Map<string, OverlayFeeRelatedFact>()
+  for (const fact of [...previous, ...current]) {
+    merged.set(`${fact.kind}:${fact.objectId}`, fact)
+  }
+  return [...merged.values()]
+}
+
+export function latestObligationsById(
+  milestones: readonly OverlayMilestone[],
+): readonly OverlayFeeObligation[] {
+  const latest = new Map<string, OverlayFeeObligation>()
+  for (const milestone of milestones) {
+    for (const obligation of milestone.feeObligations) {
+      const previous = latest.get(obligation.obligationId)
+      latest.set(obligation.obligationId, previous
+        ? {
+            ...obligation,
+            relatedFacts: mergeRelatedFacts(previous.relatedFacts, obligation.relatedFacts),
+          }
+        : obligation)
+    }
+  }
+  return [...latest.values()]
 }

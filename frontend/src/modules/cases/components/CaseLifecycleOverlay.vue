@@ -110,6 +110,9 @@
         id="lifecycle-history-details"
         data-testid="lifecycle-history-details"
       >
+        <p class="history-boundary">
+          以下为历史事实与审计追溯，不代表当前节点阻断；当前状态以上方摘要为准。
+        </p>
         <div class="overlay-grid">
           <div data-overlay-lane="document">
             <DocumentEvidenceLane :milestones="overlay.milestones" />
@@ -164,7 +167,9 @@ import LifecycleSummaryCard from './LifecycleSummaryCard.vue'
 import {
   activityTypeText,
   centerStateText,
+  currencyText,
   feeStatusText,
+  latestObligationsById,
 } from './lifecycleOverlayDisplay'
 
 const INCOMPLETE_HISTORY = '尚有历史未加载，完整状态待确认'
@@ -520,18 +525,6 @@ function centerChangeText(milestone: OverlayMilestone): string {
     : '暂无已确认的中心变化'
 }
 
-function latestObligationsById(
-  milestones: readonly OverlayMilestone[],
-): readonly OverlayFeeObligation[] {
-  const latest = new Map<string, OverlayFeeObligation>()
-  for (const milestone of milestones) {
-    for (const obligation of milestone.feeObligations) {
-      latest.set(obligation.obligationId, obligation)
-    }
-  }
-  return [...latest.values()]
-}
-
 function feeStatusLabel(obligations: readonly OverlayFeeObligation[]): string {
   if (obligations.length === 0) return '暂无费用义务'
   const govCount = obligations.filter((item) => item.feeDomain === 'GOV').length
@@ -544,7 +537,7 @@ function feeCurrentLines(obligations: readonly OverlayFeeObligation[]): readonly
   return (['GOV', 'SERVICE'] as const).flatMap((domain) => {
     const counts = new Map<string, number>()
     for (const obligation of obligations.filter((item) => item.feeDomain === domain)) {
-      const currency = obligation.currency.trim() || '币种待确认'
+      const currency = currencyText(obligation.currency)
       counts.set(currency, (counts.get(currency) ?? 0) + 1)
     }
     if (counts.size === 0) return []
@@ -671,6 +664,15 @@ function warningKindLabel(kind: OverlayWarningKind): string {
 .overlay-pagination {
   margin-top: 14px;
   color: var(--text-secondary);
+}
+
+.history-boundary {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--el-color-info);
+  background: var(--bg-page);
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .overlay-warning-projection {

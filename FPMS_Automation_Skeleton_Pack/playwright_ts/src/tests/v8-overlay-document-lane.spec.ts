@@ -15,16 +15,32 @@ test('文件驱动线只展示版本、派生、工作包、回执和任务事�
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByRole('heading', { name: '文件驱动' })).toBeVisible()
     await expect(lane.getByText('活动类型：审查意见答复已递交', { exact: true })).toBeVisible()
-    await expect(lane.getByText('OA_EXTERNAL_SUBMISSION_RECORDED', { exact: false })).toHaveCount(0)
-    await expect(lane.getByText('角色：OFFICIAL_FINAL_PDF', { exact: true })).toBeVisible()
+    await expect(lane.getByText('活动时间：2026-08-09 09:00', { exact: true })).toBeVisible()
+    await expect(lane.getByText('角色：最终递交 PDF', { exact: true })).toBeVisible()
     await expect(lane.getByText('版本：2', { exact: true })).toBeVisible()
-    await expect(lane.getByText('复核状态：APPROVED', { exact: true })).toBeVisible()
-    await expect(lane.getByText('派生类型：FORMAT_CONVERSION', { exact: true })).toBeVisible()
-    await expect(lane.getByText('工作包类型：OA_REPLY', { exact: true })).toBeVisible()
-    await expect(lane.getByText('工作包状态：SUBMITTED', { exact: true })).toBeVisible()
-    await expect(lane.getByText('回执类型：CNIPA_RECEIPT', { exact: true })).toBeVisible()
-    await expect(lane.getByText('归档状态：ARCHIVED', { exact: true })).toBeVisible()
-    await expect(lane.getByText('任务状态：DONE', { exact: true })).toBeVisible()
+    await expect(lane.getByText('版本状态：已定稿', { exact: true })).toBeVisible()
+    await expect(lane.getByText('复核状态：已复核', { exact: true })).toBeVisible()
+    await expect(lane.getByText('派生类型：格式转换', { exact: true })).toBeVisible()
+    await expect(lane.getByText('工作包类型：审查意见答复', { exact: true })).toBeVisible()
+    await expect(lane.getByText('工作包状态：已提交', { exact: true })).toBeVisible()
+    await expect(lane.getByText('回执类型：电子申请回执', { exact: true })).toBeVisible()
+    await expect(lane.getByText('归档状态：已归档', { exact: true })).toBeVisible()
+    await expect(lane.getByText('任务状态：已完成', { exact: true })).toBeVisible()
+    await expect(lane.getByText('递交检查清单未完成', { exact: true })).toHaveCount(1)
+    await expect(lane.getByText('递交文件清单缺失', { exact: true })).toHaveCount(1)
+    await expect(lane.getByText('文书编号：document-oa-reply', { exact: true })).not.toBeVisible()
+    await expect(lane.getByText('内容哈希：sha256-final-pdf', { exact: true })).not.toBeVisible()
+    await expect(lane.getByText('工作包编号：package-oa-reply', { exact: true })).not.toBeVisible()
+    await expect(lane.getByText('任务编号：task-oa-reply', { exact: true })).not.toBeVisible()
+
+    for (const summary of await lane.locator('summary').all()) {
+        await summary.click()
+    }
+    await expect(lane.getByText('文书编号：document-oa-reply', { exact: true })).toBeVisible()
+    await expect(lane.getByText('内容哈希：sha256-final-pdf', { exact: true })).toBeVisible()
+    await expect(lane.getByText('工作包编号：package-oa-reply', { exact: true })).toBeVisible()
+    await expect(lane.getByText('任务编号：task-oa-reply', { exact: true })).toBeVisible()
+    await expect(lane.getByText('原始活动类型：OA_EXTERNAL_SUBMISSION_RECORDED', { exact: true })).toBeVisible()
     await expect(lane.getByText('PATENT_IN_FORCE', { exact: false })).toHaveCount(0)
     await expect(lane.getByText('1000.00', { exact: false })).toHaveCount(0)
 })
@@ -40,7 +56,9 @@ test('未知活动类型显示待确认且不暴露原始枚举', async ({ page 
     await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByText('活动类型：活动类型待确认', { exact: true })).toBeVisible()
-    await expect(lane.getByText('UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: false })).toHaveCount(0)
+    await expect(lane.getByText('原始活动类型：UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: true })).not.toBeVisible()
+    await lane.locator('summary').first().click()
+    await expect(lane.getByText('原始活动类型：UNRECOGNIZED_DOCUMENT_ACTIVITY', { exact: true })).toBeVisible()
 })
 
 test('授权登记通知活动以中文显示', async ({ page }) => {
@@ -54,7 +72,9 @@ test('授权登记通知活动以中文显示', async ({ page }) => {
     await expect(page.getByTestId('lifecycle-history-details')).toBeVisible()
     const lane = page.getByTestId('document-evidence-lane')
     await expect(lane.getByText('活动类型：授权登记通知已登记', { exact: true })).toBeVisible()
-    await expect(lane.getByText('GRANT_REGISTRATION_NOTICE_RECORDED', { exact: false })).toHaveCount(0)
+    await expect(
+        lane.getByText('原始活动类型：GRANT_REGISTRATION_NOTICE_RECORDED', { exact: true }),
+    ).not.toBeVisible()
 })
 
 async function mockCaseOverlay(
@@ -108,7 +128,7 @@ function overlayResponse(activityType: string) {
             business_stage: 'PROSECUTION_MANAGEMENT',
             official_procedure_stage: 'OFFICE_ACTION_RESPONSE',
             legal_status: 'APPLICATION_PENDING',
-            effective_at: '2026-08-09T09:00:00Z',
+        effective_at: '2026-08-09T09:00:00.741228Z',
             verification_status: 'CONFIRMED',
             source_event_id: 'activity-document',
         },
@@ -167,7 +187,7 @@ function overlayResponse(activityType: string) {
                         receipts: [
                             {
                                 receipt_id: 'receipt-cnipa',
-                                receipt_kind: 'CNIPA_RECEIPT',
+                                receipt_kind: 'ELECTRONIC_APPLICATION_RECEIPT',
                                 receipt_attachment_id: 'attachment-receipt',
                                 receiving_case_no: 'CN-RECEIVING-001',
                                 submitter: 'user-1',
@@ -175,7 +195,12 @@ function overlayResponse(activityType: string) {
                                 archive_status: 'ARCHIVED',
                             },
                         ],
-                        missing_gate_codes: [],
+                        missing_gate_codes: [
+                            'CHECKLIST_INCOMPLETE',
+                            'CHECKLIST_INCOMPLETE',
+                            'MANIFEST_MISSING',
+                            'MANIFEST_MISSING',
+                        ],
                     },
                 ],
                 tasks: [
