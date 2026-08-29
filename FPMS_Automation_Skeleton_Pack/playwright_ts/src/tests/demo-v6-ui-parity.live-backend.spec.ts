@@ -148,6 +148,13 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
   observePage(page, 'operator')
 
   await loginAndActivate(page)
+  const captureStageButton = page.getByTestId('demo-v6-capture-stage')
+  await expect(captureStageButton).toBeEnabled()
+  expect(await captureStageButton.evaluate(button => {
+    const bounds = button.getBoundingClientRect()
+    const hitTarget = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    return hitTarget === button || button.contains(hitTarget)
+  })).toBe(true)
   const suffix = Date.now().toString().slice(-10)
   const customerName = '澄岳智造技术（苏州）有限公司'
   const caseNo = `CYIP-CN-INV-${suffix}`
@@ -1499,10 +1506,16 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await expect(previewDialog).toContainText('预览只读校验：一致（无业务写入）')
 
     uiPhase = 'stage-07-official-fee-confirmation'
+    const confirmOfficialFeeButton = previewDialog.getByRole('button', { name: '确认官费并生成草单' })
+    expect(await confirmOfficialFeeButton.evaluate(button => {
+      const bounds = button.getBoundingClientRect()
+      const hitTarget = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+      return hitTarget === button || button.contains(hitTarget)
+    })).toBe(true)
     const confirmation = await visibleMutation(
       page,
       bindStageAction('07', 'stage-07-confirm-current-official-fees', true),
-      previewDialog.getByRole('button', { name: '确认官费并生成草单' }),
+      confirmOfficialFeeButton,
       'POST',
       /\/api\/v1\/grant-fee-tasks\/[0-9a-f-]+\/official-fee-confirmation$/,
     )

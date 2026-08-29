@@ -48,7 +48,8 @@ onMounted(refreshStage)
   position: fixed;
   right: 18px;
   bottom: 18px;
-  z-index: 3000;
+  z-index: 1900;
+  pointer-events: none;
   max-width: calc(100vw - 36px);
   padding: 10px 16px;
   border: 1px solid var(--el-color-warning);
@@ -61,6 +62,7 @@ onMounted(refreshStage)
 }
 
 .demo-boundary-banner button {
+  pointer-events: auto;
   padding: 6px 10px;
   border: 1px solid currentColor;
   border-radius: 6px;
