@@ -122,13 +122,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getClient } from '../../../api/clients'
 import { http } from '../../../api/http'
 import type { Client } from '../../../api/clients.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { usePageContext } from '../../../stores/pageContext'
 import AddressTable from '../components/AddressTable.vue'
 import ContactTable from '../components/ContactTable.vue'
 
@@ -142,6 +143,7 @@ interface RelatedCase {
 
 const route = useRoute()
 const router = useRouter()
+const pageContext = usePageContext()
 
 const clientId = computed(() => String(route.params.id || ''))
 
@@ -165,6 +167,7 @@ async function fetchClient() {
     error.value = null
     try {
         client.value = await getClient(id)
+        pageContext.setBreadcrumb(['客户管理', '客户详情', client.value.name || '未命名客户'])
     } catch (err) {
         error.value = err as ApiError
     } finally {
@@ -201,6 +204,10 @@ function handleEdit() {
 onMounted(() => {
     fetchClient()
     fetchCases()
+})
+
+onUnmounted(() => {
+    pageContext.clear()
 })
 </script>
 
