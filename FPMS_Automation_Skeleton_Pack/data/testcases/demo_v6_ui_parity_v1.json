@@ -280,9 +280,9 @@
           "source_selector": "current customer detail and contact table",
           "normalization": "IDENTITY_AND_COUNT_EXACT",
           "required": true,
-          "observable": "customer and primary contact are visible",
-          "expected_rule": "customer_count=1 and primary_contact_count=1",
-          "ui_evidence_point": "客户详情/联系人"
+          "observable": "customer-name breadcrumb and primary contact are visible",
+          "expected_rule": "customer_count=1, primary_contact_count=1, and breadcrumb shows the customer name without a raw identifier",
+          "ui_evidence_point": "客户详情/客户名称面包屑与联系人"
         },
         {
           "stage": "01",
@@ -297,9 +297,9 @@
           "source_selector": "current case detail",
           "normalization": "IDENTITY_AND_COUNT_EXACT",
           "required": true,
-          "observable": "the created case is visible",
-          "expected_rule": "case_count=1",
-          "ui_evidence_point": "案件详情"
+          "observable": "case-list current stage and workflow status are visible",
+          "expected_rule": "case_count=1 and case-list stage/status agree with the case projection",
+          "ui_evidence_point": "案件列表/当前阶段与流程状态"
         },
         {
           "stage": "01",
@@ -561,9 +561,9 @@
           "source_selector": "current package submission and receipt panels",
           "normalization": "EVIDENCE_CONSUMER_IDENTITY_EXACT",
           "required": true,
-          "observable": "submission and receipt lineage is visible",
-          "expected_rule": "one submission and one receipt consume the selected reviewed evidence",
-          "ui_evidence_point": "新申请递交准备/递交与回执"
+          "observable": "structured document fields and submission/receipt lineage are visible",
+          "expected_rule": "title, document date, internal reference, reply fields, note, submission, and receipt bind to the selected reviewed evidence",
+          "ui_evidence_point": "文书详情/结构化文书字段与递交回执"
         },
         {
           "stage": "03",
@@ -1040,9 +1040,9 @@
           "source_selector": "visible original task row",
           "normalization": "IDENTITY_AND_STATE_EXACT",
           "required": true,
-          "observable": "original task supersession is visible",
-          "expected_rule": "original task is read-only and non-actionable",
-          "ui_evidence_point": "授权费任务看板/原任务"
+          "observable": "historical initial-filing gate and original task supersession are visible",
+          "expected_rule": "initial-filing result is historical rather than a current blocker, and the original task is read-only",
+          "ui_evidence_point": "案件详情/历史首次申请递交材料核验与授权费原任务"
         },
         {
           "stage": "06",
@@ -1210,9 +1210,9 @@
           "source_selector": "visible official-fee preview rows and total",
           "normalization": "DECIMAL_EQUATION_EXACT",
           "required": true,
-          "observable": "GOV preview amounts are visible",
-          "expected_rule": "two lines total exactly 950.00 CNY",
-          "ui_evidence_point": "授权登记官费预览"
+          "observable": "official fee preview and confirmation actions are visible and enabled",
+          "expected_rule": "preview and confirmation remain actionable and two lines total exactly 950.00 CNY",
+          "ui_evidence_point": "授权费任务看板/预览官费与确认官费"
         },
         {
           "stage": "07",
@@ -2037,9 +2037,9 @@
           "source_selector": "same-case dual-track fee overview",
           "normalization": "IDENTITY_TOTAL_AND_STATE_EXACT",
           "required": true,
-          "observable": "GOV pending-evidence track is visible",
-          "expected_rule": "GOV identities and 950.00 total remain intact and pending official evidence",
-          "ui_evidence_point": "案件详情/同案双轨费用概览"
+          "observable": "current-first three-lane summary keeps the GOV pending-evidence track visible",
+          "expected_rule": "document, lifecycle, and fee current summaries are primary while GOV identities and 950.00 remain pending official evidence",
+          "ui_evidence_point": "案件详情/当前优先三轨摘要/费用"
         },
         {
           "stage": "11",
@@ -2054,9 +2054,9 @@
           "source_selector": "same-case dual-track fee overview",
           "normalization": "IDENTITY_TOTAL_AND_STATE_EXACT",
           "required": true,
-          "observable": "SERVICE settled track is visible",
-          "expected_rule": "SERVICE identities and 1800.00 total remain intact and Bill is SETTLED/0.00",
-          "ui_evidence_point": "案件详情/同案双轨费用概览"
+          "observable": "full history is collapsed by default while the SERVICE settled track is visible",
+          "expected_rule": "history toggle starts collapsed and SERVICE identities and 1800.00 remain settled at 0.00",
+          "ui_evidence_point": "案件详情/查看完整历史默认收起与服务费摘要"
         },
         {
           "stage": "11",
@@ -2071,9 +2071,9 @@
           "source_selector": "same-case dual-track fee overview and linked normal pages",
           "normalization": "CROSS_PAGE_IDENTITY_TOTAL_AND_STATE_EXACT",
           "required": true,
-          "observable": "cross-track summary is visible",
-          "expected_rule": "GOV and SERVICE chains are internally complete, same-case, and domain-separated",
-          "ui_evidence_point": "案件详情/同案双轨费用概览"
+          "observable": "raw identifiers, hashes, and English statuses remain hidden until audit disclosure is expanded",
+          "expected_rule": "customer summaries remain Chinese and domain-separated; audit disclosure retains exact raw traceability facts",
+          "ui_evidence_point": "案件详情/完整历史/审计信息"
         }
       ]
     }

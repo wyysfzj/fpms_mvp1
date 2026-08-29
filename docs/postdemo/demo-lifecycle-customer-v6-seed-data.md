@@ -126,6 +126,29 @@
 - 原授权通知和更正通知的期限来源均为 `IMPORTED_OFFICIAL_NOTICE`，状态 `CONFIRMED`，来源模板分别为 `DEMO_GRANT_NOTICE_1`、`DEMO_GRANT_NOTICE_2`；更正通知显式 `supersedes=GRANT_NOTICE_ORIGINAL`。
 - OA 答复陈述书（Word/PDF）和修改后的权利要求书由每轮运行生成，分级为 `SYNTHETIC_TEST_OUTPUT`，不属于这 12 份输入证据。
 
+### 5.1 Actor upload manifest 的使用
+
+`--ui-session` 启动后，runner 在本轮 actor artifact 中生成 `upload-manifest.json` 和 `upload-files/`。操作者只能从该清单逐行取文件：先按 `evidence_key` 和 `title_zh_cn` 找到 Runbook 所需证据，再使用同一行的绝对 `path` 上传，并核对 `classification`、`media_type`、`size_bytes` 与 `sha256`。不得使用仓库 bundle 原路径、另一 actor 或上一轮 artifact。
+
+每行 `metadata` 固定包含 `effective_at`、`received_at`、`receipt_kind`、`official_due_date`、`official_due_date_source`、`official_due_date_status`、`oa_sequence`、`source_template_code`、`supersedes_role`；不适用字段为 `null`。12 行非空 metadata 如下，金额、日期和来源不因 upload manifest 改变：
+
+| # | `evidence_key` | 本行非空 `metadata` |
+| ---: | --- | --- |
+| 1 | `FILING_FINAL_SUBMISSION` | `effective_at=2026-08-01T09:00:00` |
+| 2 | `FILING_RECEIPT` | `received_at=2026-08-02T10:00:00`; `receipt_kind=RECEIPT_PDF` |
+| 3 | `ACCEPTANCE_NOTICE` | `effective_at=2026-08-03T09:00:00` |
+| 4 | `PRELIMINARY_EXAMINATION_SOURCE` | `effective_at=2026-08-04T09:00:00` |
+| 5 | `PUBLICATION_NOTICE` | `effective_at=2026-08-05T09:00:00` |
+| 6 | `SUBSTANTIVE_EXAMINATION_SOURCE` | `effective_at=2026-08-06T09:00:00` |
+| 7 | `OA_NOTICE_1` | `effective_at=2026-08-07T09:00:00`; `official_due_date=2026-09-22`; `official_due_date_source=MANUAL_OFFICIAL_NOTICE`; `official_due_date_status=CONFIRMED`; `oa_sequence=1`; `source_template_code=DEMO_OA_NOTICE_1` |
+| 8 | `OA_RECEIPT_1` | `received_at=2026-08-08T10:00:00`; `receipt_kind=RECEIPT_PDF` |
+| 9 | `OA_NOTICE_2` | `effective_at=2026-08-09T09:00:00`; `official_due_date=2026-10-23`; `official_due_date_source=MANUAL_OFFICIAL_NOTICE`; `official_due_date_status=CONFIRMED`; `oa_sequence=2`; `source_template_code=DEMO_OA_NOTICE_2` |
+| 10 | `OA_RECEIPT_2` | `received_at=2026-08-10T10:00:00`; `receipt_kind=RECEIPT_PDF` |
+| 11 | `GRANT_NOTICE_ORIGINAL` | `effective_at=2026-08-11T09:00:00`; `official_due_date=2026-11-23`; `official_due_date_source=IMPORTED_OFFICIAL_NOTICE`; `official_due_date_status=CONFIRMED`; `source_template_code=DEMO_GRANT_NOTICE_1` |
+| 12 | `GRANT_NOTICE_REPLACEMENT` | `effective_at=2026-08-12T09:00:00`; `official_due_date=2026-11-24`; `official_due_date_source=IMPORTED_OFFICIAL_NOTICE`; `official_due_date_status=CONFIRMED`; `source_template_code=DEMO_GRANT_NOTICE_2`; `supersedes_role=GRANT_NOTICE_ORIGINAL` |
+
+会前必须再次核对 bundle `valid_until=2026-09-30`。当前日期晚于该值、清单不是恰好 12 行、任一清单摘要或文件摘要不匹配时，立即停止，不得继续 actor 会话。
+
 ## 6. 官费来源与费率种子
 
 ### 6.1 费率簿身份

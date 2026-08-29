@@ -92,8 +92,8 @@ function canonicalFixture() {
           input('01', 'first_applicant', 'SOURCE_BOUND', 'same customer backfilled as the first applicant', '/cases/new', label('checkbox', '第一申请人'), 'visible applicant row backfilled from current customer master data', 'IDENTITY_EXACT'),
         ],
         outputs: [
-          output('01', 'unique_customer_and_primary_contact', 'APP_GENERATED', 'exactly one customer and one primary contact with the canonical values', '/clients/:id', label('tab', '联系人'), 'current customer detail and contact table', 'IDENTITY_AND_COUNT_EXACT', 'customer and primary contact are visible', 'customer_count=1 and primary_contact_count=1', '客户详情/联系人'),
-          output('01', 'unique_case', 'APP_GENERATED', 'exactly one case with the canonical case number and title', '/cases/:id', label('heading', '案件详情'), 'current case detail', 'IDENTITY_AND_COUNT_EXACT', 'the created case is visible', 'case_count=1', '案件详情'),
+          output('01', 'unique_customer_and_primary_contact', 'APP_GENERATED', 'exactly one customer and one primary contact with the canonical values', '/clients/:id', label('tab', '联系人'), 'current customer detail and contact table', 'IDENTITY_AND_COUNT_EXACT', 'customer-name breadcrumb and primary contact are visible', 'customer_count=1, primary_contact_count=1, and breadcrumb shows the customer name without a raw identifier', '客户详情/客户名称面包屑与联系人'),
+          output('01', 'unique_case', 'APP_GENERATED', 'exactly one case with the canonical case number and title', '/cases/:id', label('heading', '案件详情'), 'current case detail', 'IDENTITY_AND_COUNT_EXACT', 'case-list current stage and workflow status are visible', 'case_count=1 and case-list stage/status agree with the case projection', '案件列表/当前阶段与流程状态'),
           output('01', 'same_case_primary_contact_and_first_applicant', 'APP_GENERATED', 'the case primary contact and first applicant both bind to the Stage 01 customer/contact identities', '/cases/:id', label('heading', '案件详情'), 'current case parties projection', 'IDENTITY_EXACT', 'case party relationships are visible', 'primary contact and first applicant are unique and same-case', '案件详情/当事人'),
         ],
       },
@@ -124,7 +124,7 @@ function canonicalFixture() {
           input('03', 'substantive_examination_evidence', 'SOURCE_BOUND', 'current reviewed SUBSTANTIVE_EXAMINATION_SOURCE evidence', '/documents/:id', label('combobox', '证据文件'), 'visible same-case reviewed evidence from the current bundle', 'EVIDENCE_IDENTITY_AND_SHA256'),
         ],
         outputs: [
-          output('03', 'submission_and_receipt_lineage', 'APP_GENERATED', 'manual submission and filing receipt bind to the current reviewed filing evidence', '/official-workflows/filing-preparation', label('heading', '新申请递交准备'), 'current package submission and receipt panels', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'submission and receipt lineage is visible', 'one submission and one receipt consume the selected reviewed evidence', '新申请递交准备/递交与回执'),
+          output('03', 'submission_and_receipt_lineage', 'APP_GENERATED', 'manual submission and filing receipt bind to the current reviewed filing evidence', '/official-workflows/filing-preparation', label('heading', '新申请递交准备'), 'current package submission and receipt panels', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'structured document fields and submission/receipt lineage are visible', 'title, document date, internal reference, reply fields, note, submission, and receipt bind to the selected reviewed evidence', '文书详情/结构化文书字段与递交回执'),
           output('03', 'acceptance_projection', 'APP_GENERATED', 'acceptance binds to current reviewed ACCEPTANCE_NOTICE evidence', '/cases/:id', label('heading', '案件详情'), 'current lifecycle overlay', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'acceptance is visible', 'acceptance evidence identity and digest match', '案件详情/生命周期'),
           output('03', 'preliminary_projection', 'APP_GENERATED', 'preliminary start and pass both bind to current reviewed PRELIMINARY_EXAMINATION_SOURCE evidence', '/cases/:id', label('heading', '案件详情'), 'current lifecycle overlay', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'preliminary start and pass are visible', 'both transitions consume the same selected preliminary evidence version', '案件详情/生命周期'),
           output('03', 'publication_and_substantive_projection', 'APP_GENERATED', 'publication and substantive examination bind to their current reviewed evidence', '/cases/:id', label('heading', '案件详情'), 'current lifecycle overlay', 'EVIDENCE_CONSUMER_IDENTITY_EXACT', 'publication and substantive examination are visible', 'each transition consumes its selected evidence identity and digest', '案件详情/生命周期'),
@@ -176,7 +176,7 @@ function canonicalFixture() {
           input('06', 'current_task_instruction', 'EXPLICIT_INPUT', 'PAY', '/grant-fee/tasks', label('button', '记录缴费指示'), 'operator records PAY on the current task only', 'ENUM_EXACT'),
         ],
         outputs: [
-          output('06', 'original_task_superseded_read_only', 'APP_GENERATED', 'the original grant task is superseded and exposes no writable action', '/grant-fee/tasks', label('heading', '授权费任务看板'), 'visible original task row', 'IDENTITY_AND_STATE_EXACT', 'original task supersession is visible', 'original task is read-only and non-actionable', '授权费任务看板/原任务'),
+          output('06', 'original_task_superseded_read_only', 'APP_GENERATED', 'the original grant task is superseded and exposes no writable action', '/grant-fee/tasks', label('heading', '授权费任务看板'), 'visible original task row', 'IDENTITY_AND_STATE_EXACT', 'historical initial-filing gate and original task supersession are visible', 'initial-filing result is historical rather than a current blocker, and the original task is read-only', '案件详情/历史首次申请递交材料核验与授权费原任务'),
           output('06', 'current_task_pay_once', 'APP_GENERATED', 'the replacement task transitions WAITING_CLIENT to PAY exactly once', '/grant-fee/tasks', label('heading', '授权费任务看板'), 'visible current replacement task row', 'IDENTITY_AND_COUNT_EXACT', 'current PAY instruction is visible', 'PAY instruction count=1', '授权费任务看板/当前任务'),
           output('06', 'no_gov_before_confirmation', 'APP_GENERATED', 'no GOV FeeObligation, FeeDraft, or FeeItem exists before Stage 07 confirmation', '/cases/:id', label('heading', '案件详情'), 'same-case fee overview', 'COUNT_EXACT', 'absence of premature GOV objects is visible', 'GOV obligation=0, draft=0, item=0 before confirmation', '案件详情/同案双轨费用概览'),
         ],
@@ -194,7 +194,7 @@ function canonicalFixture() {
           input('07', 'confirmation_idempotency_key', 'APP_GENERATED', 'unique idempotency key generated for this confirmation action', '/grant-fee/tasks', label('button', '确认并生成官费草单'), 'current browser action ledger', 'OPAQUE_IDENTITY'),
         ],
         outputs: [
-          output('07', 'gov_preview_total', 'SOURCE_BOUND', '900.00+50.00=950.00 CNY', '/grant-fee/tasks', label('dialog', '授权登记官费预览'), 'visible official-fee preview rows and total', 'DECIMAL_EQUATION_EXACT', 'GOV preview amounts are visible', 'two lines total exactly 950.00 CNY', '授权登记官费预览'),
+          output('07', 'gov_preview_total', 'SOURCE_BOUND', '900.00+50.00=950.00 CNY', '/grant-fee/tasks', label('dialog', '授权登记官费预览'), 'visible official-fee preview rows and total', 'DECIMAL_EQUATION_EXACT', 'official fee preview and confirmation actions are visible and enabled', 'preview and confirmation remain actionable and two lines total exactly 950.00 CNY', '授权费任务看板/预览官费与确认官费'),
           output('07', 'unique_gov_obligation_and_draft', 'APP_GENERATED', 'confirmation creates exactly one GOV obligation and one GOV draft', '/fees/drafts/:id', testid('draft-source-facts'), 'current GOV draft source facts', 'IDENTITY_AND_COUNT_EXACT', 'GOV draft and obligation lineage are visible', 'GOV obligation_count=1 and GOV draft_count=1', '费用草稿详情/计算与来源'),
           output('07', 'gov_lines_read_only', 'APP_GENERATED', 'all GOV draft lines are read-only', '/fees/drafts/:id', testid('draft-source-facts'), 'current GOV draft source facts', 'STATE_EXACT', 'GOV read-only boundary is visible', 'no GOV line exposes an edit or adjustment action', '费用草稿详情/官费草单：全部明细只读'),
         ],
@@ -276,9 +276,9 @@ function canonicalFixture() {
         stage: '11',
         inputs: [],
         outputs: [
-          output('11', 'same_case_gov_pending_evidence', 'SOURCE_BOUND', 'same-case GOV draft, PayList, and GovPayments remain pending official evidence', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview', 'IDENTITY_TOTAL_AND_STATE_EXACT', 'GOV pending-evidence track is visible', 'GOV identities and 950.00 total remain intact and pending official evidence', '案件详情/同案双轨费用概览'),
-          output('11', 'same_case_service_settled', 'SOURCE_BOUND', 'same-case SERVICE obligation, draft, Bill, Payments, and Offsets remain fully settled', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview', 'IDENTITY_TOTAL_AND_STATE_EXACT', 'SERVICE settled track is visible', 'SERVICE identities and 1800.00 total remain intact and Bill is SETTLED/0.00', '案件详情/同案双轨费用概览'),
-          output('11', 'cross_track_consistency', 'APP_GENERATED', 'all same-case identities, amounts, and statuses agree without merging GOV and SERVICE facts', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview and linked normal pages', 'CROSS_PAGE_IDENTITY_TOTAL_AND_STATE_EXACT', 'cross-track summary is visible', 'GOV and SERVICE chains are internally complete, same-case, and domain-separated', '案件详情/同案双轨费用概览'),
+          output('11', 'same_case_gov_pending_evidence', 'SOURCE_BOUND', 'same-case GOV draft, PayList, and GovPayments remain pending official evidence', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview', 'IDENTITY_TOTAL_AND_STATE_EXACT', 'current-first three-lane summary keeps the GOV pending-evidence track visible', 'document, lifecycle, and fee current summaries are primary while GOV identities and 950.00 remain pending official evidence', '案件详情/当前优先三轨摘要/费用'),
+          output('11', 'same_case_service_settled', 'SOURCE_BOUND', 'same-case SERVICE obligation, draft, Bill, Payments, and Offsets remain fully settled', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview', 'IDENTITY_TOTAL_AND_STATE_EXACT', 'full history is collapsed by default while the SERVICE settled track is visible', 'history toggle starts collapsed and SERVICE identities and 1800.00 remain settled at 0.00', '案件详情/查看完整历史默认收起与服务费摘要'),
+          output('11', 'cross_track_consistency', 'APP_GENERATED', 'all same-case identities, amounts, and statuses agree without merging GOV and SERVICE facts', '/cases/:id', label('heading', '案件详情'), 'same-case dual-track fee overview and linked normal pages', 'CROSS_PAGE_IDENTITY_TOTAL_AND_STATE_EXACT', 'raw identifiers, hashes, and English statuses remain hidden until audit disclosure is expanded', 'customer summaries remain Chinese and domain-separated; audit disclosure retains exact raw traceability facts', '案件详情/完整历史/审计信息'),
         ],
       },
     ],
@@ -378,6 +378,8 @@ function validateContract(actual) {
       }
     }
   }
+  assert.equal(actual.stages.reduce((count, stage) => count + stage.inputs.length, 0), 103, 'input/source field count drift')
+  assert.equal(actual.stages.reduce((count, stage) => count + stage.outputs.length, 0), 30, 'visible output field count drift')
 
   const actualStage03 = actual.stages.find((stage) => stage.stage === '03')
   const expectedStage03 = expected.stages.find((stage) => stage.stage === '03')
@@ -404,6 +406,20 @@ function validateContract(actual) {
     assertionKeys.add(identity)
   }
   assert.deepEqual(actual.strict_assertions, expected.strict_assertions, 'collapsed, missing, extra, or drifted Stage 07–11 strict assertion')
+
+  const projectionContract = JSON.stringify(actual.stages)
+  for (const token of [
+    'customer-name breadcrumb',
+    'case-list current stage and workflow status',
+    'structured document fields',
+    'historical initial-filing gate',
+    'official fee preview and confirmation actions are visible and enabled',
+    'current-first three-lane summary',
+    'full history is collapsed by default',
+    'raw identifiers, hashes, and English statuses remain hidden until audit disclosure is expanded',
+  ]) {
+    assert(projectionContract.includes(token), `current customer projection checkpoint missing: ${token}`)
+  }
 }
 
 function expectRejected(name, mutate, messagePattern) {

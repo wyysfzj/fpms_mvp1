@@ -22,6 +22,14 @@ V6_SPEC = SPEC
 V6_STATIC_CONTRACT = LEGACY_SPEC.with_name("demo-integrated-v6-static-contract.mjs")
 V6_LIFECYCLE = ROOT / "docs/postdemo/demo-lifecycle-customer-v6.html"
 V6_RUNBOOK = ROOT / "docs/postdemo/demo-lifecycle-customer-v6-runbook.md"
+V6_COLLEAGUE_GUIDE = ROOT / "docs/postdemo/demo-v6-colleague-clone-start-guide.md"
+V6_HANDOFF = ROOT / "docs/postdemo/demo-v6-clone-deploy-handoff.md"
+V6_SEED_GUIDE = ROOT / "docs/postdemo/demo-lifecycle-customer-v6-seed-data.md"
+V6_UI_CONTRACT = (
+    ROOT
+    / "FPMS_Automation_Skeleton_Pack/data/testcases/demo_v6_ui_parity_v1.json"
+)
+V6_DOCUMENT_CHECKER = ROOT / "scripts/check_customer_demo_lifecycle_v6.py"
 
 
 def _module():
@@ -83,6 +91,74 @@ def test_v6_contract_artifacts_share_the_same_stage_order_and_fact_boundaries():
     assert "test_v6_customer_acceptance_receipts" in Path(__file__).read_text(encoding="utf-8")
     assert "FPMS_DEMO_V6_CUSTOMER_EVIDENCE_DIR" in RUNNER.read_text(encoding="utf-8")
     assert "Acorn" in static_contract
+
+
+def test_v6_colleague_docs_and_checker_freeze_current_customer_projection_contract():
+    document_paths = (
+        V6_COLLEAGUE_GUIDE,
+        V6_HANDOFF,
+        V6_RUNBOOK,
+        V6_SEED_GUIDE,
+        V6_LIFECYCLE,
+    )
+    for path in (*document_paths, V6_UI_CONTRACT, V6_DOCUMENT_CHECKER):
+        assert path.is_file(), f"missing V6 document contract artifact: {path}"
+
+    documents = {path.name: path.read_text(encoding="utf-8") for path in document_paths}
+    combined = "\n".join(documents.values())
+    guide = documents[V6_COLLEAGUE_GUIDE.name]
+    handoff = documents[V6_HANDOFF.name]
+    runbook = documents[V6_RUNBOOK.name]
+    seed_guide = documents[V6_SEED_GUIDE.name]
+    lifecycle = documents[V6_LIFECYCLE.name]
+    checker = V6_DOCUMENT_CHECKER.read_text(encoding="utf-8")
+    contract = json.loads(V6_UI_CONTRACT.read_text(encoding="utf-8"))
+
+    tag = "demo-v6-customer-20260829-r1"
+    assert tag in guide
+    assert tag in handoff
+    for stale in (
+        "90d9c560cd2d8687fddb038dcd8c3f51cd8af72b",
+        "codex/demo-v6-ui-parity-candidate-20260826",
+    ):
+        assert stale not in combined
+        assert stale in checker
+
+    for required_path in (
+        "demo-v6-colleague-clone-start-guide.md",
+        "demo-v6-clone-deploy-handoff.md",
+        "demo-lifecycle-customer-v6-runbook.md",
+        "demo-lifecycle-customer-v6-seed-data.md",
+        "demo-lifecycle-customer-v6.html",
+        "demo_v6_ui_parity_v1.json",
+    ):
+        assert required_path in checker
+
+    for token in (
+        "客户名称面包屑",
+        "第5阶段/5 · 授权登记",
+        "结构化文书字段",
+        "历史首次申请递交材料核验",
+        "预览官费",
+        "确认官费",
+        "现在是什么状态",
+        "最近发生了什么",
+        "下一步是什么",
+        "查看完整历史",
+        "审计信息",
+    ):
+        assert token in runbook
+    assert "技术标识、摘要和原始状态默认隐藏" in lifecycle
+    assert "upload-manifest.json" in guide + handoff + seed_guide
+    assert "2026-09-30" in seed_guide
+    for token in ("--strict-ui", "--runs 1", "--headless"):
+        assert token in handoff
+    for token in ("HUMAN：待完成", "CODEX：待完成", "Comparator：待完成"):
+        assert token in handoff
+
+    assert len(contract["stages"]) == 11
+    assert sum(len(stage["inputs"]) for stage in contract["stages"]) == 103
+    assert sum(len(stage["outputs"]) for stage in contract["stages"]) == 30
 
 
 def test_runner_selects_only_the_integrated_spec_and_supports_one_or_two_runs():
