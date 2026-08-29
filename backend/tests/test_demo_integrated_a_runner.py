@@ -114,10 +114,36 @@ def test_v6_colleague_docs_and_checker_freeze_current_customer_projection_contra
     checker = V6_DOCUMENT_CHECKER.read_text(encoding="utf-8")
     contract = json.loads(V6_UI_CONTRACT.read_text(encoding="utf-8"))
 
-    tag = "demo-v6-customer-20260829-r1"
+    tag = "demo-v6-customer-20260829-r2"
     assert tag in guide
     assert tag in handoff
+    for document in (guide, handoff):
+        assert "十二份上传文件的附件角色" in document
+        assert "先选择文件" in document
+        assert "再选择附件角色" in document
+        assert "最后确认上传" in document
+    upload_role_rows = {
+        "FILING_FINAL_SUBMISSION": "合并PDF",
+        "FILING_RECEIPT": "电子申请回执",
+        "ACCEPTANCE_NOTICE": "官方通知书PDF",
+        "PRELIMINARY_EXAMINATION_SOURCE": "官方通知书PDF",
+        "PUBLICATION_NOTICE": "官方通知书PDF",
+        "SUBSTANTIVE_EXAMINATION_SOURCE": "官方通知书PDF",
+        "OA_NOTICE_1": "官方通知书PDF",
+        "OA_RECEIPT_1": "电子申请回执",
+        "OA_NOTICE_2": "官方通知书PDF",
+        "OA_RECEIPT_2": "电子申请回执",
+        "GRANT_NOTICE_ORIGINAL": "官方通知书PDF",
+        "GRANT_NOTICE_REPLACEMENT": "官方通知书PDF",
+    }
+    for evidence_key, attachment_role in upload_role_rows.items():
+        assert f"`{evidence_key}`" in runbook
+        assert any(
+            f"`{evidence_key}`" in line and f"| {attachment_role} |" in line
+            for line in runbook.splitlines()
+        )
     for stale in (
+        "demo-v6-customer-20260829-r1",
         "90d9c560cd2d8687fddb038dcd8c3f51cd8af72b",
         "codex/demo-v6-ui-parity-candidate-20260826",
     ):

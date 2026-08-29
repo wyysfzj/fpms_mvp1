@@ -1,6 +1,6 @@
 # FPMS V6 客户演示：同事 Clone 与启动 Quickstart
 
-交付版本：未来不可变 tag `demo-v6-customer-20260829-r1`
+交付版本：未来不可变 tag `demo-v6-customer-20260829-r2`
 
 数据边界：`SYNTHETIC_TEST_ONLY`
 
@@ -11,10 +11,10 @@
 只有交接人确认 tag 已发布后才执行：
 
 ```bash
-git clone --branch demo-v6-customer-20260829-r1 --single-branch \
+git clone --branch demo-v6-customer-20260829-r2 --single-branch \
   https://github.com/wyysfzj/fpms_mvp1.git fpms-demo-v6
 cd fpms-demo-v6
-test "$(git describe --tags --exact-match HEAD)" = "demo-v6-customer-20260829-r1"
+test "$(git describe --tags --exact-match HEAD)" = "demo-v6-customer-20260829-r2"
 test -z "$(git status --porcelain=v1 -uall)"
 ```
 

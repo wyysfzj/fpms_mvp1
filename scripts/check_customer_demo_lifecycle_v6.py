@@ -13,8 +13,22 @@ HTML = ROOT / "docs/postdemo/demo-lifecycle-customer-v6.html"
 CONTRACT = (
     ROOT / "FPMS_Automation_Skeleton_Pack/data/testcases/demo_v6_ui_parity_v1.json"
 )
-EXPECTED_TAG = "demo-v6-customer-20260829-r1"
+EXPECTED_TAG = "demo-v6-customer-20260829-r2"
 EXPECTED_STAGES = tuple(f"{index:02d}" for index in range(1, 12))
+EXPECTED_UPLOAD_ROLE_ROWS = (
+    "| `03` | `FILING_FINAL_SUBMISSION` | 发明专利请求书及申请文件 | 合并PDF |",
+    "| `03` | `FILING_RECEIPT` | 发明专利申请递交回执 | 电子申请回执 |",
+    "| `03` | `ACCEPTANCE_NOTICE` | 发明专利申请受理通知书 | 官方通知书PDF |",
+    "| `03` | `PRELIMINARY_EXAMINATION_SOURCE` | 发明专利申请初步审查合格通知书 | 官方通知书PDF |",
+    "| `03` | `PUBLICATION_NOTICE` | 发明专利申请公布通知书 | 官方通知书PDF |",
+    "| `03` | `SUBSTANTIVE_EXAMINATION_SOURCE` | 发明专利申请进入实质审查阶段通知书 | 官方通知书PDF |",
+    "| `04` | `OA_NOTICE_1` | 第一次审查意见通知书 | 官方通知书PDF |",
+    "| `04` | `OA_RECEIPT_1` | 第一次审查意见答复递交回执 | 电子申请回执 |",
+    "| `05` | `OA_NOTICE_2` | 第二次审查意见通知书 | 官方通知书PDF |",
+    "| `05` | `OA_RECEIPT_2` | 第二次审查意见答复递交回执 | 电子申请回执 |",
+    "| `06` | `GRANT_NOTICE_ORIGINAL` | 办理登记手续通知书 | 官方通知书PDF |",
+    "| `06` | `GRANT_NOTICE_REPLACEMENT` | 办理登记手续更正通知书 | 官方通知书PDF |",
+)
 REQUIRED_RUNBOOK_FIELDS = (
     "演示话术",
     "UI/操作",
@@ -27,6 +41,7 @@ REQUIRED_RUNBOOK_FIELDS = (
     "最近新增",
 )
 STALE_CANDIDATES = (
+    "demo-v6-customer-20260829-r1",
     "90d9c560cd2d8687fddb038dcd8c3f51cd8af72b",
     "codex/demo-v6-ui-parity-candidate-20260826",
 )
@@ -58,6 +73,16 @@ def check() -> None:
     for label in ("Guide", "Handoff"):
         if EXPECTED_TAG not in documents[label]:
             raise RuntimeError(f"{label} 未绑定统一不可变 tag")
+        _require_tokens(
+            documents[label],
+            (
+                "十二份上传文件的附件角色",
+                "先选择文件",
+                "再选择附件角色",
+                "最后确认上传",
+            ),
+            label,
+        )
     for stale in STALE_CANDIDATES:
         if stale in combined:
             raise RuntimeError(f"V6 文档仍引用旧 candidate：{stale}")
@@ -122,6 +147,11 @@ def check() -> None:
             "审计信息",
         ),
         "Runbook",
+    )
+    _require_tokens(
+        documents["Runbook"],
+        EXPECTED_UPLOAD_ROLE_ROWS,
+        "Runbook upload role mapping",
     )
     _require_tokens(
         documents["Seed"],

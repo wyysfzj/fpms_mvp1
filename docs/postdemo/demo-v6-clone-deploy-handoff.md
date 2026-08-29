@@ -1,6 +1,6 @@
 # FPMS 客户演示 V6：Clone、部署与同事交接
 
-交付版本：未来不可变 tag `demo-v6-customer-20260829-r1`
+交付版本：未来不可变 tag `demo-v6-customer-20260829-r2`
 数据边界：`SYNTHETIC_TEST_ONLY`
 
 ## 1. 验收状态与能力边界
@@ -18,10 +18,10 @@
 只有 tag 发布后才执行：
 
 ```bash
-git clone --branch demo-v6-customer-20260829-r1 --single-branch \
+git clone --branch demo-v6-customer-20260829-r2 --single-branch \
   https://github.com/wyysfzj/fpms_mvp1.git fpms-demo-v6
 cd fpms-demo-v6
-test "$(git describe --tags --exact-match HEAD)" = "demo-v6-customer-20260829-r1"
+test "$(git describe --tags --exact-match HEAD)" = "demo-v6-customer-20260829-r2"
 test -z "$(git status --porcelain=v1 -uall)"
 
 python3.11 -m venv backend/.venv
@@ -91,7 +91,7 @@ backend/.venv/bin/python scripts/run_demo_integrated_a_rehearsal.py \
   --ui-session --actor CODEX --artifact "$CODEX_RECEIPT_ROOT"
 ```
 
-CODEX 必须在另一个 clean clone、另一个账号中执行。每个会话启动后先读取 actor artifact 下的 `upload-manifest.json`：清单恰有 12 行，每行 `path` 指向同一 actor artifact 的 `upload-files/`。按 `evidence_key`、`title_zh_cn` 和 `metadata` 选取文件；禁止使用另一 actor、旧运行或 bundle 原路径。
+CODEX 必须在另一个 clean clone、另一个账号中执行。每个会话启动后先读取 actor artifact 下的 `upload-manifest.json`：清单恰有 12 行，每行 `path` 指向同一 actor artifact 的 `upload-files/`。按 `evidence_key`、`title_zh_cn` 和 `metadata` 选取文件，并使用 Runbook“十二份上传文件的附件角色”表选择中文附件角色。固定顺序是先选择文件、再选择附件角色、最后确认上传；`evidence_key` 不能直接填入附件角色。禁止使用另一 actor、旧运行或 bundle 原路径。
 
 两位 actor 均按 `docs/postdemo/demo-lifecycle-customer-v6-runbook.md` 的 01–11 顺序，只操作普通业务 UI。`/demo/inputs` 只用于非共享预检、截图登记和最终导出；禁止 curl、直接 API/SQL、隐藏写入路由和内部 ID 抄写。
 
