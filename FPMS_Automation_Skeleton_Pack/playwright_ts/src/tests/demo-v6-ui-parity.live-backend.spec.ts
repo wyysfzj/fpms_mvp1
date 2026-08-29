@@ -335,7 +335,7 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await customerRow.getByRole('button', { name: `打开客户操作：${customerName}` }).click()
     await page.getByRole('menuitem', { name: '查看' }).click()
     await page.waitForURL(url => url.pathname === `/clients/${currentClientId}`)
-    await expect(page.getByText(customerName, { exact: true })).toBeVisible()
+    await expect(page.getByLabel('基本信息').getByText(customerName, { exact: true })).toBeVisible()
 
     await page.getByRole('tab', { name: '联系人' }).click()
     await page.getByRole('button', { name: '新增联系人' }).click()
