@@ -136,6 +136,188 @@ def test_runner_builds_the_integrated_bundle_successor(tmp_path: Path):
     assert manifest.count('"classification":"FICTIONAL_DEMO_EVIDENCE"') == 12
 
 
+def test_ui_upload_manifest_materializes_frozen_evidence_inside_artifact(
+    tmp_path: Path,
+):
+    module = _module()
+    helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
+    bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](tmp_path / "bundle")
+    artifact = (tmp_path / "external-artifact").resolve()
+    artifact.mkdir()
+
+    module.materialize_ui_upload_manifest(bundle, artifact)
+
+    upload_root = artifact / "upload-files"
+    upload_manifest = json.loads(
+        (artifact / "upload-manifest.json").read_text(encoding="utf-8")
+    )
+    assert set(upload_manifest) == {"schema_id", "files"}
+    assert upload_manifest["schema_id"] == "fpms.demo-v6-upload-manifest/v1"
+    assert len(upload_manifest["files"]) == 12
+    for ordinal, (source, copied) in enumerate(
+        zip(manifest["evidence"], upload_manifest["files"], strict=True),
+        start=1,
+    ):
+        copied_path = Path(copied["path"])
+        assert copied == {
+            "evidence_key": source["role"],
+            "title_zh_cn": source["title_zh_cn"],
+            "classification": source["classification"],
+            "media_type": source["media_type"],
+            "metadata": source["metadata"],
+            "file_name": copied_path.name,
+            "path": str(copied_path),
+            "size_bytes": source["size_bytes"],
+            "sha256": source["sha256"],
+        }
+        assert copied_path == upload_root / f"{ordinal:02d}-{Path(source['path']).name}"
+        assert copied_path.is_file()
+        assert copied_path.stat().st_size == source["size_bytes"]
+        assert module.hashlib.sha256(copied_path.read_bytes()).hexdigest() == source["sha256"]
+    serialized = json.dumps(upload_manifest, ensure_ascii=False).casefold()
+    for sensitive in (
+        "authorization",
+        "capability",
+        "cookie",
+        "credential",
+        "password",
+        "secret",
+        "token",
+    ):
+        assert sensitive not in serialized
+
+
+def test_ui_upload_materialization_cleans_partial_copy_and_allows_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _module()
+    helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
+    bundle, _manifest, _manifest_sha = helpers["_valid_v6_bundle"](
+        tmp_path / "bundle"
+    )
+    artifact = (tmp_path / "external-artifact").resolve()
+    artifact.mkdir()
+    real_copyfile = module.shutil.copyfile
+    copy_count = 0
+
+    def fail_second_copy(source: Path, target: Path):
+        nonlocal copy_count
+        copy_count += 1
+        if copy_count == 2:
+            raise OSError("second copy failed")
+        return real_copyfile(source, target)
+
+    monkeypatch.setattr(module.shutil, "copyfile", fail_second_copy)
+    with pytest.raises(OSError, match="second copy failed"):
+        module.materialize_ui_upload_manifest(bundle, artifact)
+
+    assert not (artifact / "upload-files").exists()
+    assert not (artifact / "upload-manifest.json").exists()
+    monkeypatch.setattr(module.shutil, "copyfile", real_copyfile)
+    module.materialize_ui_upload_manifest(bundle, artifact)
+    assert len(list((artifact / "upload-files").iterdir())) == 12
+    assert (artifact / "upload-manifest.json").is_file()
+
+
+def test_ui_upload_manifest_rejects_missing_required_field_before_writing(
+    tmp_path: Path,
+):
+    module = _module()
+    helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
+    bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](
+        tmp_path / "bundle"
+    )
+    manifest["evidence"][0].pop("role")
+    helpers["_write_manifest"](bundle, manifest)
+    artifact = (tmp_path / "external-artifact").resolve()
+    artifact.mkdir()
+
+    with pytest.raises(RuntimeError, match="required fields"):
+        module.materialize_ui_upload_manifest(bundle, artifact)
+
+    assert not (artifact / "upload-files").exists()
+    assert not (artifact / "upload-manifest.json").exists()
+
+
+def test_ui_upload_manifest_rejects_unknown_metadata_key_before_writing(
+    tmp_path: Path,
+):
+    module = _module()
+    helpers = runpy.run_path(str(ROOT / "backend/tests/test_demo_abc_runtime_bundle.py"))
+    bundle, manifest, _manifest_sha = helpers["_valid_v6_bundle"](
+        tmp_path / "bundle"
+    )
+    manifest["evidence"][0]["metadata"]["api_key"] = "must-not-be-exported"
+    helpers["_write_manifest"](bundle, manifest)
+    artifact = (tmp_path / "external-artifact").resolve()
+    artifact.mkdir()
+
+    with pytest.raises(RuntimeError, match="required fields"):
+        module.materialize_ui_upload_manifest(bundle, artifact)
+
+    assert not (artifact / "upload-files").exists()
+    assert not (artifact / "upload-manifest.json").exists()
+
+
+def test_ui_session_removes_new_empty_artifact_when_upload_materialization_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _module()
+    artifact = (tmp_path / "external-artifact").resolve()
+    args = module.argparse.Namespace(actor="CODEX", artifact=artifact)
+    monkeypatch.setattr(module, "_new_run_context", lambda **_kwargs: object())
+
+    def fail_materialization(*_args):
+        raise RuntimeError("materialize failed")
+
+    monkeypatch.setattr(
+        module,
+        "materialize_ui_upload_manifest",
+        fail_materialization,
+    )
+
+    with pytest.raises(RuntimeError, match="materialize failed"):
+        module._run_ui_session(args, tmp_path / "bundle", "a" * 64, "b" * 64, {})
+
+    assert not artifact.exists()
+
+
+def test_ui_session_materializes_upload_files_before_starting_services(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _module()
+    artifact = (tmp_path / "external-artifact").resolve()
+    args = module.argparse.Namespace(actor="HUMAN", artifact=artifact)
+    context = object()
+    service_process = object()
+    events: list[object] = []
+    monkeypatch.setattr(module, "_new_run_context", lambda **_kwargs: context)
+    monkeypatch.setattr(
+        module,
+        "materialize_ui_upload_manifest",
+        lambda bundle, target: events.append(("uploads", bundle, target)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_start_services",
+        lambda actual_context, _log: (
+            events.append(("services", actual_context)),
+            service_process,
+        )[1],
+    )
+    monkeypatch.setattr(module.abc, "wait_url", lambda *_args: None)
+    monkeypatch.setattr(module, "_run_ui_browser_session", lambda *_args: "STOPPED")
+    monkeypatch.setattr(module, "_stop_process", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "_complete_ui_session", lambda *_args: None)
+
+    module._run_ui_session(args, tmp_path / "bundle", "a" * 64, "b" * 64, {})
+
+    assert events == [
+        ("uploads", tmp_path / "bundle", artifact),
+        ("services", context),
+    ]
+
+
 def test_customer_profile_requires_exact_external_bundle_contract(tmp_path: Path):
     module = _module()
     args = module.parse_args(

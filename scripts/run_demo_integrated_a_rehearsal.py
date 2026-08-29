@@ -383,6 +383,116 @@ def integrated_evidence_json(bundle: Path) -> str:
     )
 
 
+def materialize_ui_upload_manifest(bundle: Path, artifact: Path) -> None:
+    bundle_root = bundle.resolve()
+    artifact_root = artifact.resolve()
+    upload_root = artifact_root / "upload-files"
+    upload_manifest = artifact_root / "upload-manifest.json"
+    if upload_root.exists() or upload_root.is_symlink() or upload_manifest.exists():
+        raise RuntimeError("UI upload material already exists")
+    manifest = json.loads((bundle_root / "manifest.json").read_text(encoding="utf-8"))
+    evidence = manifest.get("evidence")
+    if not isinstance(evidence, list) or len(evidence) != 12:
+        raise RuntimeError("integrated evidence manifest must contain exactly twelve rows")
+
+    metadata_keys = {
+        "effective_at",
+        "received_at",
+        "receipt_kind",
+        "official_due_date",
+        "official_due_date_source",
+        "official_due_date_status",
+        "oa_sequence",
+        "source_template_code",
+        "supersedes_role",
+    }
+    copy_plan: list[tuple[Path, Path, int, str]] = []
+    files: list[dict[str, Any]] = []
+    for ordinal, row in enumerate(evidence, start=1):
+        if not isinstance(row, dict):
+            raise TypeError("integrated evidence row is invalid")
+        role = row.get("role")
+        title = row.get("title_zh_cn")
+        classification = row.get("classification")
+        media_type = row.get("media_type")
+        metadata = row.get("metadata")
+        relative_path = row.get("path")
+        expected_size = row.get("size_bytes")
+        expected_sha = row.get("sha256")
+        if not (
+            isinstance(role, str)
+            and bool(role.strip())
+            and isinstance(title, str)
+            and bool(title.strip())
+            and re.search(r"[\u3400-\u9fff]", title) is not None
+            and classification == "FICTIONAL_DEMO_EVIDENCE"
+            and media_type == "application/pdf"
+            and isinstance(metadata, dict)
+            and set(metadata) == metadata_keys
+            and all(
+                value is None or isinstance(value, str) or type(value) is int
+                for value in metadata.values()
+            )
+            and isinstance(relative_path, str)
+            and bool(relative_path.strip())
+            and type(expected_size) is int
+            and expected_size >= 0
+            and isinstance(expected_sha, str)
+            and _SHA256_RE.fullmatch(expected_sha) is not None
+        ):
+            raise RuntimeError("integrated evidence row required fields are invalid")
+        source_path = (bundle_root / relative_path).resolve()
+        if bundle_root not in source_path.parents or not source_path.is_file():
+            raise RuntimeError("integrated evidence path escapes or is unavailable")
+        if (
+            source_path.stat().st_size != expected_size
+            or hashlib.sha256(source_path.read_bytes()).hexdigest() != expected_sha
+        ):
+            raise RuntimeError("integrated evidence digest or size does not match manifest")
+        copied_path = (upload_root / f"{ordinal:02d}-{source_path.name}").resolve()
+        if upload_root not in copied_path.parents:
+            raise RuntimeError("UI upload path escapes the session artifact")
+        copy_plan.append((source_path, copied_path, expected_size, expected_sha))
+        files.append(
+            {
+                "evidence_key": role,
+                "title_zh_cn": title,
+                "classification": classification,
+                "media_type": media_type,
+                "metadata": metadata,
+                "file_name": copied_path.name,
+                "path": str(copied_path),
+                "size_bytes": expected_size,
+                "sha256": expected_sha,
+            }
+        )
+    payload = {"schema_id": "fpms.demo-v6-upload-manifest/v1", "files": files}
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).casefold()
+    if any(token in serialized for token in _SENSITIVE_LEDGER_KEYS):
+        raise RuntimeError("UI upload manifest contains sensitive content")
+
+    upload_root_created = False
+    upload_manifest_owned = False
+    try:
+        upload_root.mkdir()
+        upload_root_created = True
+        for source_path, copied_path, expected_size, expected_sha in copy_plan:
+            shutil.copyfile(source_path, copied_path)
+            if (
+                copied_path.stat().st_size != expected_size
+                or hashlib.sha256(copied_path.read_bytes()).hexdigest() != expected_sha
+            ):
+                raise RuntimeError("copied UI upload evidence does not match frozen digest")
+        upload_manifest_owned = True
+        _write_json(upload_manifest, payload)
+    except Exception:
+        if upload_manifest_owned:
+            upload_manifest.unlink(missing_ok=True)
+        if upload_root_created:
+            shutil.rmtree(upload_root)
+        raise
+
+
 def materialize_oa_reply_outputs(output_root: Path) -> list[dict[str, Any]]:
     if output_root.exists() or output_root.is_symlink():
         raise RuntimeError(f"OA reply output root already exists: {output_root}")
@@ -1495,6 +1605,14 @@ def _run_ui_session(
         ui_session=True,
     )
     artifact.mkdir(parents=True)
+    try:
+        materialize_ui_upload_manifest(bundle, artifact)
+    except Exception:
+        try:
+            artifact.rmdir()
+        except OSError:
+            pass
+        raise
     service_process = _start_services(context, artifact / "runner.log")
     try:
         abc.wait_url("http://127.0.0.1:8000/healthz", service_process)
