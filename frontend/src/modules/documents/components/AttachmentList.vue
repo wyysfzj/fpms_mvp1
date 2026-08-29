@@ -87,7 +87,12 @@
 
       <template #footer>
         <el-button :disabled="uploading" @click="cancelUploadDialog">取消</el-button>
-        <el-button type="primary" :loading="uploading" @click="handleUploadConfirm">
+        <el-button
+          type="primary"
+          :loading="uploading"
+          :disabled="uploading || !canConfirmUpload"
+          @click="handleUploadConfirm"
+        >
           确认上传
         </el-button>
       </template>
@@ -176,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import {
@@ -216,6 +221,9 @@ const uploadDraft = reactive({
   official_file_role: '',
   source_role_alias: '',
 })
+const canConfirmUpload = computed(() => (
+  selectedUploadFile.value !== null && uploadDraft.official_file_role.trim() !== ''
+))
 
 const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   TECHNICAL_DISCLOSURE: '技术交底书',
@@ -481,6 +489,10 @@ async function handleFileChange(uploadFile: UploadFile) {
 async function handleUploadConfirm() {
   if (!selectedUploadFile.value) {
     ElMessage.warning('请先选择文件')
+    return
+  }
+  if (!uploadDraft.official_file_role.trim()) {
+    ElMessage.warning('请选择附件角色')
     return
   }
   uploading.value = true

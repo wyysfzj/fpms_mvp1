@@ -28,6 +28,25 @@
 - 允许页面为 `/demo/inputs` 只读预检、客户/案件/文书/流程/授权费用/草单/清单/回款/核销等正常页面；禁止进入隐藏演示控制路由，禁止 curl、直接 HTTP/SQL、内部 ID 抄写、旧 artifact 复用或 observer 发起 mutation。
 - 每阶段结束点击页面顶部“记录阶段 NN 截图”。第 11 阶段后回到 `/demo/inputs`，点击“完成并导出本轮证据”。只有 11 张不同截图、可见 action/mutation 一一对应且 Network/console 为零，才生成 actor `pass-receipt.json`。
 
+### 十二份上传文件的附件角色
+
+`upload-manifest.json` 的 `evidence_key` 是场景证据身份，不是“附件角色”下拉框的值。每次必须先选择文件，再从下拉框点击下表中的中文附件角色；页面显示正确角色后才能点击“确认上传”。不得把 `evidence_key` 输入下拉框，也不得上传“未标注”附件。
+
+| 阶段 | `evidence_key` | 中文标题 | 附件角色 |
+| --- | --- | --- | --- |
+| `03` | `FILING_FINAL_SUBMISSION` | 发明专利请求书及申请文件 | 合并PDF |
+| `03` | `FILING_RECEIPT` | 发明专利申请递交回执 | 电子申请回执 |
+| `03` | `ACCEPTANCE_NOTICE` | 发明专利申请受理通知书 | 官方通知书PDF |
+| `03` | `PRELIMINARY_EXAMINATION_SOURCE` | 发明专利申请初步审查合格通知书 | 官方通知书PDF |
+| `03` | `PUBLICATION_NOTICE` | 发明专利申请公布通知书 | 官方通知书PDF |
+| `03` | `SUBSTANTIVE_EXAMINATION_SOURCE` | 发明专利申请进入实质审查阶段通知书 | 官方通知书PDF |
+| `04` | `OA_NOTICE_1` | 第一次审查意见通知书 | 官方通知书PDF |
+| `04` | `OA_RECEIPT_1` | 第一次审查意见答复递交回执 | 电子申请回执 |
+| `05` | `OA_NOTICE_2` | 第二次审查意见通知书 | 官方通知书PDF |
+| `05` | `OA_RECEIPT_2` | 第二次审查意见答复递交回执 | 电子申请回执 |
+| `06` | `GRANT_NOTICE_ORIGINAL` | 办理登记手续通知书 | 官方通知书PDF |
+| `06` | `GRANT_NOTICE_REPLACEMENT` | 办理登记手续更正通知书 | 官方通知书PDF |
+
 ### 正常页面路线
 
 | 阶段 | 路线（动态 ID 由当前页面链接带入，不手抄） |

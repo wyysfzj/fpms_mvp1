@@ -275,12 +275,15 @@ test('strict V6 normal-UI journey', async ({ page, browser }) => {
     await page.getByTestId('attachment-open-upload').click()
     const uploadDialog = page.getByRole('dialog', { name: '上传附件' })
     await uploadDialog.getByTestId('attachment-file-picker').locator('input[type=file]').setInputFiles(filePath)
+    const confirmUploadButton = uploadDialog.getByRole('button', { name: '确认上传' })
+    await expect(confirmUploadButton).toBeDisabled()
     await uploadDialog.locator('.el-form-item').filter({ hasText: '附件角色' }).locator('.el-select__wrapper').click()
     await page.getByRole('option', { name: officialRoleLabel, exact: true }).click()
+    await expect(confirmUploadButton).toBeEnabled()
     const uploaded = await visibleMutation(
       page,
       uploadBinding,
-      uploadDialog.getByRole('button', { name: '确认上传' }),
+      confirmUploadButton,
       'POST',
       new RegExp(`/api/v1/documents/${documentId}/attachments$`),
     )

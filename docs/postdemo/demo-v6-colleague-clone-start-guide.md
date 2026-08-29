@@ -62,7 +62,7 @@ Runner 启动 actor 会话后，会在 actor artifact 下生成：
 - `upload-files/`：与清单逐行绑定的本地上传文件；
 - `pass-receipt.json`：只有完整结束会话后才可能生成的 actor receipt。
 
-操作者必须按 `upload-manifest.json` 的 `evidence_key` 和 `title_zh_cn` 选择对应 `path`，不得改用仓库原始 bundle 路径或上轮 artifact。具体命令、逐阶段动作和验收状态见 canonical handoff 与 Runbook。
+操作者必须按 `upload-manifest.json` 的 `evidence_key` 和 `title_zh_cn` 选择对应 `path`，并使用 Runbook“十二份上传文件的附件角色”表选择中文附件角色。固定顺序是先选择文件、再选择附件角色、最后确认上传；`evidence_key` 不能直接填入附件角色。不得改用仓库原始 bundle 路径或上轮 artifact。具体命令、逐阶段动作和验收状态见 canonical handoff 与 Runbook。
 
 ## 5. 必读资料
 
