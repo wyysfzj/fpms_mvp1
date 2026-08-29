@@ -325,8 +325,10 @@
 
     <el-dialog
       v-model="officialFeeDialogVisible"
+      class="official-fee-preview-dialog"
       title="授权登记官费预览"
       width="860px"
+      top="4vh"
       :close-on-click-modal="false"
     >
       <el-alert
@@ -1194,6 +1196,19 @@ onMounted(() => {
 .preview-source,
 .preview-lines {
   margin-top: 16px;
+}
+
+:deep(.official-fee-preview-dialog) {
+  box-sizing: border-box;
+  display: flex;
+  max-height: 92vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:deep(.official-fee-preview-dialog .el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .preview-total {
